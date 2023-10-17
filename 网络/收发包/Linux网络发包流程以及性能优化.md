@@ -11,6 +11,9 @@
 # 性能调优参数
 # 参考
 ```c
+# [转][译]Linux 网络栈监控和调优：发送数据（2017）
+https://colobu.com/2019/12/09/monitoring-tuning-linux-networking-stack-sending-data/
+
 # 说明的很清楚
 https://simonzgx.github.io/2020/08/17/Linux%E7%BD%91%E7%BB%9C%E6%95%B0%E6%8D%AE%E5%8C%85%E6%8E%A5%E5%8F%97%E8%BF%87%E7%A8%8B/
 
@@ -19,4 +22,6 @@ https://www.ithome.com/0/644/289.htm
 
 发包优化：
 https://mp.weixin.qq.com/s/JR-qqjNG9ClHCYoRiFg-CQ
+
+
 ```
