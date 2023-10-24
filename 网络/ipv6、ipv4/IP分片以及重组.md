@@ -9,15 +9,113 @@ IP协议在传输数据包时，将数据报文分为若干分片进行传输，
 
 
 ## 原理
+IP分片发生在IP层，不仅源端主机会进行分片，中间的路由器也有可能分片，因为不同的网络的MTU是不一样的。
+如果传输路径上的某个网络的MTU比源端网络的MTU要小，路由器就可能对IP数据报再次进行分片。而分片数据的重组只会发生在目的端的IP层。
+![](attachments/Pasted%20image%2020231024194109.png)
 
+片偏移字段指的是该片偏移原始数据报开始处的位置,当数据报被分片后，**每个片的总长度值要改为该片的长度值。**
+
+在分片时，除最后一片外，其他每一片中的数据部分（除 IP首部外的其余部分，即IP载荷部分长度）必须是8字节的整数倍。
+
+- 第一个分片:如果MF为1而 Fragment Offset = 0，表示该IP报文为第一个分片，而且后续有分片；
+- 中间分片:如果MF为1而Fragment Offset不是0，表示该IP报文为中间的一个分片；
+- 最后分片:如果MF为0而Fragment Offset不是0，表示该报文是最后一个分片;
+
+## 分片与上层协议
+IP分片是发生在网络的第三层，那么它的上层（第四层）是如何处理这种长数据包的呢？
+### 四层为UDP && ICMP
+> UDP和ICMP协议没有考虑分片的问题，它的协议可以认为网络层没有长度限制，所以如果我们在UDP协议中，发送大的数据时，就必然触发IP层分片。  
+
+###  四层为TCP
+> TCP协议本身支持分段，TCP协议在建立连接时会协商MSS（Maxitum Segment Size），这个协商的过程发生在建立TCP连接的过程中。
+
+![](attachments/Pasted%20image%2020231024194521.png)
+MSS加包头数据就等于MTU。
+拿TCP包做例子，报文传输MSS=1460字节的数据的话，再加上20字节IP包头，20字节TCP包头，那么MTU就是（1500）。 client 和 real server 分别根据自己MTU计算出支持的最大MSS发送给对方，双方根据最小的MSS达成协议。
+
+下图用来说明，TCP协议分段和UDP协议触发的IP层分片的区别。
+![](attachments/Pasted%20image%2020231024194635.png)
 
 ## 注意
+### TCP也可能导致分片
+但是也不能认为，TCP协议就不会触发IP层分片；因为在TCP协议握手时，client 和 real server只是取了自己网卡的MTU， 但是它们之间可能经过了很多的路由器，这些子网的MTU可能小于它们的MTU，所以在外部的复杂网络上，很多TCP协议也会触发IP层分片。
+
+### 抓包和分片
 注意 Tcpdump 中之所以能抓到超过1514字节的包，是因为目前大部分机器上都是开启了TSO/GSO的。
 TCP分片的工作下放给了网卡驱动去做；而 Tcpdump 抓包是在网络设备子系统和协议栈的IP层之间，此时还没有进行分片，所以有可能会看到大于1514的包；
 但是在真正发送出去的时候网卡驱动会根据MSS对TCP报文进行分片；可以对比服务端收到的抓包，服务端上收到的包就不会超过1514字节了
 
+## 避免分片
+为了缓解IP分片带来的问题，RFC1191和RFC1981提出了路径MTU发现（path MTU discovery，PMTUD）机制，旨在发现源和目的节点间网络路径上可传输的最大IP分组大小，从而避免分组在传输过程中出现分片。TCP协议默认启用了PMTUD机制。
+
+### PMTUD背景
+TCP MSS 解决了端到端的 fragmentation 问题，但是无法解决在传输链路的中间出现较小 MTU 的情况，如下图两台 router 直接的 MTU 小于发送方或者接收方。
+![](attachments/Pasted%20image%2020231024174106.png)
+
+PMTUD 就是为了解决这类问题，PMTUD 可以动态的检测到链路上最小的 MTU。
+**PMTUD 仅支持 TCP 和 UDP 协议**，在开启了 PMTUD 的设备上 TCP 或者 UDP 一般会将 DF bit 设置为 1 即 Don’t Fragment。
+
+
+### PMTUD 原理
+路径MTU发现（即PMTUD）机制是RFC1191和RFC1981中定义的一种标准规范，用于解决IP分组在不同MTU网络间传输时可能出现的分片问题。
+![](attachments/Pasted%20image%2020231024175827.png)
+**PMTUD机制的工作原理：**
+首先源主机Originator将生成的IP分组DF位置1并发送出去。
+分组在传输的过程中，如果某台中间路由器Router的下一跳MTU值小于当前分组大小，那么路由器会生成一个ICMP Fragmentation Needed消息（ICMP消息，Type=3，Code=4）发送给源主机。
+收到该消息后，源主机的IP层和TCP层会进行一次路径MTU值的同步，然后TCP层会依据更新后的路径MTU值，调整（通常为缩小）后续报文的MSS，并发送给IP层。IP层再次将分组的DF位置为1并发送给中间路由器，由中间路由器转发。
+重复上述过程，直到特定大小的IP分组可以顺利在网络中传输、到达接收端，此时的IP分组大小即为源主机探测到的到达接收端的路径MTU值，依据该值封装分组大小，可以避免IP分片。
+
+![](attachments/Pasted%20image%2020231024174106.png)
+以上图为例，如果 Client 发送了一个 MSS 为 1460 且 DF bit 为 1 的数据包，router 发现该数据包大于了其接口 MTU，但是又无法对其进行 fragmentation （因为 DF bit = 1）。Router 会丢弃该包并返回一个 ICMP Destination Unreachable 并在里面包含 “”fragmentation needed and DF set” (type 3, code 4)。Client 收到该 ICMP 后会减小 MSS 并进行重传。
+
+在这个 ICMP 里面还会加上下一跳的 MTU 值从而方便 Client 修改 MTU。
+![](attachments/Pasted%20image%2020231024174244.png)
+
+### PMTUD的问题
+#### PMTUD报文被网络设备丢弃
+在实际部署的时候 PMTUD 遇到的最大的问题是网络节点返回的 ICMP 被防火墙或者 ACL 阻挡并丢弃，出现这种情况可能导致网络情况不稳定。
+
+可以通过在交换机/路由器上配置允许 ICMP unreachable 来解决（比如CICSO交换机上配置如下命令）：
+
+```text
+access-list 101 permit icmp any any unreachable
+```
+
+> 注：如果 PMTUD 报文还是被 网络节点中被丢弃。那么出现上诉中中间网络设备的MTU较小。另外一种解决方法是在 router 利用 route-map 上 **把 DF bit 清除掉，强制进行 fragmentation**。这种方法同时适用于 TCP 和 UDP。
+
+> 如果是 TCP 的数据包，还有一种方法是在 router 接口上对 TCP Syn 里面的 MSS 进行替换，换成一个小的 MSS。
+#### PMTUD后依然分片
+即使源主机启用了PMTUD机制，但其生成的TCP报文仍然可能会被IP分片，从而引入IP分片攻击。
+##### 中间路由器对TCP报文的分片
+源主机在执行PMTUD的过程中，如果某台中间路由器的下一跳MTU值小于当前分组大小，依据PMTUD规范，路由器会反射一个ICMP消息给源主机。
+但是可能该中间路由器下一跳MTU值过小，甚至小于源主机可接受的最小路径MTU值。
+【目前看主机默认可接受的最小的 PMTU是552。】
+
+```c
+# sysctl -a |grep min_pmtu
+net.ipv4.route.min_pmtu = 552
+```
+在收到这样一条消息后，源主机会依据自己可接受的最小路径MTU值（而不是路由器反射回来的路径MTU值）调整TCP报文的MSS。此外，源主机会将新生成的IP分组DF位置为0。最终，当新生成的IP分组到达路由器后，路由器会对分组进行IP分片，即中间路由器对TCP报文进行了IP分片。流程如下所示：
+![](attachments/Pasted%20image%2020231024175817.png)
+
+> 注意：可将 min_pmtu 设置为68字节（68字节是互联网上的最小MTU值），使其小于中间路由器的下一跳MTU值，从而避免中间路由器对TCP报文的分片。
+
+##### 源主机对TCP报文的分片
+![](attachments/Pasted%20image%2020231024180120.png)
+
+如图所示，另一种会对TCP报文进行IP分片的情况是，当源主机（Linux内核3.8.1及之后版本）接收到一个ICMP Fragmentation Needed消息后，主机不能正确的将该消息匹配到当前的TCP socket上。
+因为该消息中携带的是一个非TCP报文（例如是一个ICMP echo reply报文），那么主机会基于该消息首先更新IP层的路径MTU值。更新后的路径MTU值，并不能及时的反馈到TCP层，导致TCP层会将过大的TCP报文写入到IP层，进而引起IP层对这些报文的分片，分片数量通常跟TCP socket的当前发送窗口大小相关。
+
 
 # 重组
+## 重组的位置
+linux对分片包的处理，和LVS的收包入口都是在内核netfilter模块， hook在（NF_INET_PRE_ROUTING），但是对分片包处理的hook在LVS之前执行（priority = NF_IP_PRI_CONNTRACK_DEFRAG）。
+可见，在LVS收包函数（ip_vs_in）调用之前，linux 系统已经对分片包合并了。
+
+1. 网络转发到LVS的分片包，会由linux内核先对分片包重组
+2. LVS对Real Server转发时，如果数据包大于MTU ，就直接发送一个ICMP通知给客户端，通知客户的改TCP连接时的MSS
+
+
 ## 原理
 接收方正是根据接收到的分片报文的源IP、目的IP、 IP标识、分片标志位、分片偏移量来对接收到的分片报文进行重组。
 ![](attachments/Pasted%20image%2020231023194946.png)
@@ -34,7 +132,7 @@ Fragment Offset -  表示此分片在整个报文中的偏移地址。
 ![](attachments/Pasted%20image%2020231023195146.png)
 
 
-###  **分片接收队列**
+###  分片接收队列
 下面以 Linux-4.15 内核版本来查看内核实现。
 
 ```c
@@ -346,10 +444,11 @@ static struct inet_frag_queue *inet_frag_alloc(...)
 
 重建主要是改变了分片的hash值，rebuild重建函数修改了hash函数的参数ip4_frags.rnd，从而导致ip4_frags中以hash值为索引存储在bucket结构中的ipq链表出现索引与hash值不一致的情况。重建就是将二者调整一致。
 
+
 ## 调优
 ![](attachments/Pasted%20image%2020231023163320.png)
 参考：[ip-sysctl.](https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt)
-### **重组超时**
+### 重组超时
 - ipfrag_time
 一个 IP 分片在内存中保留的最大时间，秒。
 
@@ -365,7 +464,7 @@ net.ipv4.ipfrag_time = 30
 sysctl -w net.ipv4.ipfrag_time=60
 ```
 
-### **重组的内存阈值设置**
+### 重组的内存阈值设置
 
 - ipfrag_high_thresh
 表示用于重组IP分段的内存分配最高值，一旦达到最高内存分配值，其它分段将被丢弃，直到达到最低内存分配值。
@@ -414,8 +513,10 @@ inet_frag_find: Fragment hash bucket 128 list length grew over limit. Dropping f
 
 解决方案：热补丁调整hash大小；
 
-## QA
-### 第一个分片和后续分片RSS是否同一个队列
+# QA
+## 第一个分片和后续分片到达Server经过网卡的RSS是否分发到同一个接收队列
+
+
 
 # 分片带来的问题
 **1. 分片带来了性能消耗** 
@@ -443,7 +544,9 @@ inet_frag_find: Fragment hash bucket 128 list length grew over limit. Dropping f
 # 小结
 基于上述种种原因，编写网络程序时，应该极力避免 IP 分片：
 - 编写 UDP 应用，要严格控制数据报长度，不能超过链路最小 MTU ；
-- 编写 TCP 应用，也要关注 MTU/MSS 设置，不然可能因中间路由分片导致通信失败；
+- 编写 TCP 应用，正常情况下由于MSS，可能不需要考虑这个问题。但是存在其他的问题
+	- MSS只是Client和Server接口的MTU，中间设备的MTU并不知晓。可能中间设备的MTU更小，需要进行分片。
+	- 中间设备给原始报文添加了隧道或者额外插入了信息，导致超过了MTU，需要进行分片。
 
 # 参考
 ```c
@@ -452,4 +555,7 @@ https://syxdevcode.github.io/2021/03/01/Linux%E4%B8%8B%E7%BD%91%E7%BB%9C%E4%B8%A
 
 # IP分片报文的接收与重组 [代码级别实现]
 https://blog.csdn.net/sinat_20184565/article/details/82670126
+
+# 利用IP分片污染攻击TCP流量
+https://mp.weixin.qq.com/s/7gA74jWC1RES76p1XBO_Kw
 ```
