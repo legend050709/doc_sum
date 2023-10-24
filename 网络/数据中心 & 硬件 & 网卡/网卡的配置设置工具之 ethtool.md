@@ -1,3 +1,6 @@
+```table-of-contents
+```
+
 # 通用使用
 Ethtool is a standard Linux utility for controlling network drivers and hardware, particularly for wired Ethernet devices. It can be used to:
 - Get identification and diagnostic information
@@ -9,13 +12,71 @@ Ethtool is a standard Linux utility for controlling network drivers and hardware
 
 ## ethtool -k/-K 
 见下
+## ethtool -x/-X
+```c
+       -x --show-rxfh-indir --show-rxfh
+              Retrieves the receive flow hash indirection table and/or RSS hash key.
+
+       -X --set-rxfh-indir --rxfh
+              Configures the receive flow hash indirection table and/or RSS hash key.
+
+           hkey   Sets  RSS  hash key of the specified network device. RSS hash key should be of device supported length.  Hash key format must be in xx:yy:zz:aa:bb:cc format meaning both the nibbles of a byte should be
+                  mentioned even if a nibble is zero.
+
+           hfunc  Sets RSS hash function of the specified network device.  List of RSS hash functions which kernel supports is shown as a part of the --show-rxfh command output.
+
+           equal N
+                  Sets the receive flow hash indirection table to spread flows evenly between the first N receive queues.
+
+           weight W0 W1 ...
+                  Sets the receive flow hash indirection table to spread flows between receive queues according to the given weights.  The sum of the weights must be non-zero and must not exceed the size of the indirec‐
+                  tion table.
+
+           default
+                  Sets the receive flow hash indirection table to its default value.
+
+           context CTX | new
+                  Specifies an RSS context to act on; either new to allocate a new RSS context, or CTX, a value returned by a previous ... context new.
+
+           delete Delete the specified RSS context.  May only be used in conjunction with context and a non-zero CTX value.
+```
+调整网卡RSS队列配置：
+查看：`ethtool -x ethx`；  
+调整：`ethtool -X ethx xxxx`；
+
+
 ## ethtool -a/-A
+查看流控统计：
+```c
+ethtool -S eth1 | grep control
+```
+![](attachments/Pasted%20image%2020231023141453.png)
+rx_flow_control_xon 是在网卡的 RX Buffer 满或其他网卡内部的资源受限时，给交换机端口发送的开启流控的pause帧计数。
+对应的，tx_flow_control_xoff 是在资源可用之后发送的关闭流控的pause帧计数。
+
+查看网络流控配置：`ethtool -a eth1`
+![](attachments/Pasted%20image%2020231023141349.png)
+
+关闭网卡流控：
+```c
+ethtool -A ethx autoneg off  # 自协商关闭
+ethtool -A ethx tx off  # 发送模块关闭
+ethtool -A ethx rx off # 接收模块关闭
+```
+
 
 ## ethtool -g/-G
 见下
 ## ethtool -l/-L
 见下
 ## ethtool -c/-C
+
+## ethtool -i 
+排查一下网卡phy芯片firmware是不是有bug，安装的版本是不是符合预期，查看 ethtool -i eth1:
+![](attachments/Pasted%20image%2020231023141552.png)
+
+比如：集群中存在多台设备时，个别设备存在问题时，而机器的其他的配置，内核版本，内核参数都一样时，这个时候可能是硬件的固件版本不一致导致的。
+## 其他操作
 - Mellanox网卡设置抓包
 ```c
 ethtool --set-priv-flags enp130s0f0 sniffer on

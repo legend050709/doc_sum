@@ -1,0 +1,455 @@
+```table-of-contents
+```
+# 分片
+## 定义
+IP协议在传输数据包时，将数据报文分为若干分片进行传输，并在目标系统中进行重组。这一过程称为分片（ fragmentation）。
+![](attachments/Pasted%20image%2020231023195019.png)
+
+> 注：如果 IP 包设置了 DF 标志，中间路由便不能将它分片，只能向发送者报告 ICMP **目的不可达** 错误。其中，类型为 3 ，表示目的不可达；代码为 4 表示 **需要分片，但设置了DF标志** （ fragmentation required, and DF flag set ）。
+
+
+## 原理
+
+
+## 注意
+注意 Tcpdump 中之所以能抓到超过1514字节的包，是因为目前大部分机器上都是开启了TSO/GSO的。
+TCP分片的工作下放给了网卡驱动去做；而 Tcpdump 抓包是在网络设备子系统和协议栈的IP层之间，此时还没有进行分片，所以有可能会看到大于1514的包；
+但是在真正发送出去的时候网卡驱动会根据MSS对TCP报文进行分片；可以对比服务端收到的抓包，服务端上收到的包就不会超过1514字节了
+
+
+# 重组
+## 原理
+接收方正是根据接收到的分片报文的源IP、目的IP、 IP标识、分片标志位、分片偏移量来对接收到的分片报文进行重组。
+![](attachments/Pasted%20image%2020231023194946.png)
+
+```c
+Identification       -  用来确认不同的分片是否属于同一个IP报文；
+Flags                  -  其中IP_MF表示还有分片，此分片为中间分片；
+Fragment Offset -  表示此分片在整个报文中的偏移地址。
+```
+![](attachments/Pasted%20image%2020231023195103.png)
+![](attachments/Pasted%20image%2020231023195053.png)
+
+如果中间路由链路 MTU 变小，经过的 IP 包大小超出限制，路由便再次对 IP 包进行分片。就算 IP 包已分过片，只要有分片大小超出限制，都要进一步划分：
+![](attachments/Pasted%20image%2020231023195146.png)
+
+
+###  **分片接收队列**
+下面以 Linux-4.15 内核版本来查看内核实现。
+
+```c
+struct ipq {
+    struct inet_frag_queue q;
+    u32         user;
+    __be32      saddr;
+    __be32      daddr;
+    __be16      id;
+    u8          protocol;
+    int         vif;   /* L3 master device index */
+};
+```
+实际的分片保存在结构体ipq中的成员q（inet_frag_queue）内，其中fragments指向分片队列的头，fragments_tail指向分片的队列尾。
+```c
+struct inet_frag_queue {
+    struct hlist_node   list;
+    struct sk_buff      *fragments;
+    struct sk_buff      *fragments_tail;
+};
+```
+
+
+内核将接收到的分片报文暂存在一个ipq结构的队列中。由ipq结构的定义与查找匹配函数（ip4_frag_match）可知，以下几个值唯一确定一个分片队列：
+```c
+user         重组报文的用户
+saddr       源IP地址
+daddr       目的IP地址
+id              IP报文ID标识
+protocol    传输层协议号
+vif             L3 master device index
+```
+- user
+重组报文的用户，也就是重组之后报文的使用者。
+例如在ip_local_deliver中调用重组函数（ip_defrag），user参数使用的是IP_DEFRAG_LOCAL_DELIVER值，即此处的数据包重组是为了要传给本机的上层应用程序使用。
+另外，netfilter的透明代理（tproxy）和socket匹配也需要将所有分片进行重组，如是此目的，user参数使用IP_DEFRAG_CONNTRACK_IN。
+user参数的引入可使内核对同一组数据分片同时进行不同目的的重组，完整的user值参见内核代码ip_defrag_users枚举类型定义。
+
+- vif
+L3mdev设备索引。
+l3mdev用于实现VRF（Virtual Forwarding and Routing）功能，不同的VRF之间是三层相互隔离的，在两个VRF中可存在其它几个参数相同的数据包，此时需要vif索引加以区分。
+
+### 分片存储结构
+IP分片在内核中分两级存储。
+其一，根据IP报头的4个字段计算得到一个hash值，数据包按照此hash值散列于相应的bucket 中。此 hash 数组大小为1024。
+所以，此处的查找非常简单，只需要将计算得到的hash值作为索引（ip4_frags.hash[hash]）即可得到相应的bucket。
+**全局变量 ip4_frags **保存有所有ipv4相关的分片信息。
+```c
+struct inet_frags {
+    struct inet_frag_bucket hash[INETFRAGS_HASHSZ];
+};
+struct inet_frag_bucket {
+    struct hlist_head   chain;
+    spinlock_t      chain_lock;
+};
+
+static struct inet_frags ip4_frags;
+hash = ipqhashfn(iph->id, iph->saddr, iph->daddr, iph->protocol);
+```
+
+其二，在inet_frag_bucket结构中，chain链表用于将所有已接收到的分片通过分片队列结构（inet_frag_queue）中的list成员链接起来。
+但是上文提到的ipq结构又在什么地方呢？
+实际内核代码中inet_frag_queue属于ipq的一部分，为ipq的第一个成员，内核并不单独分配inet_frag_queue结构，而是通过分配一个ipq将其一并创建出来。**所以chain链表上也可以说是链接的ipq结构。**
+```c
+#define INETFRAGS_MAXDEPTH  128
+```
+以chain开头的链表长度最大为128，即内核最大能接收具有128个分片的数据包。
+![](attachments/Pasted%20image%2020231023175742.png)
+
+### 分片队列查找
+内核在接收到一个分片时，首先查找是否已接收过同一个报文的其它分片。
+查找过程在分片存储的二级结构中进行：
+第一级通过IP报头的id、saddr、daddr和 protocol字段找到相应bucket。
+第二级遍历bucket的chain链表，找到正确的ipq分片队列，匹配函数见ip4_frag_match实现。
+```c
+static bool ip4_frag_match(const struct inet_frag_queue *q, const void *a)
+{
+    return  qp->id == arg->iph->id &&
+        qp->saddr == arg->iph->saddr &&
+        qp->daddr == arg->iph->daddr &&
+        qp->protocol == arg->iph->protocol &&
+        qp->user == arg->user &&
+        qp->vif == arg->vif;
+}
+```
+如果是数据包的第一个分片没有ipq，此时如果chain链表的长度还没有超出INETFRAGS_MAXDEPTH（128），并且分片队列所占内存没有超出高阈值，分配一个新的ipq队列结构，添加到chain链表上。
+
+### 分片的插入
+现在找到了当前接收的分片所需放入的队列ipq（ipq->inet_frag_queue），需要考虑插入的位置了。
+在结构inet_frag_queue中，成员fragments（struct sk_buff）指向第一个分片，fragments_tail指向最后一个。分片之间通过sk_buff的next成员组成一个单向链表，分片按照IP头部OFFSET字段的有小到大依次排列。
+来看插入处理函数ip_frag_queue。
+
+- a）正常情况下顺序接收到分片数据包，当前接收到的分片的OFFSET就会大于已接收的最后一个分片的OFFSET，或者如果是接收到第一个分片报文，分片链表末尾fragments_tail为空，此两种情况下，当前接收的分片都需要添加到sk_buff链表末尾，仅需要获得前一个sk_buff（prev）指针。
+```c
+    prev = qp->q.fragments_tail;
+    if (!prev || FRAG_CB(prev)->offset < offset) {
+        next = NULL;
+        goto found;
+    }
+```
+
+- b）接收到乱序分片。
+需要遍历sk_buff分片链表查找合适插入位置，获取前一个（prev）与后一个（next）分片的sk_buff指针。
+```c
+    for (next = qp->q.fragments; next != NULL; next = next->next) {
+        if (FRAG_CB(next)->offset >= offset)
+            break;  /* bingo! */
+        prev = next;
+    }
+```
+
+- c）丢弃不合法分片。
+正常情况下，每接收一个分片就将队列的接收计数加一，同时将相应的对端系统的接收计数加一，二者一致。但是，内核有可能在此期间接收到相同的源地址设备发送的另外一组需要分片的数据流，其会对应到另外一个分片队列，将会导致内核的对端系统（peer->rid）接收计数增加。此后，再次接收到前一个队列的分片时，分片队列 ipq 的 rid 就会小于对端系统的 rid，如果二者的差值大于64（ipfrag_max_dist 默认值）时，内核认为是非法的分片，将会丢弃整个分片队列。
+```c
+static int ip_frag_queue(struct ipq *qp, struct sk_buff *skb)
+{
+    struct sk_buff *prev, *next;
+    struct net_device *dev;
+    unsigned int fragsize;
+    int flags, offset;
+    int ihl, end;
+    int err = -ENOENT;
+    u8 ecn;
+
+    if (qp->q.flags & INET_FRAG_COMPLETE)
+        goto err;
+
+    if (!(IPCB(skb)->flags & IPSKB_FRAG_COMPLETE) &&
+        unlikely(ip_frag_too_far(qp)) &&
+        unlikely(err = ip_frag_reinit(qp))) {
+        ipq_kill(qp);
+        goto err;
+    }
+    ...
+}
+
+static int ip_frag_too_far(struct ipq *qp)
+{
+    struct inet_peer *peer = qp->peer;
+    // peer 主要是标识来自于同一个sip的分片。
+    unsigned int max = qp->q.net->max_dist;
+    unsigned int start, end;
+    int rc;
+
+    if (!peer || !max)
+        return 0;
+    start = qp->rid;
+    end = atomic_inc_return(&peer->rid);
+    qp->rid = end;
+    rc = qp->q.fragments && (end - start) > max;
+    if (rc) {
+        struct net *net;
+
+        net = container_of(qp->q.net, struct net, ipv4.frags);
+        __IP_INC_STATS(net, IPSTATS_MIB_REASMFAILS);
+    }
+    return rc;
+}
+
+```
+
+- d) 至此，我们也获得了当前分片的插入位置（prev和next），将分片链接到prev之后，next之前。
+```c
+    /* Insert this fragment in the chain of fragments. */
+    skb->next = next;
+    if (!next)
+        qp->q.fragments_tail = skb;
+    if (prev)
+        prev->next = skb;
+    else
+        qp->q.fragments = skb;
+```
+当前接收的分片数据包可能与前一个或者后一个已有分片存在重叠部分，需要进行合并。
+如果与前一个分片（prev）重叠，采用增加当前分片的OFFSET值的方法避开重叠部分；
+如果是与后一个分片（next）重叠，一种情况是与后一分片的一部分重叠，采用增加后一分片的OFFSET的值来避开重叠部分；另外一种情况是重叠的部分包含整个后一分片，此时就可以free是否掉后一分片，继续检查是否与后后的分片重叠，循环进行处理，直到解决重叠问题为止。
+
+
+### 分片重组
+重组的前提是接收到所有的分片。内核判断一个队列是否接收到了所有分片需要满足三个条件：
+- a）INET_FRAG_FIRST_IN  - 在接收到OFFSET为0值的数据包时设置此标志；
+- b）INET_FRAG_LAST_IN   - 接收到IP报头中More Fragmentation（IP_MF）标志等于0的分片时，设置此标志位；
+- c）inet_frag_queue中meat等于len
+meat在每次成功插入一个分片后增加此分片的长度值，len值由最后一个分片的OFFSET值加上其长度获得。
+```c
+    if (qp->q.flags == (INET_FRAG_FIRST_IN | INET_FRAG_LAST_IN) &&
+        qp->q.meat == qp->q.len)
+        err = ip_frag_reasm(qp, prev, dev);
+```
+
+来看重组函数ip_frag_reasm，首先检查最近插入的分片报文是否为数据包的第一个分片，如果不是必定存在前一个分片（prev不为空），此时，如下的代码将使用最近插入的这个分片结构（sk_buff）作为分片链表的头。
+
+首先克隆clone一份最近接收的这一分片，将克隆之后的分片重新链接到分片链表中，替换掉之前的分片。之后将链表头分片（fragments）克隆到最近接收的这一分片中，释放位于链表头的分片，将最近接收分片设置为链表头。
+```c
+    if (prev) {
+        head = prev->next;
+        fp = skb_clone(head, GFP_ATOMIC);
+        if (!fp)
+            goto out_nomem;
+ 
+        fp->next = head->next;
+        if (!fp->next)
+            qp->q.fragments_tail = fp;
+        prev->next = fp;
+ 
+        skb_morph(head, qp->q.fragments);
+        head->next = qp->q.fragments->next;
+ 
+        consume_skb(qp->q.fragments);
+        qp->q.fragments = head;
+    }
+```
+
+其次检查所有分片的总长度是否超过65535，超出65535的数据包不做重组，函数直接返回。
+```c
+    ihlen = ip_hdrlen(head);
+    len = ihlen + qp->q.len;
+ 
+    if (len > 65535) goto out_oversize;
+```
+>IP 包全长由头部中的 _total length_ 字段决定，该字段共 16 位，因此一个 IP 包最大可达 216−1 ，即 65535 字节。除去头部 _20_ 字节，IP 包最多可承载 65535−20 ，即 65515 字节的数据. 当然了，IP 头部如果带有可选选项，长度就不止 20 字节了。这样，它能承载的数据量就要打些折扣，但不会低于 65535-60 ，即 65475 字节。其中，60 是 IP 头部的最大长度。
+
+对于分片链表的头一个分片（head），如果其自身包括分片，需要做一些特殊处理。为其分片数据单独创建一个sk_buff，将其链接在链表头head之后。head仅包含数据区与页面数据存储区。修改相应的长度信息。
+```c
+    if (skb_has_frag_list(head)) {
+        struct sk_buff *clone;
+ 
+        clone = alloc_skb(0, GFP_ATOMIC);
+ 
+        clone->next = head->next;
+        head->next = clone;
+        skb_shinfo(clone)->frag_list = skb_shinfo(head)->frag_list;
+        skb_frag_list_init(head);
+ 
+        for (i = 0; i < skb_shinfo(head)->nr_frags; i++)
+            plen += skb_frag_size(&skb_shinfo(head)->frags[i]);
+        clone->len = clone->data_len = head->data_len - plen;
+        head->data_len -= clone->len;
+        head->len -= clone->len;
+    }
+```
+
+真正的重组操作，其实很简单。涉及到需要修改的为长度信息，包括data_len、len和truesize。head为最终重组完成后的sk_buff结构。
+```c
+    for (fp=head->next; fp; fp = fp->next) {
+        head->data_len += fp->len;
+        head->len += fp->len;
+        head->truesize += fp->truesize;
+    }
+```
+
+### 分片生存时间
+现实网络环境中，有可能接收不到一个数据包的所有分片，无法重组数据包将导致这些分片一直驻留在分片队列中。内核采用超时机制处理这些分片。在接收到第一个数据包分片，创建分片队列后，内核随即启动超时计时器，超时时间从网络命名空间结构中获取（timeout）， 默认情况下超时时间为30秒钟（IP_FRAG_TIME）( 内核参数ipfrag_time 来设置)。
+```c
+static struct inet_frag_queue *inet_frag_alloc(struct netns_frags *nf, struct inet_frags *f, ...)
+{
+    timer_setup(&q->timer, f->frag_expire, 0);
+}
+static struct inet_frag_queue *inet_frag_intern(struct netns_frags *nf, ...)
+{
+    if (!mod_timer(&qp->timer, jiffies + nf->timeout))
+        refcount_inc(&qp->refcnt);
+}
+ 
+#define IP_FRAG_TIME    (30 * HZ)       /* fragment lifetime    */
+ 
+static int __net_init ipv4_frags_init_net(struct net *net)
+{   
+    net->ipv4.frags.timeout = IP_FRAG_TIME;
+}
+void __init ipfrag_init(void)
+{   
+    ip4_frags.frag_expire = ip_expire;
+}
+```
+超时定时器在到期之后，使用ip_expire函数释放分片队列（ipq_put）。如果本机就是这些分片报文的目的主机，回复ICMP的分片重组超时消息（type=ICMP_TIME_EXCEEDED(11), code=ICMP_EXC_FRAGTIME(1)）。
+
+### 分片重组内存管理
+分片重组系统在初始化时，限定其内存使用不超过4M字节（high_thresh）的内存（基于网络命名空间），如果超过high_thresh，内核会释放一部分分片，将内存使用见底到3M字节（low_thresh）。
+
+每个分片占用的内存使用其sk_buff的truesize值统计（其包括sk_buff结构体占用内存、skb_shared_info结构体占用内存与数据包占用内存的总和）。对于第一个分片，还要分配分片队列（ipq），也要计入到内存占用中。当分片重组或者超时删除之后，减低内容占用统计。
+当接收到一个分片报文，查找是否已存在相应的分片队列时，检查当前网络命名空间中分片占用内存是否大于low_thresh，如大于，调唤醒初始化时注册的工作队列函数（inet_frag_worker）释放部分分片占用的内存。
+在分配新的分片队列（inet_frag_queue）时，首先检查当前占用内存是否超过high_thresh，如超过不再分片新的分片队列。
+```c
+struct inet_frag_queue *inet_frag_find(...)
+{
+    if (frag_mem_limit(nf) > nf->low_thresh)
+        inet_frag_schedule_worker(f);
+}
+static struct inet_frag_queue *inet_frag_alloc(...)
+{
+    if (!nf->high_thresh || frag_mem_limit(nf) > nf->high_thresh) {
+        inet_frag_schedule_worker(f);
+		return NULL;
+	}
+}
+```
+由于内存超限，inet_frag_worker函数每次执行最多扫描128个bucket中的分片队列，每次最多释放512个分片队列（inet_frag_queue）。执行完成之后记录最后扫描的bucket索引，下次被唤醒时，由此索引开始继续扫描。
+```c
+#define INETFRAGS_EVICT_BUCKETS   128  
+#define INETFRAGS_EVICT_MAX   512
+```
+
+### 分片队列重建
+分片bucket中的链表chain深度超过128时（系统中同时进行处理重组数据包的用户（IP_DEFRAG_LOCAL_DELIVER）或者l3mdev过多），将不能够再创建出新的分片队列（ipq）。此时也需要唤醒工作队列（inet_frag_worker）释放部分分片，并且在重建间隔大于5秒钟时，重建分片结构。
+```c
+#define INETFRAGS_MAXDEPTH  128  
+#define INETFRAGS_MIN_REBUILD_INTERVAL (5 * HZ)
+```
+
+重建主要是改变了分片的hash值，rebuild重建函数修改了hash函数的参数ip4_frags.rnd，从而导致ip4_frags中以hash值为索引存储在bucket结构中的ipq链表出现索引与hash值不一致的情况。重建就是将二者调整一致。
+
+## 调优
+![](attachments/Pasted%20image%2020231023163320.png)
+参考：[ip-sysctl.](https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt)
+### **重组超时**
+- ipfrag_time
+一个 IP 分片在内存中保留的最大时间，秒。
+
+查看：
+```c
+netstat -s|grep timeout
+601 fragments dropped after timeout
+```
+
+调整：
+```c
+net.ipv4.ipfrag_time = 30
+sysctl -w net.ipv4.ipfrag_time=60
+```
+
+### **重组的内存阈值设置**
+
+- ipfrag_high_thresh
+表示用于重组IP分段的内存分配最高值，一旦达到最高内存分配值，其它分段将被丢弃，直到达到最低内存分配值。
+
+- ipfrag_low_thresh
+(linux-4.17 开始弃用) 重组 IP 分片使用的内存下限，超过该值后内会通过移除不完整的分片队列来释放资源。过程中内核依旧会接收新的分片。
+
+查看：
+```c
+netstat -s|grep reassembles
+8094 packet reassembles failed
+```
+
+调整：
+```c
+net.ipv4.ipfrag_high_thresh 
+net.ipv4.ipfrag_low_thresh
+```
+
+### 重组安全检查
+- ipfrag_max_dist 
+相同的源地址ip碎片数据报的最大数量. 这个变量表示在ip碎片被添加到队列前要作额外的检查.如果超过定义的数量的ip碎片从一个相同源地址到达，那么假定这个队列的 ip碎片有丢失，这个队列已经存在的ip碎片队列会被丢弃（并不是所有的队列的分片）。如果为0关闭检查。
+
+IP 分片乱序到达的情况并非不常见，但如果从某个源 IP 上已经收到了许多分片，而其中的某个分片队列的分片还不完整，则多半该队列中的一片或多片数据已经丢失了。
+
+- 查看
+```c
+netstat -s|grep reassembles
+8094 packet reassembles failed
+```
+
+- 调整
+把 ipfrag_max_dist 设置为0，就关掉此安全检查。
+```c
+sysctl -w net.ipv4.ipfrag_max_dist=0
+```
+
+### 分片的冲突链超过阈值
+分片 hash bucket 冲突链太长超过系统默认值128。
+
+查看：
+```c
+dmesg|grep "Dropping fragment"
+inet_frag_find: Fragment hash bucket 128 list length grew over limit. Dropping fragment.
+```
+
+解决方案：热补丁调整hash大小；
+
+## QA
+### 第一个分片和后续分片RSS是否同一个队列
+
+# 分片带来的问题
+**1. 分片带来了性能消耗** 
+分片和重组会消耗发送方、接收方一定的CPU、内存等资源，如果存在大量的分片报文的话，可能会造成较为严重的资源消耗； 
+分片对接收方内存资源的消耗较多，因为接收方要为接收到的每个分片报文分配内存空间，以便于等待最后一个分片报文到达后完成重组。
+
+**2. 分片被中间节点丢失** 
+首片分片报文包含原始报文的四层信息，而其他分片报文不包含，这可能导致分片报文在传输过程中被中间设备因为基于策略的路由而转发到错误的节点而丢弃，还可能被路径上的NAT设备、无状态防火墙等设备丢弃。
+这会导致接收方收不到齐全的分片报文，进而导致重组失败。
+>  如果某个分片报文在网络传输过程中丢失，那么接收方将无法完成重组，如果应用进程要求重传的话，发送方必须重传所有分片报文而不是仅重传被丢弃的那个分片报文，这种效率低下的重传行为会给端系统和网络资源带来额外的消耗。
+
+**3. 分片攻击** 
+黑客构造的分片报文，但是不向接收方发送最后一个分片报文，导致接收方要为所有的分片报文分配内存空间，可由于最后一个分片报文永远不会达到，接收方的内存得不到及时的释放（接收方会启动一个分片重组的定时器，在一定时间内如果无法完成重组，将向发送方发送ICMP重组超时差错报文）。
+只要这种攻击的分片报文发送的足够多、足够快，很容易占满接收方的内存，让接收方无内存资源处理正常的业务，从而达到DOS的攻击效果。
+
+**4. 安全隐患** 
+由于分片只有第一个分片报文具有四层信息而其他分片没有，这给路由器、防火墙等中间设备在做访问控制策略匹配的时候带来了麻烦。
+如果路由器、防火墙等中间设备不对分片报文进行安全策略的匹配检测而直接放行IP分片报文，则有可能给接收方带来安全隐患和威胁，因为黑客可以利用这个特性，绕过路由器、防火墙的安全策略检查对接收方实施攻击；
+如果路由器、防火墙等中间设备对这些分片报文进行重组后再匹配其安全策略，那么又会对这些中间设备的资源带来极大的消耗，特别是在遇到分片攻击的时候，这些中间设备的所有内存资源会在第一时间被消耗完，导致设备程序运行异常，进而可能导致全网中断的严重后果。
+
+**5. 高速率下的IPv4重组错误** 
+在当今互联网的某些条件下，IPv4分片机制还不够健壮。
+在高速率下，16位的IP标识字段不足以防止重复的id，从而导致频繁错误组装IP分片，而TCP和UDP的校验和也不足以防止由此产生的损坏的数据报被发送到上层协议。
+
+# 小结
+基于上述种种原因，编写网络程序时，应该极力避免 IP 分片：
+- 编写 UDP 应用，要严格控制数据报长度，不能超过链路最小 MTU ；
+- 编写 TCP 应用，也要关注 MTU/MSS 设置，不然可能因中间路由分片导致通信失败；
+
+# 参考
+```c
+# Linux下网络丢包故障定位
+https://syxdevcode.github.io/2021/03/01/Linux%E4%B8%8B%E7%BD%91%E7%BB%9C%E4%B8%A2%E5%8C%85%E6%95%85%E9%9A%9C%E5%AE%9A%E4%BD%8D/
+
+# IP分片报文的接收与重组 [代码级别实现]
+https://blog.csdn.net/sinat_20184565/article/details/82670126
+```

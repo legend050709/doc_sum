@@ -82,6 +82,11 @@ inode 节点的总数，在硬盘格式化时就给定，一般是每 1KB 或每
 查找文件大小为 0 的空文件，可以使用如下命令查找：
 ```c
 find PATH -name "*" -type f -size 0c
+比如：find /home -type f -size 0 
+
+查找并删除大小为0的文件
+find /home -type f -size 0 -exec rm {} \;
+
 
 注意：
 使用 `-size` 参数时，不要用 `-size 1k`，这个表示占用空间为 1KB，而不是文件大小为 1KB，应该使用 `-size 1024c` 才表示文件大小为 1KB。
@@ -117,6 +122,33 @@ b）大量的小文件分布在大量的目录下，这时候上面的命令可�
 # cd /data
 # find */ ! -type l | cut -d / -f 1 | uniq -c
 直到找出具体的目录。
+```
+（3）查找文件个数多的文件夹
+这里为什么要循环/var/*？这是根据个人经验吧！
+如下所示，查看/var目录下的各个子目录的文件数量。
+```text
+for i in /var/*; do echo $i; find $i |wc -l; done 
+
+注： find xxx ： 查找以 xxx开头的文件or 文件夹。
+# find /var/tmp
+/var/tmp
+/var/tmp/net_mlx5_85
+/var/tmp/net_mlx5_103
+/var/tmp/systemd-private-7fa2e63fc47b4ff59c92752702536558-kernel-server.service-Z4REdp
+/var/tmp/systemd-private-7fa2e63fc47b4ff59c92752702536558-kernel-server.service-Z4REdp/tmp
+/var/tmp/net_mlx5_123
+/var/tmp/net_mlx5_136
+/var/tmp/net_mlx5_55
+/var/tmp/systemd-private-7fa2e63fc47b4ff59c92752702536558-chronyd.service-ZPZDBD
+/var/tmp/systemd-private-7fa2e63fc47b4ff59c92752702536558-chronyd.service-ZPZDBD/tmp
+/var/tmp/host_0
+```
+![](attachments/Pasted%20image%2020231018103713.png)
+
+如上所示，循环查找/var目录下的各个子目录的文件夹的数量，直到查找到某个子目录。
+将子目录下文件个数最多的目录下的文件给删除。
+```c
+find . -type f | xargs rm -f
 ```
 
 # du命令
