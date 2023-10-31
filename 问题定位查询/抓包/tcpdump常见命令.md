@@ -16,6 +16,11 @@ tcpdump -nni eth3 -s0 -G 60 -Z root -w %Y_%m%d_%H%M_%S.pcap
 -s0 表示数据包不进行截断。
 -Z user
 ```
+
+## pcap包的分割和合并
+主要是使用了Linux下的 wireshark  包中的 editcap 与 mergecap 工具。
+具体参考：Linux下的wireshark包
+
 ## ipv4头相关过滤
 ### 基础知识
 ```ruby
@@ -137,3 +142,6 @@ TCP重传十分影响网络性能，往往通过抓包之后，wireshark里打�
 
 
 # 参考
+```c
+
+```
