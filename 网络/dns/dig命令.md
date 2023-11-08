@@ -97,6 +97,30 @@ Where:  domain	  is in the Domain Name System
         -h                           (print help and exit)
         -v                           (print version and exit)
 ```
+# 使用说明
+## dig命名查询的内容解析
+![](attachments/Pasted%20image%2020231108103907.png)
+### 查询状态
+查询状态分为：
+**NOERROR：** 代表没有错误；
+**NXDOMAIN：** 否定回答，不存在此记录；
+**REFUSED：** DNS服务器拒绝访问；
+**SERVFAIL：** dns查询记录失败
+### 查询标记
+qr query 查询标志，代表查询操作
+rd recursion desired，代表希望进行递归查询操作
+ra recursion available 在返回中设置，代表查询的服务器支持递归查询操作
+aa authoritative answer 权威回复，如果查询结果是由管理域名的域名服务器而不是缓存服务器提供的，则称为权威回复
+### 查询类型
+查询类型分为：
+**A记录：**IPV4的地址解析；
+**AAA记录：**IPV6的地址解析；
+**NS记录：**域名服务器的记录；
+**MX记录：** 邮件交换记录；
+**PTR记录（指针记录）：**A记录的逆向记录，作用是把IP地址解析为域名；
+**CNAME记录：** 别名记录；
+
+
 # 常用范例
 ## dig @Server_ip NS
 ## dig -x IP

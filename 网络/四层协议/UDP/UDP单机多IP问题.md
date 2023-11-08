@@ -1,8 +1,283 @@
+```table-of-contents
+```
 # 背景
+在主机上通过 nc 监听 56789 端口，然后在容器里使用 `nc` 发数据。
+在主机上运行 nc UDP 服务器（`-u` 表示 UDP 协议，`-l` 表示监听的端口）
+```
+nc -ul 56789
+```
+然后启动一个容器，运行客户端：
+```
+$ docker run -it apline sh
+/ # nc -u 172.16.13.13 56789
+```
+
+
+容器使用的是 docker 的默认网络，容器的 ip 是 172.17.0.3，通过 veth pair（图中没有显示）连接到虚拟网桥 docker0（ip 地址为 172.17.0.1），docker0所在的宿主机本身的网络为 eth0，其 ip 地址为 172.16.13.13。
+```
+ 172.17.0.3
++----------+
+|   eth0   |
++----+-----+
+     |
+     |
+     |
+     |
++----+-----+          +----------+
+| docker0  |          |  eth0    |
++----------+          +----------+
+172.17.0.1            172.16.13.13
+```
+
+
+**问题**
+
+在 docker0 上抓包，因为这是报文必经过的地方。通过过滤容器的 ip 地址，很容器找到感兴趣的报文：
+```
+tcpdump -i docker0 -nn host 172.17.0.3
+```
+抓包的结果如下：
+可以发现第一个报文发送出去没有任何问题（因为 UDP 是没有 ACK 报文的，所以客户端无法知道对方有没有收到，这里说的没有问题是指没有对应的 ICMP 报文），但是第二个报文从服务端发送的报文，Client会返回一个 `ICMP` 告诉端口 38908 不可达；第三个报文从客户端发送的报文也是如此。以后的报文情况类似，双方再也无法进行通信了。
+```
+11:20:43.973286 IP 172.17.0.3.38908 > 172.16.13.13.56789: UDP, length 6
+11:20:50.102018 IP 172.17.0.1.56789 > 172.17.0.3.38908: UDP, length 6
+11:20:50.102129 IP 172.17.0.3 > 172.17.0.1: ICMP 172.17.0.3 udp port 38908 unreachable, length 42
+11:20:54.503198 IP 172.17.0.3.38908 > 172.16.13.13.56789: UDP, length 3
+11:20:54.503242 IP 172.16.13.13 > 172.17.0.3: ICMP 172.16.13.13 udp port 56789 unreachable, length 39
+```
+
+
 # 分析
+从网络报文的分析中可以看到服务端返回的报文源地址不是我们预想的 eth0 地址，而是 docker0 的地址，而客户端直接认为该报文是非法的，返回了 ICMP 的报文给对方。
+那么问题的原因也可以分为两个部分：
+1. 为什么应答报文源地址是**错误的**？
+2. 既然 UDP 是无状态的，内核怎么判断源地址不正确呢？
+
+
+# QA
+## UDP接口多IP的SIP的选择问题
+UDP 和多网络接口。因为如果主机上只有一个网络接口，发出去的报文源地址一定不会有错；
+通过搜索，发现这确实是个已知的问题。在 UNP（） 这本书中，已经描述过这个问题，下面是对应的内容：
+![](attachments/Pasted%20image%2020231106115338.png)
+## udp和tcp对比
+为什么 UDP 和 TCP 有不同的选路逻辑呢？
+因为 UDP 是无状态的协议，内核不会保存连接双方的信息，因此每次发送的报文都认为是独立的，socket 层每次发送报文默认情况不会指明要使用的源地址，只是说明对方地址。
+因此，内核会为要发出去的报文选择一个 ip，这通常都是报文路由要经过的设备 ip 地址。
+
+## 为什么 dnsmasq 服务没有这个问题呢
+使用 `strace` 工具抓取了 dnsmasq的系统调用。
+dnsmasq 在启动阶段监听了 UDP 和 TCP 的 54 端口
+（因为是在本地机器上测试的，为了防止和本地 DNS 监听的 DNS端口冲突，我选择了 54 而不是标准的 53 端口）：
+```c
+socket(PF_INET, SOCK_DGRAM, IPPROTO_IP) = 4
+setsockopt(4, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+bind(4, {sa_family=AF_INET, sin_port=htons(54), sin_addr=inet_addr("0.0.0.0")}, 16) = 0
+setsockopt(4, SOL_IP, IP_PKTINFO, [1], 4) = 0
+
+socket(PF_INET, SOCK_STREAM, IPPROTO_IP) = 5
+setsockopt(5, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+bind(5, {sa_family=AF_INET, sin_port=htons(54), sin_addr=inet_addr("0.0.0.0")}, 16) = 0
+listen(5, 5)                            = 0
+```
+
+比起 TCP，UDP 部分少了 `listen`，但是多个 `setsockopt(4, SOL_IP, IP_PKTINFO, [1], 4)` 这句。
+dnsmasq 收包和发包的系统调用，直接使用 `recvmsg` 和 `sendmsg` 系统调用：
+```c
+recvmsg(4, {msg_name(16)={sa_family=AF_INET, sin_port=htons(52072), sin_addr=inet_addr("10.111.59.4")}, msg_iov(1)=[{"\315\n\1 \0\1\0\0\0\0\0\1\fterminal19-0\5u5016\3"..., 4096}], msg_controllen=32, {cmsg_len=28, cmsg_level=SOL_IP, cmsg_type=, ...}, msg_flags=0}, 0) = 67
+
+sendmsg(4, {msg_name(16)={sa_family=AF_INET, sin_port=htons(52072), sin_addr=inet_addr("10.111.59.4")}, msg_iov(1)=[{"\315\n\201\200\0\1\0\1\0\0\0\1\fterminal19-0\5u5016\3"..., 83}], msg_controllen=28, {cmsg_len=28, cmsg_level=SOL_IP, cmsg_type=, ...}, msg_flags=0}, 0) = 83
+```
+
+而出问题的应用 `strace` 结果如下：
+```c
+[pid   477] socket(PF_INET6, SOCK_DGRAM, IPPROTO_IP) = 124
+[pid   477] setsockopt(124, SOL_IPV6, IPV6_V6ONLY, [0], 4) = 0
+[pid   477] setsockopt(124, SOL_IPV6, IPV6_MULTICAST_HOPS, [1], 4) = 0
+[pid   477] bind(124, {sa_family=AF_INET6, sin6_port=htons(6088), inet_pton(AF_INET6, "::", &sin6_addr), sin6_flowinfo=0, sin6_scope_id=0}, 28) = 0
+
+[pid   477] getsockname(124, {sa_family=AF_INET6, sin6_port=htons(6088), inet_pton(AF_INET6, "::", &sin6_addr), sin6_flowinfo=0, sin6_scope_id=0}, [28]) = 0
+[pid   477] getsockname(124, {sa_family=AF_INET6, sin6_port=htons(6088), inet_pton(AF_INET6, "::", &sin6_addr), sin6_flowinfo=0, sin6_scope_id=0}, [28]) = 0
+
+[pid   477] recvfrom(124, "j\201\2450\201\242\241\3\2\1\5\242\3\2\1\n\243\0160\f0\n\241\4\2\2\0\225\242\2\4\0"..., 2048, 0, {sa_family=AF_INET6, sin6_port=htons(38790), inet_pton(AF_INET6, "::ffff:172.17.0.3", &sin6_addr), sin6_flowinfo=0, sin6_scope_id=0}, [28]) = 168
+
+[pid   477] sendto(124, "k\202\2\0210\202\2\r\240\3\2\1\5\241\3\2\1\v\243\5\33\3TDH\244\0220\20\240\3\2"..., 533, 0, {sa_family=AF_INET6, sin6_port=htons(38790), inet_pton(AF_INET6, "::ffff:172.17.0.3", &sin6_addr), sin6_flowinfo=0, sin6_scope_id=0}, 28) = 533
+```
+其对应的逻辑是这样的：使用 ipv6 绑定在 `0.0.0.0` 和 6088 端口，调用 `getsockname` 获取当前 socket 绑定的端口信息，数据传输过程使用的是 `recvfrom` 和 `sendto`。
+
+对比下来，两者的不同有几点：
+
+- 后者使用的是 ipv6，而前者是 ipv4
+- 后者使用 `recvfrom` 和 `sendto` 传输数据，而前者是 `sendmsg` 和 `recvmsg`
+- 前者有调用 `setsockopt` 设置 `IP_PKTINFO` 的值，而后者没有
+
+## 为什么内核会把源地址和之前不同的报文丢弃
+我们前面已经说过，UDP 协议是无连接的，默认情况下 socket 也不会保存双方连接的信息。即使服务端发送报文的源地址有误，只要对方能正常接收并处理，也不会导致网络不通。
+
+因为 conntrack，内核的 netfilter 模块会保存连接的状态，并作为防火墙设置的依据。它保存的 UDP 连接，只是简单记录了主机上本地 ip 和端口，和对端 ip 和端口，并不会保存更多的内容。
+
+在找到根源之前，我们曾经尝试过在服务器的主机上使用 SNAT 来修改服务端应答报文的源地址，期望能够修复该问题。但是却发现这种方法行不通，为什么呢？
+
+因为 SNAT 是在 netfilter 最后做的，在之前 netfilter 的 conntrack 因为不认识该 connection，直接丢弃了，所以即使添加了 SNAT 也是无法工作的。
+
+那能不能把 conntrack 功能去掉呢？比如解决方案：
+```
+iptables -I OUTPUT -t raw -p udp --sport 5060 -j CT --notrack
+iptables -I PREROUTING -t raw -p udp --dport 5060 -j CT --notrack
+```
+答案也是否定的，因为 NAT 需要 conntrack 来做翻译工作，如果去掉 conntrack 等于 SNAT 完全没用。
+
 # 原理
+## IP_PKTINFO
+通过查找，发现 `IP_PKTINFO` 这个选项就是让内核在 socket 中保存 IP 报文的信息，当然也包括了报文的源地址和目的地址。
+而 `man 7 ip` 文档中也说明了 `IP_PKTINFO` 是怎么控制源地址选择的：
+![](attachments/Pasted%20image%2020231106112432.png)
+
+也就是说，通过设置 `IP_PKTINFO` socket 选项为 1，然后使用 `recvmsg` 和 `sendmsg` 传输数据就能保证源地址选择符合我们的期望。这也是 dnsmasq 使用的方案。
+
+# 小结
+UDP 在多网卡的情况下，可能会发生服务器端源地址不对的情况，这是内核选路的结果。
 # 解决
-# 范例
+## 使用 IP_PKTINFO sockopt
+如上分析，在 UDP socket 上设置 `IP_PKTIFO`，并通过 `recvmsg` 和 `sendmsg` 函数传输数据。
+## UDP监听特定IP+PORT
+不再是监听在 `0.0.0.0` 地址（也就是所有的 ip 地址）+ Port，而是Udp server上监听特定的IP+Port，那么也可以保证server 在udp 回包的时候SIP的选择也是正确的。
+
+比如之前接口多IP时，监听的是：
+```bash
+nc -ul 56789
+```
+
+那么使用 nc 启动一个 udp 服务器，监听在 特定IP上，则为：
+```bash
+nc -ul 172.16.13.13 56789
+```
+这种情况下，服务端和客户端也能正常通信。
+# 其他
+## sendto && recvfrom 
+### 函数原型
+```text
+#include <sys/socket.h>
+
+ssize_t recvfrom(int sockfd, void *buf, size_t nbytes,
+					int flags, struct sockaddr *from, socklen_t *addrlen);
+					
+ssize_t sendto(int sockfd, const void *buf, size_t nsize, 
+					int flags, const struct sockaddr *to, const socklen_t *addrlen);
+					
+若成功，均返回读或者写的字节数；失败则返回-1 
+```
+### 范例
+UDP Server：
+```c
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+
+#define UDP_TEST_PORT       50001
+
+int main(int argC, char* arg[])
+{
+    struct sockaddr_in addr;
+    int sockfd, len = 0;    
+    int addr_len = sizeof(struct sockaddr_in);
+    char buffer[256];   
+
+    /* 建立socket，注意必须是SOCK_DGRAM */
+    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror ("socket");
+        exit(1);
+    }
+
+    /* 填写sockaddr_in 结构 */
+    bzero(&addr, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(UDP_TEST_PORT);
+    addr.sin_addr.s_addr = htonl(INADDR_ANY) ;// 接收任意IP发来的数据
+
+    /* 绑定socket */
+    if (bind(sockfd, (struct sockaddr *)&addr, sizeof(addr))<0) {
+        perror("connect");
+        exit(1);
+    }
+
+    while(1) {
+        bzero(buffer, sizeof(buffer));
+        len = recvfrom(sockfd, buffer, sizeof(buffer), 0, 
+                       (struct sockaddr *)&addr ,&addr_len);
+        /* 显示client端的网络地址和收到的字符串消息 */
+        printf("Received a string from client %s, string is: %s\n", 
+                inet_ntoa(addr.sin_addr), buffer);
+        /* 将收到的字符串消息返回给client端 */
+        sendto(sockfd,buffer, len, 0, (struct sockaddr *)&addr, addr_len);
+    }
+
+    return 0;
+}
+  
+// End of udp_server.c
+```
+
+UDP Client：
+```c
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+
+#define UDP_TEST_PORT       50001
+#define UDP_SERVER_IP       "127.0.0.1"
+
+int main(int argC, char* arg[])
+{
+    struct sockaddr_in addr;
+    int sockfd, len = 0;    
+    int addr_len = sizeof(struct sockaddr_in);      
+    char buffer[256];
+
+    /* 建立socket，注意必须是SOCK_DGRAM */
+    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("socket");
+        exit(1);
+    }
+
+    /* 填写sockaddr_in*/
+    bzero(&addr, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(UDP_TEST_PORT);
+    addr.sin_addr.s_addr = inet_addr(UDP_SERVER_IP);
+
+    while(1) {
+        bzero(buffer, sizeof(buffer));
+
+        printf("Please enter a string to send to server: \n");
+
+        /* 从标准输入设备取得字符串*/
+        len = read(STDIN_FILENO, buffer, sizeof(buffer));
+
+        /* 将字符串传送给server端*/
+        sendto(sockfd, buffer, len, 0, (struct sockaddr *)&addr, addr_len);
+
+        /* 接收server端返回的字符串*/
+        len = recvfrom(sockfd, buffer, sizeof(buffer), 0, 
+                       (struct sockaddr *)&addr, &addr_len);
+        printf("Receive from server: %s\n", buffer);
+    }
+
+    return 0;
+}
+
+// End of udp_client.c
+```
+# PKTINFO范例
 以下实例，以dpvs中的 udp_serv.c 作为参考。
 
 - 相关数据结构
@@ -311,3 +586,6 @@ int main(int argc, char *argv[])
 
 ```
 # 参考
+```c
+https://cizixs.com/2017/08/21/docker-udp-issue/
+```

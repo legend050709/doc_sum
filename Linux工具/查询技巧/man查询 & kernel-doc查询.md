@@ -1,3 +1,5 @@
+```table-of-contents
+```
 # 概述
 
 我们可以发现命令Date后面有一个数字Date(1),这个数字1代表一般用户可使用的命令。查询命令后面的数字是有意义的。
@@ -315,6 +317,14 @@ find / -type d -name "kernel-doc*"
 知道其属于tcp 协议栈的参数。
 直接 man 7 tcp, 然后查找 tcp_max_syn_backlog。
 ![](attachments/Pasted%20image%2020230525202118.png)
+
+## 网页查看
+[kernel-doc 链接](https://www.kernel.org/doc/Documentation/)；如下所示
+![](attachments/Pasted%20image%2020231102113649.png)
+
+
+[sysctl 相关的 kernel-doc 查看](https://www.kernel.org/doc/Documentation/sysctl/)；如下所示
+![](attachments/Pasted%20image%2020231102113542.png)
 
 # kernel-doc 说明
 ## 背景
