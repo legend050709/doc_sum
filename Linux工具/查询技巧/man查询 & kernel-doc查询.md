@@ -288,7 +288,7 @@ iproute-4.11.0-25.el7_7.2.x86_64
 ## kernel-doc方式查看
 ### 安装kernel-doc
 ```c
-yum install kernel-doc
+yum install kernel-doc -y
 ```
 ### 查看kernel-doc软件包的文件安装位置
 安装好kernel-doc软件包后，可以使用下面的命令查看它将文档安装在哪里了。

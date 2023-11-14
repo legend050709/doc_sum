@@ -1,7 +1,23 @@
-# 简介
+```table-of-contents
+```
+# 背景
+先弄清楚 TCP 协议有哪些痛点？而这些痛点是否可以在基于 UDP 协议实现的可靠传输协议中得到改进？
+
+在之前这篇文章：[TCP 就没什么缺陷吗？ (opens new window)](https://mp.weixin.qq.com/s/9kHoRk6QIYOFUR_PCmHY6g)，我已经说了 TCP 协议四个方面的缺陷：
+
+- 升级 TCP 的工作很困难；
+- TCP 建立连接的延迟；
+- TCP 存在队头阻塞问题；
+- 网络迁移需要重新建立 TCP 连接；
+
+现在市面上已经有基于 UDP 协议实现的可靠传输协议的成熟方案了，那就是 QUIC 协议，已经应用在了 HTTP/3。
+# quic介绍
+这次，**聊聊 QUIC 是如何实现可靠传输的？又是如何解决上面 TCP 协议四个方面的缺陷**？
+![](attachments/Pasted%20image%2020231113195335.png)
+
 ![](attachments/Pasted%20image%2020230906201859.png)
 ![](attachments/Pasted%20image%2020230906201925.png)
-# 建连快
+# quic建连快
 数据的发送和接收，要想保证安全和可靠，一定是需要连接的。TCP 需要，QUIC 也同样需要。连接到底是什么？连接是一个通道，是在一个客户端和一个服务端之间的唯一一条可信的通道，主要是为了安全考虑，建立了连接，也就是建立了可信通道，服务器对这个客户端“很放心”，对于服务器来说：你想跟我进行通信，得先让我认识一下你，我得先确认一下你是好人，是有资格跟我通信的。那么这个确认对方身份的过程，就是建立连接的过程。
 
 ## TCP+TLS建连慢
@@ -86,12 +102,20 @@ Client Hello 在扩展字段里标明了支持的 TLS 版本（Supported Version
 
 第二，0-RTT 存在前向安全问题，请慎用！
 
-# 不存在队头阻塞问题
+# quic解决队头阻塞问题
 QUIC依赖于UDP，UDP不存在队头阻塞问题。
 
 ## HTTP2依赖的TCP的队头阻塞
 在HTTP/2中，多个请求是跑在一个TCP管道中的。但当出现了丢包时，HTTP/2 的表现反倒不如 HTTP/1 了。因为TCP为了保证可靠传输，有个特别的“丢包重传”机制，丢失的包必须要等待重新传输确认，HTTP/2出现丢包时，整个 TCP 都要开始等待重传，那么就会阻塞该TCP连接中的所有请求（如下图）。而对于 HTTP/1.1 来说，可以开启多个 TCP 连接，出现这种情况反到只会影响其中一个连接，剩余的 TCP 连接还可以正常传输数据。
+
+# quic的可靠传输
+# quic的连接迁移
+# quic的流量控制
+# quic的拥塞控制
 # 参考
 ```c
 https://mp.weixin.qq.com/s/3GwoY7wGPybcPsR9--dLyQ
+
+小林：
+https://xiaolincoding.com/network/3_tcp/quic.html#quic-%E6%98%AF%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E5%8F%AF%E9%9D%A0%E4%BC%A0%E8%BE%93%E7%9A%84
 ```

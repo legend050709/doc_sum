@@ -1,3 +1,5 @@
+```table-of-contents
+```
 # 概述
 在谈RST攻击前，必须先了解TCP：如何通过三次握手建立TCP连接、四次握手怎样把全双工的连接关闭掉、滑动窗口是怎么传输数据的、TCP的flag标志位里RST在哪些情况下出现。下面我会画一些尽量简化的图来表达清楚上述几点，之后再了解下RST攻击是怎么回事。
 ![](attachments/Pasted%20image%2020230927114023.png)
@@ -584,6 +586,43 @@ tcp        0      0 192.21.7.1:41754        192.21.5.10:80          ESTABLISHED 
 16:31:47.651611 poll([{fd=3, events=POLLIN}], 1, 512) = 0 (Timeout) <0.512545>
 16:31:48.164195 poll([{fd=3, events=POLLIN}], 1, 512^Cstrace: Process 31548 detached
  <detached ...>
+```
+
+## killcx工具
+### 原理
+正如我们最开始学到的，如果处于 Established 状态的服务端，收到四元组相同的 SYN 报文后，**会回复一个 Challenge ACK，这个 ACK 报文里的「确认号」，正好是服务端下一次想要接收的序列号，说白了，就是可以通过这一步拿到服务端下一次预期接收的序列号。**
+
+**然后用这个确认号作为 RST 报文的序列号，发送给服务端，此时服务端会认为这个 RST 报文里的序列号是合法的，于是就会释放连接！**
+
+在 Linux 上有个叫 killcx 的工具，就是基于上面这样的方式实现的，它会主动发送 SYN 包获取 SEQ/ACK 号，然后利用 SEQ/ACK 号伪造两个 RST 报文分别发给客户端和服务端，这样双方的 TCP 连接都会被释放，这种方式活跃和非活跃的 TCP 连接都可以杀掉。
+
+### 使用
+killcx 的工具使用方式也很简单，如果在服务端执行 killcx 工具，只需指明客户端的 IP 和端口号，如果在客户端执行 killcx 工具，则就指明服务端的 IP 和端口号。
+```
+./killcx <IP地址>:<端口号>
+```
+killcx 工具的工作原理，如下图：
+![](attachments/Pasted%20image%2020231113150454.png)
+
+### 流程
+它伪造客户端发送 SYN 报文，服务端收到后就会回复一个携带了正确「序列号和确认号」的 ACK 报文（Challenge ACK），然后就可以利用这个 ACK 报文里面的信息，伪造两个 RST 报文：
+
+- 用 Challenge ACK 里的确认号伪造 RST 报文发送给服务端，服务端收到 RST 报文后就会释放连接。
+- 用 Challenge ACK 里的序列号伪造 RST 报文发送给客户端，客户端收到 RST 也会释放连接。
+正是通过这样的方式，成功将一个 TCP 连接关闭了！
+
+==这种方式活跃和非活跃的 TCP 连接都可以杀掉==。
+
+### 安装
+因为Killcx是perl脚本，它运行依赖三个Perl模块，分别是Net::RawIp、Net::PCAP、NetPacket::Ethernet，这几个模块的安装很简单
+```c
+# 通过yum先安装perl-CPAN
+yum -y install perl-CPAN
+# 利用CPAN安装三个模块
+perl -MCPAN -e shell
+cpan> install Net::RawIP
+cpan> install Net::Pcap
+cpan> install NetPacket::Ethernet
 ```
 
 ## 使用hping3杀死空闲的TCP连接
