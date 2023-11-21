@@ -506,53 +506,74 @@ struct sock *__inet_lookup_listener(struct......)
 #include <netinet/in.h>
 #include <sys/epoll.h>
 #include <fcntl.h>
+#include <pthread.h>
+#include <errno.h>
 
 #define LISTEN_START_PORT  9000
 #define LISTEN_END_PORT    9300
-#define EVENTS_SIZE        10240
+#define EVENTS_SIZE        2048
 #define MAXLINE 80
+#define READ_BUF_SIZE 512
+
+
+int make_socket_non_blocking (int sfd)
+{
+    int flags, s;
+    flags = fcntl (sfd, F_GETFL, 0);
+    if (flags == -1) {
+        perror ("fcntl");
+        return -1;
+    }
+
+    flags |= O_NONBLOCK;
+    s = fcntl (sfd, F_SETFL, flags);
+    if (s == -1) {
+        perror ("fcntl");
+        return -1;
+    }
+
+    return 0;
+}
 
 /* 作为server_test 在单机上单个进程监听多个port,测试多个连接 */
-int listen_multi_port(int *socks)
+int tcp_listen(void * listen_port_arg)
 {
-    int i, j;
+    int i;
+    int listen_port = 0;
     int listen_sock;
     struct sockaddr_in addr;
     int opt = 1;
     int backlog = 20;
-    int sock_cnt = 0;
     int epfd = 0;
     struct epoll_event tmp_event;
     struct epoll_event events[EVENTS_SIZE];
 
+    if (listen_port_arg) {
+        listen_port = *((int*)listen_port_arg);
+    }
+    listen_sock = socket(AF_INET, SOCK_STREAM, 0);
+    setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    setsockopt(listen_sock, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
+    make_socket_non_blocking(listen_sock);
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(listen_port);
+    addr.sin_addr.s_addr = INADDR_ANY;
+    bind(listen_sock, (struct sockaddr *)&addr, sizeof(addr));
+    listen(listen_sock, backlog);
 
     epfd = epoll_create(1);
     if (epfd == -1) {
       perror("epoll_creat error!!\n");
       return -1;
     }
-
-    for (i = LISTEN_START_PORT; i <= LISTEN_END_PORT; i++) {
-        listen_sock = socket(AF_INET, SOCK_STREAM, 0);
-        setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-        memset(&addr, 0, sizeof(addr));
-        addr.sin_family = AF_INET;
-        addr.sin_port = htons(i);
-        addr.sin_addr.s_addr = INADDR_ANY;
-        bind(listen_sock, (struct sockaddr *) &addr, sizeof(addr));
-        listen(listen_sock, backlog);
-
-        socks[sock_cnt] = listen_sock;
-        sock_cnt++;
-
-        memset(&tmp_event, 0, sizeof(tmp_event));
-        tmp_event.events = EPOLLIN;
-        tmp_event.data.fd = listen_sock;
-        if(-1 == epoll_ctl(epfd, EPOLL_CTL_ADD, listen_sock, &tmp_event)) {
-            perror("epoll_ctl error!!!\n");
-            return -1;
-        }
+    tmp_event.events = EPOLLIN;
+    tmp_event.data.fd = listen_sock;
+    if(-1 == epoll_ctl(epfd, EPOLL_CTL_ADD, listen_sock, &tmp_event)) {
+        perror("epoll_ctl error!!!\n");
+        return -1;
     }
+
 
     struct sockaddr_in cli_addr;
     struct sockaddr_in connectedAddr;
@@ -561,64 +582,125 @@ int listen_multi_port(int *socks)
     int eNum;
     char str[INET_ADDRSTRLEN] = {0};
     char str2[INET_ADDRSTRLEN] = {0};
+    int read_n = 0;
+    char read_buf[READ_BUF_SIZE];
+
     while (1) {
         eNum = epoll_wait(epfd, events, EVENTS_SIZE, -1);
         if (eNum == -1) {
             printf("epoll_wait error.\n");
-            return -1;
+            continue;
         }
-        for (j = 0; j < eNum; j++) {
-            if (!(events[i].events & EPOLLIN)) {
-                continue;
-            }
-            memset(str, 0, sizeof(str));
-            accept_fd = accept(events[i].data.fd, (struct sockaddr*) &cli_addr, &addr_length);
-            if (accept_fd > 0) {
-                getsockname(accept_fd, (struct sockaddr *)&connectedAddr, &addr_length);
-                printf("received from %s:%d to %s:%d\n", 
-                    inet_ntop(AF_INET,  &cli_addr.sin_addr, str, sizeof(str)),
-                    ntohs(cli_addr.sin_port),
-                    inet_ntoa(connectedAddr.sin_addr),
-                    ntohs(connectedAddr.sin_port)
-                );
-                close(accept_fd);
-                accept_fd = -1;
+        for (i = 0; i < eNum; i++) {
+            if(events[i].data.fd == listen_sock) {
+                if (!(events[i].events & EPOLLIN)) {
+                    continue;
+                }
+                // accept_fd = accept(events[i].data.fd, (struct sockaddr*) &cli_addr, &addr_length);
+                accept_fd = accept(events[i].data.fd, NULL, NULL);
+                if (accept_fd >= 0) {
+                    /*
+                        getsockname(accept_fd, (struct sockaddr *)&connectedAddr, &addr_length);
+                        printf("received from %s:%d to %s:%d\n",
+                            inet_ntop(AF_INET,  &cli_addr.sin_addr, str, sizeof(str)),
+                            ntohs(cli_addr.sin_port),
+                            inet_ntoa(connectedAddr.sin_addr),
+                            ntohs(connectedAddr.sin_port)
+                        );
+                        close(accept_fd);
+                        accept_fd = -1;
+                    */
+                    make_socket_non_blocking(accept_fd);
+                    tmp_event.events = EPOLLIN | EPOLLET;
+                    tmp_event.data.fd = accept_fd;
+                    if (-1 == epoll_ctl(epfd, EPOLL_CTL_ADD, accept_fd, &tmp_event)) {
+                        perror("epoll_ctl error2.");
+                        if (accept_fd >= 0) {
+                            close(accept_fd);
+                            accept_fd = -1;
+                        }
+                        continue;
+                    }
+                } else {
+                    if (errno != EAGAIN) {
+                      perror("accept error.");
+                      printf("");
+                      continue;
+                    }
+                }
+            } else {
+                if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP || (!(events[i].events & EPOLLIN)))) {
+                    // perror("events flags error.");
+                    if (events[i].data.fd >= 0) {
+                        epoll_ctl(epfd, EPOLL_CTL_DEL, events[i].data.fd, NULL);
+                        close(events[i].data.fd);
+                        events[i].data.fd = -1;
+                    }
+                    continue;
+                }
+                if (events[i].data.fd < 0) {
+                    perror("events fd error.");
+                    continue;
+                }
+                if (events[i].events & EPOLLIN) {
+                    read_n = read(events[i].data.fd, read_buf, sizeof(read_buf));
+                    if (read_n <= 0) {
+                        if (events[i].data.fd >= 0) {
+                            epoll_ctl(epfd, EPOLL_CTL_DEL, events[i].data.fd, NULL);
+                            close(events[i].data.fd);
+                            events[i].data.fd = -1;
+                        }
+                    }
+                }
             }
         }
     }
     return 0;
 }
 
-void close_multi_fd(int *socks)
-{
-    int i;
-    for (i = 0; i <= LISTEN_END_PORT - LISTEN_START_PORT; i++) {
-        if (socks[i] != -1) {
-            close(socks[i]);
-            socks[i] = -1;
-        }
-    }
-}
 
-
-/* 使用：gcc -o listen_multi_ports listen_multi_ports.c */
+/* 
+    compile: gcc -o listen_multi_ports listen_multi_ports.c -lpthread
+ */
 int main(int argc, char *argv[])
 {
-    int i;
-    int *socks = (int *)malloc((LISTEN_END_PORT - LISTEN_START_PORT + 1) * sizeof(int));
-    if (NULL == socks) {
+    int i, ret;
+    int listen_port;
+    pthread_t *pthread_ids = (pthread_t *)malloc((LISTEN_END_PORT - LISTEN_START_PORT + 1) * sizeof(pthread_t));
+
+    if (NULL == pthread_ids) {
          printf("malloc filed.\n");
          return -1;
     }
     for (i = 0; i <= LISTEN_END_PORT-LISTEN_START_PORT; i++) {
-         socks[i] = -1;
+         pthread_ids[i] = 0;
+         listen_port = LISTEN_START_PORT + i;
+         ret = pthread_create(&pthread_ids[i], NULL, (void *)tcp_listen, (void*)&listen_port);
+         if (ret != 0) {
+            printf("Create pthread error!\n");
+            return -1;
+         }
     }
-    listen_multi_port(socks);
-    close_multi_fd(socks);
+    for (i = 0; i <= LISTEN_END_PORT-LISTEN_START_PORT; i++) {
+        if (pthread_ids[i]) {
+            pthread_join(pthread_ids[i], NULL);
+        }
+    }
+
     return 0;
 }
-
 ```
+
+机器的其他配置：
+```c
+pkill nginx
+ulimit -HSn 1024000
+sysctl -w fs.file-max=13025552
+sysctl -w net.ipv4.ip_local_port_range='1024 64000'
+ip link set eth03 up
+for a in `seq 11 220`; do ip addr add 192.21.9.${a}/24 dev eth03;done
+```
+
 # 参考
 ```c
 https://www.cnblogs.com/charlieroro/p/14096252.html
