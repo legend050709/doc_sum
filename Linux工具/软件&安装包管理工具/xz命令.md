@@ -32,16 +32,29 @@ xz命令可以压缩、解压缩单个文件，也可以对tar的文件进行压
 ```
 # 范例
 
-- 压缩一个文件 test.txt
+## 压缩一个文件 test.txt
 ![](attachments/Pasted%20image%2020230615123822.png)
 
 注：没有添加-k标记，压缩成功后生成 test.txt.xz, 原文件会被删除。
 
-- 展示xz文件内容
+## 展示xz文件内容
 使用参数 -l 显示 .xz 文件的基本信息。基本信息包括压缩率、数据完整性验证方式等。也可以和参数 -v 或 -vv 配合显示更详尽的信息。
 
 ```shell
 xz -l index.txt.xz
 # Strms  Blocks   Compressed Uncompressed  Ratio  Check   Filename
 #    1       1        768 B      1,240 B  0.619  CRC64   index.txt.
+```
+## 解压缩xz文件
+ xz -dk xxx.xz 其中-d表示解压缩，-k表示保留原xz文件。
+```c 
+-d, --decompress, --uncompress
+	  Decompress.
+
+-k, --keep
+	  Don't delete the input files.
+```
+
+```c
+xz -dk gdb-11.2.xz
 ```

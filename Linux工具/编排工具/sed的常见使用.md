@@ -2,7 +2,97 @@
 # 场景
 # 使用方法
 # 操作
+## 提取
+### 从指定的字符串中提取多个内容
+将目标用()括起来，然后输出的时候使用\n来代替进行输出。
 
+```c
+# ss -tman | grep skmem
+	 skmem:(r0,rb87380,t0,tb16384,f0,w0,o136,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f0,w0,o0,bl0)
+	 skmem:(r0,rb369280,t0,tb787968,f0,w0,o0,bl0)
+	 skmem:(r0,rb369280,t0,tb87040,f0,w0,o0,bl0)
+	 skmem:(r0,rb369280,t0,tb87040,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f2816,w1280,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f2816,w1280,o0,bl0)
+	 skmem:(r0,rb4194304,t0,tb2626560,f0,w0,o0,bl0)
+	 skmem:(r0,rb369280,t0,tb332800,f4096,w0,o136,bl0)
+	 skmem:(r0,rb369280,t0,tb374272,f0,w0,o0,bl0)
+	 skmem:(r0,rb369280,t0,tb87040,f0,w0,o0,bl0)
+	 skmem:(r0,rb369280,t0,tb46080,f0,w0,o0,bl0)
+	 skmem:(r0,rb369280,t1408,tb87040,f3968,w4224,o0,bl0)
+	 skmem:(r0,rb369280,t0,tb678912,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f2816,w1280,o0,bl0)
+	 skmem:(r0,rb1061488,t0,tb2626560,f0,w0,o0,bl0)
+	 skmem:(r0,rb2491109,t0,tb2626560,f0,w0,o0,bl0)
+	 skmem:(r0,rb369280,t0,tb87040,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f2816,w1280,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f2816,w1280,o0,bl0)
+	 skmem:(r0,rb369280,t0,tb217600,f0,w0,o0,bl0)
+	 skmem:(r0,rb1061488,t0,tb2626560,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f0,w0,o136,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f2816,w1280,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f2816,w1280,o0,bl0)
+	 skmem:(r0,rb369280,t0,tb87040,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f2816,w1280,o0,bl0)
+	 skmem:(r0,rb1061488,t0,tb2626560,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f2816,w1280,o0,bl0)
+	 skmem:(r0,rb1061488,t0,tb2626560,f4096,w0,o0,bl0)
+	 skmem:(r0,rb366080,t0,tb46080,f4096,w0,o136,bl0)
+	 skmem:(r0,rb369280,t0,tb87040,f0,w0,o0,bl0)
+	 skmem:(r0,rb978736,t0,tb46080,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f2816,w1280,o0,bl0)
+	 skmem:(r0,rb1061488,t0,tb2626560,f0,w0,o0,bl0)
+	 skmem:(r0,rb1061488,t0,tb2626560,f4096,w0,o0,bl0)
+	 skmem:(r0,rb369280,t0,tb87040,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f2816,w1280,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f2816,w1280,o0,bl0)
+	 skmem:(r0,rb369280,t0,tb87040,f0,w0,o0,bl0)
+	 skmem:(r0,rb87380,t0,tb16384,f2816,w1280,o0,bl0)
+```
+比如想要提取每一个数字。
+则如下所示：
+```c
+# ss -tman | grep skmem | sed -r "s/skmem:\(r([0-9]+),rb([0-9]+),t([0-9]+),tb([0-9]+),f([0-9]+),w([0-9]+),o([0-9]+),bl([0-9]+)\)/\1  \2  \3  \4  \5  \6   \7  \8/g"
+```
+![](attachments/Pasted%20image%2020231116195238.png)
+
+```c
+# echo "libgcc-4.8.5-4.h5.x86_64.rpm" | sed -r "s/libgcc-([0-9]+\.[0-9]+.*)\.rpm/\1/g"
+4.8.5-4.h5.x86_64
+
+如果是使用grep，则如下所示：
+# echo "libgcc-4.8.5-4.h5.x86_64.rpm" | grep -Eo "[0-9]+\.[0-9]+.*x86_64"
+4.8.5-4.h5.x86_64
+```
+```c
+grep参数说明：
+
+   -E, --extended-regexp
+          Interpret PATTERN as an extended regular expression (ERE, see below).  (-E is specified by POSIX.)
+
+   -o, --only-matching
+          Print only the matched (non-empty) parts of a matching line, with each such part on a separate output line.
+
+   -e PATTERN, --regexp=PATTERN
+          Use PATTERN as the pattern.  This can be used to specify multiple search patterns, or to protect a pattern beginning with a hyphen (-).  (-e is specified by POSIX.)
+```
 ## 删除
 ### 删除指定范围的行
 ```bash

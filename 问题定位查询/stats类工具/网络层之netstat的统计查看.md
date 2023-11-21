@@ -1,6 +1,27 @@
 ```table-of-contents
 ```
 # netstats命令
+## 查看各个状态的连接个数
+```c
+# netstat -n | grep 10.21.255.98 | awk '/^tcp/ {++S[$NF]} END {for(a in S) print a, S[a]}'
+FIN_WAIT2 6
+SYN_SENT 26
+TIME_WAIT 48909
+```
+另外使用ss命令也是可以的。
+```c
+# ss -s
+Total: 351 (kernel 5796)
+TCP:   48012 (estab 26, closed 47943, orphaned 8, synrecv 0, timewait 47911/0), ports 0
+
+Transport Total     IP        IPv6
+*     5796      -         -
+RAW   0         0         0
+UDP   5         2         3
+TCP   69        45        24
+INET      74        47        27
+FRAG      0         0         0
+```
 # /proc/net/netstat文件
 ## 可读显示脚本
 在查看centos机器的网络状态时，尝尝要看看计数器文件/proc/net/netstat，但是直接cat，如下显示. 很难读取。
@@ -148,7 +169,17 @@ IpExt:InECT0Pkts = 0
 IpExt:InCEPkts = 0
 IpExt:ReasmOverlaps = 0
 ```
+# 常见问题
+## netstat  查看ipv6连接ipv6地址展示不全
+![](attachments/Pasted%20image%2020231115163953.png)
+
+增加参数 -W 可以解决。
+![](attachments/Pasted%20image%2020231115164434.png)
+
+范例如下所示：
+![](attachments/Pasted%20image%2020231115164503.png)
+
 # 参考
 ```c
-
+https://blog.csdn.net/u010772882/article/details/127484484
 ```

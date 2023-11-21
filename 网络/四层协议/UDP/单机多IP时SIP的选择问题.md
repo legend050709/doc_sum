@@ -30,7 +30,7 @@ $ docker run -it apline sh
 ```
 
 
-**问题**
+- **问题**
 
 在 docker0 上抓包，因为这是报文必经过的地方。通过过滤容器的 ip 地址，很容器找到感兴趣的报文：
 ```
@@ -47,18 +47,93 @@ tcpdump -i docker0 -nn host 172.17.0.3
 ```
 
 
-# 分析
+- **分析**
 从网络报文的分析中可以看到服务端返回的报文源地址不是我们预想的 eth0 地址，而是 docker0 的地址，而客户端直接认为该报文是非法的，返回了 ICMP 的报文给对方。
 那么问题的原因也可以分为两个部分：
 1. 为什么应答报文源地址是**错误的**？
 2. 既然 UDP 是无状态的，内核怎么判断源地址不正确呢？
 
+# 接口多IP时SIP的选择机制
+源地址和目的地址是 IP 首部中最重要的两个字段，而我们总是习惯于关注报文的目的地址，而忽略源地址。这完全是情有可原的！因为作为开发者来说，关心的是数据往哪发，作为运维者来说，配置路由规则也是按目的地址进行配置。至于源地址？就让内核自己去搞定好了，而内核似乎也真的能搞定。
+源地址选择不重要吗？当然不是，源地址在绝大多数情况下就是对端的目的地址，它的选择是否正确决定了对端能不能将该响应正确地送回来。对于只有一个 IP 地址(排除 loopback )的主机来说，那没得说，只能选它；但如果有多个 IP 地址呢？ 要知道一台主机可以有多个网卡，每个网卡都可以配置多个 IP 地址，这时源地址该如何选择呢？
+## SIP的选择顺序
+内核按照以下顺序尝试选择：
 
-# QA
+1. socket 层次，用户使用 bind() 绑定的 IP 地址
+> 注意：使用bind方式，会分配Sport，即在connect之前使用bind绑定，会分配Sport。Sport的选择范围受限于内核参数port-range。如果机器上存在大量的会话（比如time_wait）状态，那么下次bind分配sport可能失败，导致单机支持的会话个数受限于port-range。可以使用
+2. 查询路由时，如果匹配的路由带有 src 关键字，则使用其指定的地址
+3. 查询路由时，得到的出接口上配置的同网段的第一个 primary 地址
+4. 查询路由时，其他接口上配置的 primary 地址
+
+> 注：看上去源地址是完全在网络层完成的事，但实际上，不同的传输层( TCP 和 UDP )也会对源地址选择产生影响。
+### TCP 源地址选择 
+TCP 是面向连接的，这里的面向连接隐含一层意思：连接的四元组一旦建立，就不会变了。
+
+对于发起端，它会在发送第一个 SYN 报文时(也就是用户使用 connect() 时)就进行源地址选择。
+对于被动端则很简单，直接使用 SYN 报文中的目的地址。它需要重新源地址选择吗？不需要，或者说不能！原因是四元组唯一确定一条 TCP 连接，既然发起端已经在 SYN 中定下了<源IP，目的IP>，那么被动端只能默默接受，否则就无法算一条连接了。
+
+-**内核相关实现**
+主动端：
+```
+int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
+{
+    ......
+    if (!inet->inet_saddr)
+		inet->inet_saddr = fl4->saddr; 
+}
+```
+
+被动端：
+```
+// 收到 SYN 请求时
+static void tcp_v4_init_req(struct request_sock *req,
+			    const struct sock *sk_listener,
+			    struct sk_buff *skb)
+{
+    ......
+    sk_daddr_set(req_to_sk(req), ip_hdr(skb)->saddr);
+}
+
+// 收到 ACK 时
+struct sock *tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
+				  struct request_sock *req...
+{
+    ....
+    newinet->inet_saddr	      = ireq->ir_loc_addr;
+}                  
+```
+
+### UDP 源地址选择
+UDP 在很多方面都没有 TCP 复杂，但源地址选择是个例外。UDP 没有数据流或者连接的概念，因此他不必听命于对端的报文的目的地址作为源地址，而是可以另起炉灶，重新选择。
+比如在下面的拓扑中：
+![](attachments/Pasted%20image%2020231120110358.png)
+
+HOST 2 作为 UDP Server, 当 HOST 1 发送一个源地址 为 10.0.0.1 且目的地址为 192.168.2.1 的 UDP 报文后，HOST 2 查询路由发现回复的报文应该走 eth1，因此回复的报文源地址为 192.168.3.1。
+
+有什么办法可以避免 UDP 每个报文都去进行路由查找然后源地址选择呢？答案是 bind() 或者 connect()。
+```c
+#include <sys/types.h>          /* See NOTES */
+#include <sys/socket.h>
+
+int connect(int sockfd, const struct sockaddr *addr,
+           socklen_t addrlen);
+```
+connect() 的相关代码如下：
+```
+int __ip4_datagram_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
+{
+    ......
+    if (!inet->inet_saddr)
+		inet->inet_saddr = fl4->saddr;	/* Update source address */
+}
+```
+# 相关问题
 ## UDP接口多IP的SIP的选择问题
 UDP 和多网络接口。因为如果主机上只有一个网络接口，发出去的报文源地址一定不会有错；
 通过搜索，发现这确实是个已知的问题。在 UNP（） 这本书中，已经描述过这个问题，下面是对应的内容：
 ![](attachments/Pasted%20image%2020231106115338.png)
+
+> 小结：UDP 在多网卡的情况下，可能会发生服务器端源地址不对的情况，这是内核选路的结果。
 ## udp和tcp对比
 为什么 UDP 和 TCP 有不同的选路逻辑呢？
 因为 UDP 是无状态的协议，内核不会保存连接双方的信息，因此每次发送的报文都认为是独立的，socket 层每次发送报文默认情况不会指明要使用的源地址，只是说明对方地址。
@@ -126,19 +201,19 @@ iptables -I PREROUTING -t raw -p udp --dport 5060 -j CT --notrack
 ```
 答案也是否定的，因为 NAT 需要 conntrack 来做翻译工作，如果去掉 conntrack 等于 SNAT 完全没用。
 
-# 原理
-## IP_PKTINFO
+# 解决方法
+## UDP接口多IP使用IP_PKTINFO sockopt
+ 获取 TCP socket 的目的地址很容易，通过 getsockname即可。但是对于无连接状态的 UDP socket 获取目的地址比较麻烦。
+ 
 通过查找，发现 `IP_PKTINFO` 这个选项就是让内核在 socket 中保存 IP 报文的信息，当然也包括了报文的源地址和目的地址。
 而 `man 7 ip` 文档中也说明了 `IP_PKTINFO` 是怎么控制源地址选择的：
 ![](attachments/Pasted%20image%2020231106112432.png)
 
 也就是说，通过设置 `IP_PKTINFO` socket 选项为 1，然后使用 `recvmsg` 和 `sendmsg` 传输数据就能保证源地址选择符合我们的期望。这也是 dnsmasq 使用的方案。
 
-# 小结
-UDP 在多网卡的情况下，可能会发生服务器端源地址不对的情况，这是内核选路的结果。
-# 解决
-## 使用 IP_PKTINFO sockopt
-如上分析，在 UDP socket 上设置 `IP_PKTIFO`，并通过 `recvmsg` 和 `sendmsg` 函数传输数据。
+### 限制
+上面的方法固然好，但是很多语言目前稳定版本，socket 都不支持 sendmsg，recvmsg，更不要说 setsockopt 设置 IP_PKTINFO 了。在 java 中没有，在 python 2.7 版本也没有，只有 python 3.3 版本支持。所以这种方法还不具有普适性，但是如果用的是 C 或者 Go 语言，实现起来倒是很方便的。
+
 ## UDP监听特定IP+PORT
 不再是监听在 `0.0.0.0` 地址（也就是所有的 ip 地址）+ Port，而是Udp server上监听特定的IP+Port，那么也可以保证server 在udp 回包的时候SIP的选择也是正确的。
 
@@ -154,7 +229,7 @@ nc -ul 172.16.13.13 56789
 这种情况下，服务端和客户端也能正常通信。
 # 其他
 ## sendto && recvfrom 
-### 函数原型
+- **函数原型**
 ```text
 #include <sys/socket.h>
 
@@ -166,7 +241,8 @@ ssize_t sendto(int sockfd, const void *buf, size_t nsize,
 					
 若成功，均返回读或者写的字节数；失败则返回-1 
 ```
-### 范例
+
+- **范例**
 UDP Server：
 ```c
 #include <sys/types.h>
@@ -277,7 +353,8 @@ int main(int argC, char* arg[])
 
 // End of udp_client.c
 ```
-# PKTINFO范例
+# 范例
+## PKTINFO范例
 以下实例，以dpvs中的 udp_serv.c 作为参考。
 
 - 相关数据结构
@@ -588,4 +665,8 @@ int main(int argc, char *argv[])
 # 参考
 ```c
 https://cizixs.com/2017/08/21/docker-udp-issue/
+
+# Linux 报文源地址选择那点事儿
+https://switch-router.gitee.io/blog/srcselect/
+【其他文章也很好】
 ```

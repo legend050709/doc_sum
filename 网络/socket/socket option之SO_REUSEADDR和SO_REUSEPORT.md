@@ -494,6 +494,131 @@ struct sock *__inet_lookup_listener(struct......)
 
 这个特性在4.5版本只支持UDP,而在4.6版本开始支持TCP([patch](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/net/ipv4/inet_hashtables.c?id=c125e80b88687b25b321795457309eaaee4bf270))。这样在查找listen socket时，内核将不用再遍历整个冲突链，而是在找到一个合格的socket时，如果它设置了`SO_REUSEPORT`,就直接找到它所属的`reuseport group`,从中选择一个进行后续处理.
 
+# 范例
+## 单机监听多个Port
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <sys/epoll.h>
+#include <fcntl.h>
+
+#define LISTEN_START_PORT  9000
+#define LISTEN_END_PORT    9300
+#define EVENTS_SIZE        10240
+#define MAXLINE 80
+
+/* 作为server_test 在单机上单个进程监听多个port,测试多个连接 */
+int listen_multi_port(int *socks)
+{
+    int i, j;
+    int listen_sock;
+    struct sockaddr_in addr;
+    int opt = 1;
+    int backlog = 20;
+    int sock_cnt = 0;
+    int epfd = 0;
+    struct epoll_event tmp_event;
+    struct epoll_event events[EVENTS_SIZE];
+
+
+    epfd = epoll_create(1);
+    if (epfd == -1) {
+      perror("epoll_creat error!!\n");
+      return -1;
+    }
+
+    for (i = LISTEN_START_PORT; i <= LISTEN_END_PORT; i++) {
+        listen_sock = socket(AF_INET, SOCK_STREAM, 0);
+        setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(i);
+        addr.sin_addr.s_addr = INADDR_ANY;
+        bind(listen_sock, (struct sockaddr *) &addr, sizeof(addr));
+        listen(listen_sock, backlog);
+
+        socks[sock_cnt] = listen_sock;
+        sock_cnt++;
+
+        memset(&tmp_event, 0, sizeof(tmp_event));
+        tmp_event.events = EPOLLIN;
+        tmp_event.data.fd = listen_sock;
+        if(-1 == epoll_ctl(epfd, EPOLL_CTL_ADD, listen_sock, &tmp_event)) {
+            perror("epoll_ctl error!!!\n");
+            return -1;
+        }
+    }
+
+    struct sockaddr_in cli_addr;
+    struct sockaddr_in connectedAddr;
+    socklen_t addr_length = sizeof(cli_addr);
+    int accept_fd;
+    int eNum;
+    char str[INET_ADDRSTRLEN] = {0};
+    char str2[INET_ADDRSTRLEN] = {0};
+    while (1) {
+        eNum = epoll_wait(epfd, events, EVENTS_SIZE, -1);
+        if (eNum == -1) {
+            printf("epoll_wait error.\n");
+            return -1;
+        }
+        for (j = 0; j < eNum; j++) {
+            if (!(events[i].events & EPOLLIN)) {
+                continue;
+            }
+            memset(str, 0, sizeof(str));
+            accept_fd = accept(events[i].data.fd, (struct sockaddr*) &cli_addr, &addr_length);
+            if (accept_fd > 0) {
+                getsockname(accept_fd, (struct sockaddr *)&connectedAddr, &addr_length);
+                printf("received from %s:%d to %s:%d\n", 
+                    inet_ntop(AF_INET,  &cli_addr.sin_addr, str, sizeof(str)),
+                    ntohs(cli_addr.sin_port),
+                    inet_ntoa(connectedAddr.sin_addr),
+                    ntohs(connectedAddr.sin_port)
+                );
+                close(accept_fd);
+                accept_fd = -1;
+            }
+        }
+    }
+    return 0;
+}
+
+void close_multi_fd(int *socks)
+{
+    int i;
+    for (i = 0; i <= LISTEN_END_PORT - LISTEN_START_PORT; i++) {
+        if (socks[i] != -1) {
+            close(socks[i]);
+            socks[i] = -1;
+        }
+    }
+}
+
+
+/* 使用：gcc -o listen_multi_ports listen_multi_ports.c */
+int main(int argc, char *argv[])
+{
+    int i;
+    int *socks = (int *)malloc((LISTEN_END_PORT - LISTEN_START_PORT + 1) * sizeof(int));
+    if (NULL == socks) {
+         printf("malloc filed.\n");
+         return -1;
+    }
+    for (i = 0; i <= LISTEN_END_PORT-LISTEN_START_PORT; i++) {
+         socks[i] = -1;
+    }
+    listen_multi_port(socks);
+    close_multi_fd(socks);
+    return 0;
+}
+
+```
 # 参考
 ```c
 https://www.cnblogs.com/charlieroro/p/14096252.html

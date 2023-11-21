@@ -146,7 +146,67 @@ killcx 工具则是属于主动获取，它是主动发送一个 SYN 报文，�
 
 - tcpkill 工具只能用来关闭活跃的 TCP 连接，无法关闭非活跃的 TCP 连接，因为 tcpkill 工具是等双方进行 TCP 通信后，才去获取正确的序列号，如果这条 TCP 连接一直没有任何数据传输，则就永远获取不到正确的序列号。
 - killcx 工具可以用来关闭活跃和非活跃的 TCP 连接，因为 killcx 工具是主动发送 SYN 报文，这时对方就会回复 Challenge ACK ，然后 killcx 工具就能从这个 ACK 获取到正确的序列号。
-- 
+
+# 实验
+- **测试环境**
+说明：
+```c
+clinet: 10.44.79.155
+
+server: 10.44.79.153
+```
+
+- **clinet发起连接**
+```c
+nc -t 10.44.79.153 22 -p 34556
+```
+
+- **server 查看连接**
+```c
+# netstat -apn |grep 10.44.79.155
+tcp        0      0 10.44.79.153:22         10.44.79.155:34556      ESTABLISHED 9389/sshd: [accepte
+```
+
+- **client操作构造server上的孤儿连接**
+如下操作，将client的链接给清理了。同时server上的连接依然保持为Established 状态。
+```c
+sysctl -w net.ipv4.tcp_orphan_retries=1
+# 处于fin-wait状态，减少重发fin的次数，超过了之后直接断开了
+
+iptables -t filter -A OUTPUT -p tcp --dport 22 --sport 34556  -j DROP
+# 丢弃给sever发的fin包
+
+pkill nc
+# 直接将nc给杀死，其实就是为了关闭连接
+
+# 在 client上查看是否存在链接，发现不存在了。
+# netstat -apn |grep 10.44.79.153
+```
+
+- **server上的链接成为孤儿连接**
+经过上诉的client的操作，client上不存在该连接了，但是server上的该连接依然处于established 状态。
+
+
+- **client上发送syn包**
+```c
+#iptables -t filter -D OUTPUT -p tcp --dport 22 --sport 34556  -j DROP
+# 运行client 接下来往外发特定流的包
+
+# hping3  -S -p 22 10.44.79.153 -s 34556 -c 1
+在 client上使用hping3 发送指定五元组的syn包。
+不在clinet上通过nc来发送syn，是因为 nc 可能会导致server收到syn之后，回复challenge ack, 然后client回复rst。在这个之后，client继续发送了syn进行三次握手，并且也会成功。
+```
+
+- **server上查看连接**
+经过上面的操作，发现server上之前处于 established 状态的连接，现在不存在了。
+
+
+- **抓包查看流程**：
+client上抓包：
+![](attachments/Pasted%20image%2020231114203914.png)
+
+server上抓包：
+![](attachments/Pasted%20image%2020231114204005.png)
 # 参考
 ```c
 https://xiaolincoding.com/network/3_tcp/challenge_ack.html#rfc-%E6%96%87%E6%A1%A3%E8%A7%A3%E9%87%8A

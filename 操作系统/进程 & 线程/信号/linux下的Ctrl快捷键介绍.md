@@ -1,4 +1,5 @@
-
+```table-of-contents
+```
 # 常用Ctrl快捷键
 ## ctrl +c && ctrl + z
 首先，最常用的是Ctrl+C和Ctrl+Z：

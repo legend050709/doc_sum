@@ -1,7 +1,7 @@
 ```table-of-contents
 ```
 # 介绍
-# 范例
+# 使用
 ```c
 # -T 打印系统调用花费的时间  
 # -tt 打印系统调用的时间点  
@@ -14,6 +14,16 @@ $ strace -T -tt -f -s 10000 -p 87 -o strace.log
 
 strace -T -tt -f -s 10000 -p 87 |& tee strace.log
 ```
+## 存在子进程的命令追踪
+```c
+strace -T -tt -f CMD
+```
+## 多线程追踪
+```
+strace -T -tt -fp PID
+```
+# 范例
+
 # 其他
 大多数进程基本都会使用基础c库，而不是系统调用，如Linux上的glibc，Windows上的msvc，所以还有一个工具ltrace，可以用来追踪库调用，如下：
 ```c

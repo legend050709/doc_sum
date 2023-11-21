@@ -1,6 +1,8 @@
 ```table-of-contents
 ```
+# 查看
+## /proc/net/sockstat
 # 参考
 ```c
-https://www.gooneyryan.com/archives/983
+
 ```
