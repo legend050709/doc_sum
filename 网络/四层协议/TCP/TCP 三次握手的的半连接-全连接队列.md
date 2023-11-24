@@ -7,4 +7,7 @@ https://xiaolincoding.com/network/3_tcp/tcp_queue.html
 
 # TCP Backlog
 https://ylgrgyq.github.io/2017/05/18/tcp-backlog/
+
+# backlog参数对TCP连接建立的影
+https://switch-router.gitee.io/blog/TCP-Backlog/
 ```
