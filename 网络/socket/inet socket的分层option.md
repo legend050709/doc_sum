@@ -11,11 +11,11 @@ int setsockopt(int sockfd, int level, int optname,
 
 ```
 ## 参数说明
-level ：
+- **level** ：
 通过level这个参数，使用统一个接口函数能够设置不同协议的属性。
 当设置为SOL_SOCKET时表示的是socket通用的属性，那么不需要涉及具体的协议，可以直接搞定。
 如果涉及到具体的协议，如TCP/UDP则需要指定level为对应的值。
-一般来说，这么几种类型level：SOL_SOCKET,SOL_TCP,SOL_UDP，SOL_RAW，IPPROTO_IP， IPPROTO_IPV6。
+一般来说，这么几种类型level：**SOL_SOCKET, SOL_TCP, SOL_UDP，SOL_RAW，IPPROTO_IP， IPPROTO_IPV6**。
 ```c
 int kernel_setsockopt(struct socket *sock, int level, int optname,
             char *optval, unsigned int optlen)
@@ -36,6 +36,13 @@ int kernel_setsockopt(struct socket *sock, int level, int optname,
     return err;
 }
 ```
+- optname：需设置的选项
+> 有部分选项需在listen/connect调用前设置才有效，这部分选项如下：SO_DEBUG、SO_DONTROUTE、SO_KEEPALIVE、SO_LINGER、SO_OOBINLINE、SO_RCVBUF、SO_RCVLOWAT、SO_SNDBUF、SO_SNDLOWAT、TCP_MAXSEG、TCP_NODELAY。
+
+- optval：指针，指向存放选项值的缓冲区
+- optlen：optval缓冲区长度
+
+
 ## 不同协议对应的setsockopt函数
 sock->ops->setsockopt 在inet_init函数中被初始化。
 ![](attachments/Pasted%20image%2020231115141943.png)
@@ -99,6 +106,7 @@ ipv6_setsockopt
 ## ip层
 ### IPv4层
 ### Ipv6 层
+## raw socket的opt
 # 范例
 ## IP_BIND_ADDRESS_NO_PORT
 ![](attachments/Pasted%20image%2020231115135400.png)
@@ -112,4 +120,6 @@ https://blog.csdn.net/lianhunqianr1/article/details/119621750?ops_request_misc=%
 [setsockopt 内核实现]
 (http://blog.chinaunix.net/uid-24857907-id-4217438.html)
 
+# setsockopt的常用选项
+https://www.imooc.com/article/290578
 ```
