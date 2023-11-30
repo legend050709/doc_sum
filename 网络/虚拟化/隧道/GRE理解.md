@@ -1,11 +1,13 @@
+```table-of-contents
+```
 # 简介
 通用路由封装协议GRE（Generic Routing Encapsulation）可以对某些网络层协议（如IPX、ATM、IPv6、AppleTalk等）的数据报文进行封装，使这些被封装的数据报文能够在另一个网络层协议（如IPv4）中传输，从而解决了跨越异种网络的报文传输问题。异种报文传输的通道称为Tunnel（隧道）。
 GRE是一种三层隧道封装技术，使报文可以通过GRE隧道透明的传输，解决异种网络的传输问题。
 ![](attachments/Pasted%20image%2020230816191907.png)
 
  如上图所示，如果X协议报文从Ingress PE向Egress PE传输，则封装在Ingress PE上完成，而解封装在Egress PE上进行。封装后的数据报文在网络中传输的路径，称为GRE隧道。
-
-
+# 内核的GRE处理流程
+![](attachments/Pasted%20image%2020231129162908.png)
 # GRE报文封装 和 解封装
 
 ![](attachments/Pasted%20image%2020230816192612.png)
@@ -311,4 +313,7 @@ https://www.cnblogs.com/sky5hat/p/10470456.html
 
 gre over ipsec:
 https://cshihong.github.io/2019/04/19/GRE-over-IPSec%E6%8A%80%E6%9C%AF%E5%8E%9F%E7%90%86/
+
+# Linux内核之GRE处理流程
+https://blog.csdn.net/s2603898260/article/details/115773153
 ```

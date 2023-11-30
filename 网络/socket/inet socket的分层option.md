@@ -112,6 +112,14 @@ ipv6_setsockopt
 ![](attachments/Pasted%20image%2020231115135400.png)
 如上所示，ipv4 socket 以及 ipv6 scoket 在进行setsockopt 设置BIND_ADDRESS_NO_PORT 的时候，level 都是 SOL_IP.
 参考：[linux IP_BIND_ADDRESS_NO_PORT patch](https://patchwork.ozlabs.org/project/netdev/patch/1433650677.29864.26.camel@edumazet-glaptop2.roam.corp.google.com/)
+## IP_DONTFRAGMENT
+```c
+SOCKET sock = socket(PF_INET, SOCK_DGRAM, 0);
+int dontfragment = 1;
+if (setsockopt(sock,IPPROTO_IP,IP_DONTFRAGMENT,&dontfragment,sizeof(dontfragment)) == -1) {
+    printf("set failed \r\n");
+}
+```
 # 参考
 ```c
 # 深入理解Linux socket
