@@ -265,16 +265,20 @@ $ ip route get 10.33.32.157
 - **查询路由缓存**
 ```shell
 # ipv4 路由缓存
-# ip route show table cache
+# ip -s route show table cache
 or 
 # route -C
-
+or
+# netstat -rn -C
+or
+# ip -s route get x.x.x.x
 
 # ipv6 路由缓存
-# ip -6 route show table cache
+# ip -6 -s route show table cache
 or 
 # route -6 -C
-
+or
+# netstat -rn -C
 ```
 ![](attachments/Pasted%20image%2020231129174856.png)
 

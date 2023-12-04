@@ -191,6 +191,8 @@ Early Demux（早期解复用）和查询 IP Route System（路由子系统）�
 route -Cn
 or 
 ip -s route show table cache
+or 
+ip -s route get x.x.x.x
 or
 netstat -rn --cache
 	-r: Display the kernel routing tables.
@@ -203,6 +205,30 @@ ip -s route show cache 192.168.100.17
 ```
 ![](attachments/Pasted%20image%2020231129203321.png)
 ![](attachments/Pasted%20image%2020231129203341.png)
+
+
+如下所示：
+client 给 DPVS发送 UDP的大包(UDP载荷1470)，经过DPVS之后，DPVS需要进行IPIP Tun封装(外层加一个IP头)，导致超过1500. DPVS给clinet回复一个Icmp need-frag的包。
+```
+# client抓包
+# tcpdump -nni eth04 host 192.22.2.28 or icmp or icmp6
+11:35:39.419766 IP 192.20.1.11.47931 > 192.22.2.28.6000: UDP, length 1470
+11:35:39.419840 IP 192.22.2.28 > 192.20.1.11: ICMP 192.22.2.28 unreachable - need to frag (mtu 1480), length 556
+```
+client中查看route cache 如下所示：
+![](attachments/Pasted%20image%2020231130115208.png)
+> 如上所示，收到icmp need-frag的差错报文， route cache 中的mtu 设置为 1480.
+ 
+- **route cache 的 mtu 的作用**：
+> 对于TCP：route cache的 mtu 影响 同一个 sip, dip 的后续包的 mss 协商。
+> 对于UDP：route cache的 mtu 影响 同一个 sip,dip的后续包是否分片。
+
+
+![](attachments/Pasted%20image%2020231130152514.png)
+如上所示， icmp need-frag 生成的 route cache中的mtu 影响了后续流的发送。后续流的包的MSS调整了。
+但是从上面抓包看，后续流的MSS调整了，但是抓包发现后续发送的包的大小还是超过了MSS(1440)。这个是为什么呢？
+> 抓包发现TCP发送的数据大小大于协商的MSS，主要原因是网卡的TSO。即TCP的分段在TSO中进行。tcpdump抓包此时还看不到TCP的分段。如下所示，关闭了网卡的TSO之后`ethtool -K eth04 tso off`，就可以看到后续发送的TCP包的大小小于MSS。
+![](attachments/Pasted%20image%2020231130154337.png)
 ## route cache统计
 `/proc/net/stat/rt_cache`
 
@@ -213,7 +239,7 @@ ip -s route show cache 192.168.100.17
 
 ## 清理route cache
 `ip route flush cache`，它可以清除 IP 路由缓存。
-
+![](attachments/Pasted%20image%2020231130121249.png)
 ## route cache的调优
 参考：[Tuning Linux IPv4 route cache](https://vincent.bernat.ch/en/blog/2011-ipv4-route-cache-linux)
 
