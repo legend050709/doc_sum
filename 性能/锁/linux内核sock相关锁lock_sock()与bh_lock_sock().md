@@ -14,6 +14,8 @@
 
 - **process context**
 当用户态进程通过系统调用(比如 sys_socket、sys_bind 等) 进入内核空间后，我们认为此时内核依然处于 process context。处于 process context 的一个特征是 current 这个指向当前 task_struct 的变量是有意义的，也就是说此刻我们明确指出这一段代码是正在被哪一个进程执行。
+> current其实一个`struct task_struct`指针，指向当前在运行的进程。x86_64架构下每个 CPU当前正在运行的 任务（task_struct）保存在 `per-cpu`变量中，当前进程的变量 `current_task` 就被声明为 `per-cpu`变量。
+
 
 - **interrupt context**
 与之相对的则是 interrupt context, interrupt context 没有属于哪一个进程的概念，此时 current 变量是无效的。

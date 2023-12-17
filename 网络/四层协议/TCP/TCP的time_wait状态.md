@@ -9,6 +9,13 @@
 ## 内核参数
 ## reuse_addr/reuse_port sockopt
 ## linger_time sockopt
+
+## tcp_tw_reuse 内核参数
+## tcp_tw_recycle 内核参数
+### 作用
+### 原理
+### 影响
+### 内核移除tcp_tw_recycle
 # 其他
 ## time_wait的时间设置
 
@@ -23,4 +30,7 @@ https://zhuanlan.zhihu.com/p/591724475
 https://ylgrgyq.github.io/2017/06/30/tcp-time-wait/
 https://github.com/ylgrgyq/ylgrgyq.github.io/issues/4
 
+
+# TCP Metrics--remove per-destination timestamp cache
+https://switch-router.gitee.io/blog/tcp-metrics-remove-timestamp/
 ```
