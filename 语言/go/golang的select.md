@@ -9,8 +9,8 @@ Golang 中的 select 语句是用于多路复用的一种语言结构，用于�
 `select..case`则只能处理 channel类型。**即每个 case 必须是一个通信操作, 要么是发送要么是接收**。
 
 select 将随机执行一个可运行的 case。如果没有 case 可运行，它将阻塞，直到有 case 可运行。
-- 每个 case 都必须是一个通信
-- 所有 channel 表达式都会被求值
+- 每个 case 都必须是一个通信；
+- 所有 channel 表达式都会被求值；
 - 如果有多个 case 都可以执行，Select 会随机公平地选出一个执行。其他不会执行。  
     否则：  
     如果有 default 子句，则执行该语句。  
