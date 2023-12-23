@@ -228,7 +228,7 @@ bind-9.11.4-16.P2.el7_8.3.x86_64
 /var/named/named.loopback
 /var/named/slaves
 ```
-## BIND的工作端口
+## bind的工作端口
 - 53/UDP
 - 53/TCP
 （其主要工作在UDP端口，如果传送的数据太大导致失败，其会以TCP模式尝试重传）
@@ -262,7 +262,7 @@ bind-9.11.4-16.P2.el7_8.3.x86_64
 ## 分类
  bind服务器配置角色：
 - **主服务器（Primary Authoritative Name Server）**：
-负责至少解析一个域内的域名，维护所负责解析的域数据库，可对该域数据进行读写操作
+负责至少解析一个域内（zone）的域名，维护所负责解析的域数据库（zone文件），**可对负责的域数据进行读写操作**
 -  **辅服务器（Secondary Authoritative Name Server）**：
 负责从主服务器或其他辅服务器中复制相关解析库，为主服务器缓解解析压力
 - **缓存服务器（Caching Name Servers）**：
@@ -315,11 +315,11 @@ bind-9.11.4-16.P2.el7_8.3.x86_64
 `/etc/logrotate.d/named` ：日志切割配置文件
 
 `/etc/named.conf`： 主配置文件
-`/etc/named.rfc1912.zones`： 区域配置文件（用include指令包含在主配置文件）
+`/etc/named.rfc1912.zones`： 区域配置文件（即zone文件，用include指令包含在主配置文件）
 `/etc/named.root.key`： 根区域的key文件以实现事务签名；
-`/etc/rndc.key`： rndc加密密钥
+`/etc/rndc.key`： `rndc`加密密钥
 
-`/etc/rndc.conf`： rndc（远程名称服务器控制器）配置文件
+`/etc/rndc.conf`： `rndc`（远程名称服务器控制器）配置文件
 
 ## 主配置文件`named.conf`
 BIND 9 配置由**块、语句和注释**组成。
@@ -510,6 +510,8 @@ file的前缀通常和zone的名字通常对应起来，然后加一个.zone的�
 ### 区域文件(Zone文件)
 zone文件：保存 RR (Record Resource) 信息的文件。
 zone文件包括正向Zone文件和反向Zone文件。
+DNS正解: 域名解析->返回IP；
+DNS反解: IP解析->域名；
 > 注：在 zone file 中，注释的符号是`;`。
 
 #### 正向区域文件
@@ -609,7 +611,9 @@ www             IN      CNAME       Server1
 ```
 #### 反向区域文件
 区域名称：是网络地址的反向.in-addr.arpa.
-反解域也是要有SOA记录的，在反解域中ns记录就不用在写A记录了，因为反解区域文件只可以有PTR，不可以有A记录。
+一个IP只能对应唯一的FQDN反解PTR记录，且应该与正解域对应。
+> 注意：需要注意一点的是反解析对应的配置文件应该不带有点分十进制ip地址的最后一份。例如解析的IP为`192.168.31.113` 配置文件应该写为`31.168.192.in-addr.arpa` 其中`113`这里不写，是在后面添加解析时使用。
+
 ```c
 比如：
 192.168.111. –> 111.168.192.in-addr.arpa.
@@ -621,6 +625,7 @@ zone "Reverse_Net_Addr.in-addr.arpa" IN {
     file "Net_Addr.zone"
 }
 ```
+另外，在zone文件中，反解域也是要有SOA记录的，在反解域中ns记录就不用在写A记录了，因为反解区域文件只可以有PTR，不可以有A记录。
 
 ### 正向区域文件的配置范例
 这里给出一个自定义的总的区域定义文件，新加一个区域文件的定义：
@@ -664,14 +669,26 @@ chown :named zhangqifei.top.zone
 service named start|restart
 ```
 
+修改文件属性：
+```c
+将新创建的zone文件修改为和/var/named下的其他的zone文件相同的属性：
+
+chown named:named /var/named/zhangqifei.top.zone
+chmod 640 /var/named/zhangqifei.top.zone
+```
 检查配置文件：
 ```c
 named-checkzone  zhangqifei.top  /var/named/zhangqifei.top.zone
 ```
 
+测试：
+```c
+dig ns2.zhangqifei.top
+```
 ### 反向区域文件的配置范例
 
-例子如下：
+**范例一**：
+编辑`/etc/named.rfc1912.zones`，添加一个域名
 ```c
 
 zone "111.168.192.in-addr.arpa" IN {
@@ -681,7 +698,7 @@ zone "111.168.192.in-addr.arpa" IN {
 配置/var/named/ZONE_NAME.zone
 不需要MX、A、AAAA，要有SOA、NS记录，PTR记录。
 ```
-配置192.168.111.zone：
+然后配置192.168.111.zone：
 ```c
 $TTL 1D
 @   IN  SOA ns1.magedu.com. me.zhangqifei.top (
@@ -707,6 +724,71 @@ $TTL 1D
 named-checkzone 111.168.192.in-addr.arpa /var/named/192.168.111.zone
 ```
 
+
+**范例二**：
+编辑`/etc/named.rfc1912.zones`，添加一个域名：
+```json
+zone "31.168.192.in-addr.arpa" IN {
+        type master;
+        file "31.168.192.in-addr.arpa.zone";
+        allow-update { 192.168.31.113; };};
+
+#检查配置文件
+[root@dns01-113 ~]# named-checkconf
+```
+
+在`/var/named/`下创建反解域区域数据库文件：
+```json
+[root@dns01-113 ~]# vim /var/named/31.168.192.in-addr.arpa.zone     #名称需要根据上面定义的来创建
+$TTL  60
+@         IN  SOA    dns.host.com.    604419314.qq.com. (
+                     20200818
+                     10800
+                     900
+                     64800
+                     86400
+                     )
+              NS     dns.host.com.
+
+$ORIGIN  31.168.192.in-addr.arpa.
+$TTL 60 
+113          PTR     dns01-113.host.com.
+114          PTR     dns02-114.host.com. 
+#####################
+提示: 如果我们$ORIGIN 31.168.192.in-addr.arpa.不写全，也是可以的。例如 
+$ORIGIN in-addr.arpa.
+$TTL 60
+113.31.168.192   PTR   dns01-113.host.com.
+#上面的写法也是可以的
+```
+
+说明: 反解域也是要有SOA记录的，在反解域中ns记录就不用在写A记录了，因为反解区域文件只可以有PTR，不可以有A记录
+
+检查区域配置文件是否正常：
+```json
+#31.168.192.in-addr.arpa为我们反向解析的域名 
+[root@dns01-113 ~]# named-checkzone 31.168.192.in-addr.arpa. /var/named/31.168.192.in-addr.arpa.zone
+zone 31.168.192.in-addr.arpa/IN: loaded serial 20200818
+OK
+```
+
+重启`named`：
+```json
+systemctl restart named
+```
+
+测试：
+```bash
+#第一种方法
+# dig -t PTR 113.31.168.192.in-addr.arpa. @192.168.31.113  +short
+dns01-113.host.com. 
+
+#第二种方法
+# dig -x 192.168.31.114 @192.168.31.113 +short
+dns02-114.host.com. 
+
+#dig 后面ip为需要解析的ip，@后面ip为dns服务器ip
+```
 # DNS测试工具
 常见的DNS测试工具为 `dig`, `host`, `nslookup` 等。
 
