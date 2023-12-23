@@ -1,5 +1,43 @@
 ```table-of-contents
 ```
+# 选项
+
+- `-n`： 表示不要解析域名，直接显示 ip。
+- `-nn`： 不要解析域名和端口
+- `-X`： 表示同时使用十六进制和 `ASCII` 字符串打印报文的全部数据。
+- `-XX`： 同 `-X`，但同时显示以太网头部。
+- `-S`： 显示绝对的序列号（sequence number），而不是相对编号。
+- `-i`： 选择要捕获的接口；`-i any` 监听所有的网卡
+- `-v, -vv, -vvv`：显示更多的详细信息
+- `-c number`:  截取 number 个报文，然后结束
+- `-A`： 表示使用 `ASCII` 字符串打印报文的全部数据，这样可以使读取更加简单，方便使用 `grep` 等工具解析输出内容。`-A` 和 `-X` 这两个参数不能一起使用。
+- `s0` : tcpdump 默认只会截取前 96 字节的内容，要想截取所有的报文内容，可以使用 -s number， number 就是你要截取的报文字节数，如果是 0 的话，表示截取报文全部内容。
+- `-p` : 不让网络接口进入混杂模式。
+>默认情况下使用 tcpdump 抓包时，会让网络接口进入混杂模式。一般计算机网卡都工作在非混杂模式下，此时网卡只接受来自网络端口的目的地址指向自己的数据。当网卡工作在混杂模式下时，网卡将来自接口的所有数据都捕获并交给相应的驱动程序。如果设备接入的交换机开启了混杂模式，使用 -p 选项可以有效地过滤噪声。
+
+- `-e` : 显示数据链路层信息。
+> 默认情况下 tcpdump 不会显示数据链路层信息，使用 -e 选项可以显示源和目的 MAC 地址，以及 VLAN tag 信息。例如：
+
+```bash
+$ tcpdump -n -e -c 5 not ip6
+
+tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+listening on br-lan, link-type EN10MB (Ethernet), capture size 262144 bytes
+18:27:53.619865 24:5e:be:0c:17:af > 00:e2:69:23:d3:3b, ethertype IPv4 (0x0800), length 1162: 192.168.100.20.51410 > 180.176.26.193.58695: Flags [.], seq 2045333376:2045334484, ack 3398690514, win 751, length 1108
+18:27:53.626490 00:e2:69:23:d3:3b > 24:5e:be:0c:17:af, ethertype IPv4 (0x0800), length 68: 220.173.179.66.36017 > 192.168.100.20.51410: UDP, length 26
+18:27:53.626893 24:5e:be:0c:17:af > 00:e2:69:23:d3:3b, ethertype IPv4 (0x0800), length 1444: 192.168.100.20.51410 > 220.173.179.66.36017: UDP, length 1402
+18:27:53.628837 00:e2:69:23:d3:3b > 24:5e:be:0c:17:af, ethertype IPv4 (0x0800), length 1324: 46.97.169.182.6881 > 192.168.100.20.59145: Flags [P.], seq 3058450381:3058451651, ack 14349180, win 502, length 1270
+18:27:53.629096 24:5e:be:0c:17:af > 00:e2:69:23:d3:3b, ethertype IPv4 (0x0800), length 54: 192.168.100.20.59145 > 192.168.100.1.12345: Flags [.], ack 3058451651, win 6350, length 0
+5 packets captured
+```
+
+- `-l`:  如果想实时将抓取到的数据通过管道传递给其他工具来处理，需要使用 `-l` 选项来开启行缓冲模式。
+![](attachments/Pasted%20image%2020231221120824.png)
+```bash
+$ tcpdump -i eth0 -s0 -l port 80 | grep 'Server:'
+```
+
+
 # 过滤规则查看
 通过查看 `man pcap-filter` 可以看到 tcpdump的常用过滤规则。如下所示：
 ![](attachments/Pasted%20image%2020231023103324.png)
@@ -134,12 +172,60 @@ ping -M want -s 3000 192.168.1.1
 - 大于600字节
 tcpdump -i eth1 'ip[2:2] > 600'
 ```
-
+## ipv6过滤
+抓取 IPv6 流量：
+```bash
+tcpdump -nni ethx ip6
+```
 ## 四层头过滤
 ### tcp重传
 - wireshark 过滤查看
 TCP重传十分影响网络性能，往往通过抓包之后，wireshark里打开pcap文件，然后过滤框里输入过滤条件tcp.analysis.retransmission，就能过滤出所有重传的数据包，然后可以通过Statistics里的Summary查看占比.
 
+## 包内容进行过滤
+通过 `-A` 选项，可以以 ASCII 码的形式，展示包内容。或者 `-XX` 也可以展示ASCII的形式展示包内容。
+进而也可以对包内容以字符串形式进行查询。
+![](attachments/Pasted%20image%2020231221115557.png)
+
+截取 http 请求的时候可以用 
+```bash
+sudo tcpdump -nni ethx -SA port 80
+```
+
+从 HTTP 请求头中提取 HTTP 用户代理：
+```bash
+$ tcpdump -nn -A -s1500 -l | grep "User-Agent:"
+```
+通过 `egrep` 可以同时提取用户代理和主机名（或其他头文件）：
+```bash
+$ tcpdump -nn -A -s1500 -l | egrep -i 'User-Agent:|Host:'
+```
+
+提取 HTTP 请求的主机名和路径：
+```bash
+$ tcpdump -s 0 -v -n -l | egrep -i "POST /|GET /|Host:"
+
+tcpdump: listening on enp7s0, link-type EN10MB (Ethernet), capture size 262144 bytes
+    POST /wp-login.php HTTP/1.1
+    Host: dev.example.com
+    GET /wp-login.php HTTP/1.1
+    Host: dev.example.com
+    GET /favicon.ico HTTP/1.1
+    Host: dev.example.com
+    GET / HTTP/1.1
+    Host: dev.example.com
+```
+
+## 字段偏移过滤
+抓取 HTTP GET 流量：
+```bash
+$ tcpdump -s 0 -A -vv 'tcp[((tcp[12:1] & 0xf0) >> 2):4] = 0x47455420'
+```
+
+可以抓取 HTTP POST 请求流量：
+```bash
+$ tcpdump -s 0 -A -vv 'tcp[((tcp[12:1] & 0xf0) >> 2):4] = 0x504f5354'
+```
 
 # 参考
 ```c

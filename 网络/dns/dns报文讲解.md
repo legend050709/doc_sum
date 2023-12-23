@@ -112,4 +112,7 @@ https://yangwang.hk/?p=878
 
 # 使用Wireshark进行DNS协议解析
 https://mp.weixin.qq.com/s?__biz=MzIxNTExNTcxMg==&mid=2247483877&idx=1&sn=48d797977ec96a3d5117f9da9403ff84&chksm=979c734aa0ebfa5c80147f1dc3f58ed7869c8f5f1b57d249d6c747538b2a65d9459b00a8d560&scene=21#wechat_redirect
+
+## 万字长文爆肝 DNS 协议
+https://cloud.tencent.com/developer/article/1779032
 ```

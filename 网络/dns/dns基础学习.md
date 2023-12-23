@@ -37,15 +37,211 @@ omain_name Time_to_live Class Type Value
 |---|---|---|---|---|
 |www.nettest.net|600|IN|A|161.202.43.78|
 |161.202.43.78|600|IN|PTR|www.nettest.net|
-## 类型
-### A记录
-### AAAA记录
-### NS记录
-### SOA记录
-### PTR记录
-### MX记录
-### Cname记录
-### SRV记录
+
+## 格式
+资源记录是一个包含了下列字段的 4 元组；
+```c
+(Name, Value, Type, TTL)
+```
+
+资源记录(Resource Record)格式
+```c
+name [ttl(缓存时间)] IN 资源记录类型 (RRtype) Value
+ 
+宏定义以$开头
+TTL        #缓存时间
+ORIGIN .   #源地址，ORIGIN . 意思代表根域
+```
+RR 会有不同的类型，下面是不同类型的 RR 汇总表
+
+|DNS RR 类型|解释|
+|---|---|
+|A 记录|IPv4 主机记录，用于将域名映射到 IPv4 地址|
+|AAAA 记录|IPv6 主机记录，用于将域名映射到 IPv6 地址|
+|CNAME 记录|别名记录，用于映射 DNS 域名的别名|
+|MX 记录|邮件交换器，用于将 DNS 域名映射到邮件服务器|
+|PTR 记录|指针，用于反向查找（IP地址到域名解析）|
+|SRV 记录|SRV记录，用于映射可用服务。|
+
+
+
+## SOA记录
+### 定义
+SOA( Start of Authority)，起始授权机构记录：用来表示被标记成在众多NS记录中哪一台是主服务器。
+
+SOA记录表明了DNS服务器之间的关系。SOA记录表明了谁是这个区域的所有者。
+比如`51CTO.COM`这个区域。一个DNS服务器安装后，需要创建一个区域，以后这个区域的查询解析，都是通过DNS服务器来完成的。
+**所有者**: 这里所说的所有者，就是谁对这个区域有修改权利。
+>常见的DNS服务器只能创建一个标准区域，然后可以创建很多个辅助区域。（有的DNS服务器也可以创建多个标准区域）
+>标准区域是可以读写修改的。而辅助区域只能通过标准区域复制来完成，不能在辅助区域中进行修改。
+>而创建标准区域的DNS就会有SOA记录，或者准确说SOA记录中的主机地址一定是这个标准区域的服务器IP地址。
+
+### 特性
+SOA 作为所有区域文件的强制性记录，他必须是 ZONE 文件中的RR记录的第一个。
+
+SOA记录的作用在于提供DNS区域的权威信息。因此在进行DNS解析时，当要查询的域名在所有递归解析服务器没有域名的解析缓存时，递归DNS服务器首先会查询该域名的SOA记录，以确定该域名的权威DNS服务器，并从权威DNS服务器上获取相应的DNS记录。
+
+### 内容说明
+SOA记录负责说明哪个DNS服务器是主服务器，以及主服务器和辅助服务器之间的一些关联参数。
+SOA记录中包含了该DNS区域的管理员、该DNS区域的刷新时间、重试时间、过期时间等信息。SOA记录中的序列号字段还可以用来追踪DNS区域文件的更新历史。
+
+在域名配置中，Zone文件中的 **SOA记录格式**：
+```text
+[LOCATION NAME] IN SOA  [PRIMARY_DNS_SERVER_NAME] [EMAIL_ADDRESS_NAME] (
+  Serial_NUM ;序列号
+  Refresh    ;刷新时间
+  Retry      ;重试时间
+  Expire     ;过期时间
+  Min_TTL    ;最小TTL时间
+)
+
+总结即：
+格式为：[zone] IN SOA [主机名] [管理员email] （[五组更新时间参数])
+
+注：
+ZONE文件中使用`;`表示注释符号。
+@在ZONE文件中具有特殊含义，代表当前区域。
+```
+
+- `Location Name`： 区域的名称，或者用 `@` 进行代替；
+-  `PRIMARY_DNS_SERVER_NAME`： 用于规定解析当前域名的主服务器
+这个服务器的IP地址以及详细资源需要在后边被规定；
+- `EMAIL_ADDRESS_NAME` 指定了管理员的 Email 地址；
+比如： `admin.domain.com. 实际上等价于 admin@domain.com.`
+- `serial number`（序列号）：
+是域名记录的版本，每更改一次域名的任何DNS记录，版本号就会自动加一。
+在配置了区域复制时，辅助DNS服 务器会间歇的查询主服务器上DNS区域的序列号，如果主服务器上DNS区域的序列号大于自己的序列号，则辅助DNS服务器向主服务器发起区域复制。建议的格式为YYYYMMDDnn 其中nn为修订号。
+
+- `refresh`（刷新时间，单位秒）：
+辅助DNS服务器(`secondary dns`)查询主服务器(`primary dns`)以进行区域更新前等待的时间。当刷新时间到期时，辅助DNS服务器从主服务器上获取主DNS区域的SOA记录， 然后和本地辅助DNS区域的SOA记录相比较，如果记录中的`serial number`跟`secondary dns`已有的序列号不一样，则会向`primary dns`请求传送域名的当前的DNS记录。
+
+- `retry`（重试时间，单位秒）：
+如果想`secondary dns`请求传送域名当前的DNS记录失败后，则会间隔重试时间（retry）后再次重试请求。一般来说，retry小于refresh。
+
+- `expire`（过期时间，单位秒）：
+在过期时间之前，`secondary dns`会继续请求传送DNS记录，并且在此时间里，`secondary dns`会根据已有的记录应答相关的DNS查询。
+如果到了过期时间后，`secondary dns`会停止应答该域名的DNS查询。
+
+- `min TTL`（最小TTL，单位秒）：
+域名所有记录的最小生存时间值。当用户DNS查询到记录后，将存在缓存中，直到至少过了这个时间才将缓存刷新重新查询。
+
+- `Negative caching TTL`
+有的DNS服务器还会有`Negative caching TTL`，就是当用户DNS查询到无此域名记录（`NXDOMAIN`）时，将把这个“没有此域名的记录”的声明保存在缓存中的时间。
+
+### 注意
+```json
+domain.com. ns.domain.com. admin.domain.com. (
+                  3     ; Serial
+             604800     ; Refresh
+              86400     ; Retry
+            2419200     ; Expire
+             604800 )   ; Negative Cache TTL
+```
+在所有的配置中，`ns.domain.com != ns.domain.com.` ，必须注意在 zone file 中的配置文件的最后 `.` 必须不能省略；
+
+如果不写最后一个的 `.` ，那么该域名就是一个 **相对名** ，结果就是在解析的过程中，这条资源就被当成 `ns.domain.com.domain.com`；
+
+### 范例
+```text
+@   IN  SOA     nameserver.place.dom.  postmaster.place.dom. (  
+    1            ; serial number  
+    3600         ; refresh   [1h]  
+    600          ; retry     [10m]  
+    86400        ; expire    [1d]  
+    3600 )       ; min TTL   [1h]
+
+
+说明：
+如上所示，负责人参数为 postmaster.place.dom. 看起来像个主机的完全合格域名，其实意思是
+postmaster@place.dom.，是一个邮箱地址。那么为什么负责人这个参数不直接写成邮箱地址呢？
+因为@已经被作为特殊代码(zone)，所以就用小数点来取代。因此我们被迫把邮件地址写成了完全合格域名的格式。
+```
+
+使用“dig”时的返回格式为：
+```c
+nameserver.place.dom.              7200   IN      SOA     ns1.he.net. postmaster.place.dom. 1 3600 600 68400 3600
+```
+
+## NS记录
+NS(Name Server)，域名服务器：用于确定哪些服务器（注意可能不是单个服务器）为一个局域网传递DNS信息以及确定域名由哪个服务器进行解析。
+即：NS记录表明谁对某个区域有解释权，即哪些是权威DNS。
+
+一般NS配置在 BIND9 中的 db 文件中进行配置，在 SOA 配置之后。
+**NS记录 和 SOA记录是任何一个DNS区域都不能或缺的两条记录**。
+在 BIND 的配置中，可以在 Zone 文件中指定多个 Name Server，一般来说 Name Server 需要搭配 SOA 进行配置；
+
+格式为：
+```
+[zone] IN NS [主机名称]
+```
+意思是：这个zone的查询请向后面这部主机请求。如果此zone有两部以上的DNS服务器负责时，就必须写两个NS，而NS后面接的主机名称必须要有ip的对应，这时需要A记录。
+
+## A记录
+格式为：
+```json
+[hostname] IN A [IP]
+```
+
+## AAAA记录
+
+## PTR记录
+## MX记录
+```json
+#优先级:0-99，数字越小，级别越高，
+ 
+@ 600 IN MX 10 mail
+@ 600 IN MX 20 smtp
+```
+## Cname记录
+CNAME-records ( Canonical name for an alias )是域名的别名。
+一个服务器的域名地址 nyc3.example.com 这个主机域名可能会提供不同的服务；
+比如说域名 nyc3.example.com 指向的主机既要去提供 web服务，也要提供 ftp 服务，那么这个时候就需要一个别名域名来指向原来的域名，这个时候就可以使用一个 A 记录来管理多个域名，为DNS后期修改配置提供方便。
+
+## SRV记录
+SRV (Service)记录是从 RFC2052 中对 SRV资源进行了定义。SRV 被用来记录服务器提供什么样的服务。
+
+## 其他
+### SOA记录与NS记录的区别
+NS记录和SOA记录是任何一个DNS区域都不可或缺的两条记录，NS记录表示域名服务器记录，用来指定该域名由哪些DNS服务器来进行解析；
+SOA记录负责说明哪个DNS服务器是主服务器，以及主服务器和辅助服务器之间的一些关联参数。
+
+
+假设hexun.com区域有两个DNS服务器负责解析，ns1.hexun.com是主服务器，ns2.hexun.com是辅助服务器，ns1.hexun.com的ip是202.99.16.1，ns2.hexun.com的ip是202.99.16.2。那么我们应该创建两条NS记录，当然，NS记录依赖A记录的解析，我们首先应该为ns1.hexun.com和ns2.hexun.com创建两条A记录。
+
+NS记录说明了有两个DNS服务器（ns1.hexun.com 和 ns2.hexun.com）负责hexun.com的域名解析，但哪个是主服务器呢？NS记录并没有说明，这个任务由SOA记录来完成。
+
+
+
+# FQDN
+**FQDN(Fully Qualified Domain Name)** 完全合格域名/全程域名，即域名可以通过DNS进行解析，其公式 FQDN = HostName + Domain。
+
+这门技术解决了一个域名多个主机的问题。
+一个网站或者服务器集群一般都是有多个主机一起协作的。
+比如说包括正向代理服务器、反向代理服务器、Web服务器、Email服务器、OA服务器、FTP服务器等等，这个时候就涉及需不需要为每一个主机申请一个域名。
+有了这个技术之后每一个主机都可以自己申请一个 `Hostname` 来区别于其他的主机，这个时候就只需要一个域名就可以做到管理所有的主机。
+
+比如我申请了一个域名: `doheras.com`
+现在我有两个服务器需要用到这个域名，一个 FTP服务器，一个Web服务器，这两个服务器都需要用到 `doheras.com`这个域名，根据公式，我们知道可以采用 `hostname` 的方式来访问不同的主机：
+Web 服务器: `web.doheras.com`
+FTP 服务器: `ftp.doheras.com`
+
+# DNS缓存
+`DNS 缓存(DNS caching)` 有时也叫做 `DNS 解析器缓存`，它是**由操作系统维护的临时数据库**，它包含有**最近的网站和其他 Internet 域的访问记录**。
+也就是说， DNS 缓存只是计算机为了满足快速的响应速度而把已加载过的资源缓存起来，再次访问时可以直接快速引用的一项技术和手段。
+
+## DNS 缓存的工作流程
+在浏览器向外部发出请求之前，计算机会拦截每个请求并在 DNS 缓存数据库中查找域名，该数据库包含有最近的域名列表，以及 DNS 首次发出请求时 DNS 为它们计算的地址。
+
+## DNS 缓存方式
+DNS 数据可缓存到各种不同的位置上，每个位置均将存储 DNS 记录，它的生存时间由 TTL(DNS 字段) 来决定。
+
+### 浏览器缓存
+现如今的 Web 浏览器设计默认将 DNS 记录缓存一段时间。因为越靠近 Web 浏览器进行 DNS 缓存，为检查缓存并向 IP 地址发出请求的次数就越少。发出对 DNS 记录的请求时，浏览器缓存是针对所请求的记录而检查的第一个位置。
+
+在 `chrome` 浏览器中，你可以使用 `chrome://net-internals/#dns` 查看 DNS 缓存的状态。这是基于 `Windows` 下查询的，我的 Mac 电脑输入上面 url 后无法查看 DNS ，只能 `clear host cache`。
+![](attachments/Pasted%20image%2020231222105944.png)
+### 操作系统内核缓存
+在浏览器缓存查询后，会进行操作系统级 DNS 解析器的查询，操作系统级 DNS 解析器是 DNS 查询离开你的计算机前的第二站，也是本地查询的最后一个步骤。
 
 # QA
 ## DNS 为什么同时使用 TCP 和 UDP
@@ -168,7 +364,9 @@ DNS污染，指的是用户访问一个地址，国内的服务器(非DNS)监控
 # DNS服务
 https://linuxgeeks.github.io/2016/03/25/212131-DNS%E6%9C%8D%E5%8A%A1/
 
+## 万字长文爆肝 DNS 协议！
+https://cloud.tencent.com/developer/article/1779032
 
-
-
+# DNS体系架构最详解(图文)
+https://wenku.baidu.com/view/f35c35d5240c844769eaee3a?pcf=2&bfetype=new&bfetype=new&_wkts_=1703214684668
 ```

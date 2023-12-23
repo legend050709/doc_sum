@@ -23,7 +23,6 @@ $ service apache2 start
 
 使用了 Systemd，就不需要再用`init`了。Systemd 取代了`initd`，成为系统的第一个进程（PID 等于 1），其他进程都是它的子进程。
 
-Systemd 的优点是功能强大，使用方便，缺点是体系庞大，非常复杂。事实上，现在还有很多人反对使用 Systemd，理由就是它过于复杂，与操作系统的其他部分强耦合，违反"keep simple, keep stupid"的Unix 哲学。
 ![](attachments/Pasted%20image%2020231218115433.png)
 
 Systemd 并不是一个命令，而是一组命令，涉及到系统管理的方方面面。
@@ -32,7 +31,6 @@ Systemd 并不是一个命令，而是一组命令，涉及到系统管理的方
 ```bash
 # 查看启动耗时
 $ systemd-analyze                                                                                       
-
 # 查看每个服务的启动耗时
 $ systemd-analyze blame
 
@@ -42,6 +40,56 @@ $ systemd-analyze critical-chain
 # 显示指定服务的启动流
 $ systemd-analyze critical-chain atd.service
 ```
+
+## 优缺点
+Systemd 的优点是功能强大，使用方便。
+缺点是体系庞大，非常复杂。事实上，现在还有很多人反对使用 Systemd，理由就是它过于复杂，与操作系统的其他部分强耦合，违反"keep simple, keep stupid"的Unix 哲学。
+
+## 用户进程和systemd的关系
+操作系统使用systemd后，所有用户进程都是systemd的后代进程。如下所示：
+```bash
+$ pstree -p  
+systemd(1)─┬─agetty(1056)  
+           ├─auditd(737)───{auditd}(738)  
+           ├─crond(810)  
+           ├─dbus-daemon(761)  
+           ├─dhclient(966)  
+           ├─irqbalance(764)  
+           ├─lvmetad(573)  
+           ├─master(1140)─┬─pickup(1141)  
+           │              └─qmgr(1142)  
+           ├─mysqld(1068)─┬─{mysqld}(1161)  
+           │              └─......  
+           ├─polkitd(763)─┬─{polkitd}(814)  
+           │              ├─......  
+           ├─rpcbind(762)  
+           ├─rsyslogd(1047)─┬─{rsyslogd}(1093)  
+           │                └─{rsyslogd}(1094)  
+           ├─sshd(1042)───sshd(1110)─┬─bash(1143)───pstree(2240)  
+           │                         └─bash(1492)  
+           ├─systemd-journal(545)  
+           ├─systemd-logind(773)  
+           ├─systemd-udevd(576)  
+           └─tuned(1024)─┬─{tuned}(1377)  
+                         ├─{tuned}(1378)  
+                         ├─{tuned}(1380)  
+                         └─{tuned}(1381)
+```
+> 注意：虽然从进程树关系来看，所有进程都直接或间接地受到systemd的管理。
+> 但是，并非所有systemd的子进程都受Systemd Unit管理单元的管理。只有那些由systemd方式启动的服务进程(比如systemctl命令启动)才受到Systemd Unit管理单元的监控和管理。
+
+比如，用户可以通过下面两种方式启动Nginx服务进程：
+```bash
+nginx                    # (1)  
+systemctl start nginx    # (2)
+```
+但systemd只能监控、管理第(2)种方式启动的nginx服务。比如第一种方式启动的nginx，无法使用`systemctl stop nginx`来停止。
+
+所以，**systemd下的直系子进程可分为两类：受systemd管理的子进程和不受systemd管理的子进程**。
+![](attachments/Pasted%20image%2020231219161753.png)
+
+![](attachments/Pasted%20image%2020231219162018.png)
+![](attachments/Pasted%20image%2020231219162056.png)
 # systemd的Unit
 Systemd 可以管理所有系统资源。不同的资源统称为 Unit（单位）。
 简单说，单元就是 Systemd 的最小功能单位，是单个进程的描述。一个个小的单元互相调用和依赖，组成一个庞大的任务管理系统，这就是 Systemd 的基本思想。
@@ -821,7 +869,174 @@ $ sudo journalctl --vacuum-size=1G
 $ sudo journalctl --vacuum-time=1years
 ```
 
+# systemd 的 path
+## 介绍
+systemd 的 path工具提供了监控文件、目录变化并触发执行指定操作的功能。
+有时候这种监控功能是非常实用的，比如监控到`/etc/nginx/nginx.conf`或`/etc/nginx/conf.d/`发生变化后，立即reload nginx。虽然，用户也可以使用inotify类的工具来监控，但远不如systemd path更方便、更简单且更易于观察监控效果和调试。
+> 注意：其实，systemd path的底层使用的是inotify，所以受限于inotify的缺陷，systemd path只能监控本地文件系统，而无法监控网络文件系统。
 
+## 监控项
+systemd path暴露的监控功能并不多，它能监控的动作包括：
+![](attachments/Pasted%20image%2020231219162602.png)
+> 注：这些指令监控的路径必须是绝对路径。
+
+## 使用
+要使用systemd path的功能，需至少编写两个文件，一个`.path`文件和一个`.service`文件，这两个文件的前缀名称通常保持一致，但并非必须。
+
+这两个文件可以位于以下路径：
+- /usr/lib/systemd/system/
+- /etc/systemd/system/
+- ~/.config/systemd/user/：用户级监控，只在该用户登录后才监控，该用户所有会话都退出后停止监控。
+
+## 范例
+
+例如：
+```bash
+/usr/lib/systemd/system/test.path  
+/usr/lib/systemd/system/test.service  
+  
+/etc/systemd/system/test.path  
+/etc/systemd/system/test.service  
+  
+~/.config/systemd/user/test.path  
+~/.config/systemd/user/test.service
+```
+
+
+有以下监控需求：
+
+1. 监控/tmp/foo目录下的所有文件修改、创建、删除等操作
+2. 如果被监控目录/tmp/foo不存在，则创建
+3. 监控/tmp/a.log文件的更改
+4. 监控/tmp/file.lock锁文件是否存在
+
+为了简化，这些监控触发的事件都执行同一个操作：向/tmp/path.log中写入一行信息。
+此处将path_test.path文件和path_test.service文件放在/etc/systemd/system/目录下。
+
+path_test.path内容如下：
+```bash
+$ cat /etc/systemd/system/path_test.path  
+[Unit]  
+Description = monitor some files  
+  
+[Path]  
+PathChanged = /tmp/foo  
+PathModified = /tmp/a.log  
+PathExists = /tmp/file.lock  
+MakeDirectory = yes  
+Unit = path_test.service  
+  
+# 如果不需要开机后就自动启动监控的话，可省略下面这段  
+# 如果开机就监控，则加上这段，并执行systemctl enable path_test.path  
+[Install]  
+WantedBy = multi-user.target
+```
+其中MakeDirectory指令默认为no，当设置为yes时表示如果监控的目录不存在，则自动创建目录，但该指令对PathExists指令无效。
+
+Unit指令表示该sysmted path实例监控到符合条件的事件时启动的服务单元，即要执行的对应操作。通常省略该指令，这时启动的服务名称和path实例的名称一致(除了后缀)，例如`path_test.path`默认启动的是`path_test.service`服务。
+
+path_test.service内容如下：
+```bash
+$ cat /etc/systemd/system/path_test.service  
+[Unit]  
+Description = path_test.service  
+  
+[Service]  
+ExecStart = /bin/bash -c 'echo file changed >>/tmp/path.log'
+```
+
+然后执行如下操作启动该systemd path实例：
+```bash
+systemctl daemon-reload  
+systemctl start path_test.path
+```
+
+使用如下命令可以列出当前已启动的所有systemd path实例
+```bash
+$ systemctl --type=path list-units --no-pager  
+UNIT                               LOAD   ACTIVE SUB     DESCRIPTION                                
+systemd-ask-password-console.path  loaded active waiting Dispatch Password Requests to Console  
+systemd-ask-password-wall.path     loaded active waiting Forward Password Requests to Wall Dir  
+path_test.path                     loaded active waiting monitor some files
+```
+
+测试该systemd path能否如愿工作。
+```bash
+$ touch /tmp/foo/a  
+$ touch /tmp/foo/a  
+$ touch /tmp/a.log  
+$ echo 'hello world' >>/tmp/a.log  
+$ rm -rf /tmp/a.log  
+...
+```
+
+如果想观察触发情况，可使用journalctl。例如：
+```bash
+$ journalctl -u path_test.service  
+Jul 05 16:09:43 junmajinlong.com systemd[1]: Started path_test.service.  
+Jul 05 16:09:45 junmajinlong.com systemd[1]: Started path_test.service.  
+Jul 05 16:09:47 junmajinlong.com systemd[1]: Started path_test.service.  
+Jul 05 16:09:49 junmajinlong.com systemd[1]: Started path_test.service.  
+Jul 05 16:09:51 junmajinlong.com systemd[1]: Started path_test.service.  
+Jul 05 16:09:55 junmajinlong.com systemd[1]: Started path_test.service.
+```
+## 资源控制
+systemd path触发的任务可能会消耗大量资源，比如执行rsync的定时任务、执行数据库备份的定时任务，等等，它们可能会消耗网络带宽，消耗IO带宽，消耗CPU等资源。
+
+想要控制这些定时任务的资源使用量也非常简单，因为真正执行任务的是`.service`，而Service配置文件中可以轻松地配置一些资源控制指令或直接使用Slice定义的CGroup。这些资源控制类的指令可参考`man systemd.resource-control`。
+
+例如，直接在`[Service]`中定义资源控制指令：
+```bash
+[Service]  
+Type=simple  
+MemoryLimit=20M  
+ExecStart=/usr/bin/backup.sh
+```
+
+又或者让Service使用定义好的Slice：
+```bash
+[Service]  
+ExecStart=/usr/bin/backup.sh  
+Slice=backup.slice
+```
+其中backup.slice的内容为：
+```bash
+$ cat /usr/lib/systemd/system/backup.slice  
+[Unit]  
+Description=Limited resources Slice  
+DefaultDependencies=no  
+Before=slices.target  
+  
+[Slice]  
+CPUQuota=50%  
+MemoryLimit=20M
+```
+
+## systemd path的`Bug`
+注意，此中的`bug`是带引号的。
+
+systemd path监控路径上所产生的事件是需要时间的，如果两个事件发生时的时间间隔太短，systemd path可能会丢失第二个甚至后续第三个第四个等等事件。
+
+例如，使用`PathChanged`或`PathModified`监控路径/tmp/foo目录时，执行以下操作触发事件：
+```bash
+$ touch /tmp/foo/a && rm -rf /tmp/foo/a
+```
+
+期待的是systemd path能够捕获这两个事件并执行两次对应的操作，但实际上只会执行一次对应操作。换句话说，systemd path丢失了一次事件。
+
+之所以会丢失事件，是因为touch产生的事件被systemd path捕获，systemd path立即启动对应`.service`服务做出对应操作，在本次操作还未执行完时，rm又立即产生了新的事件，于是systemd path再次启动服务，但此时老的服务尚未退出，所以本次启动的新的服务实际上什么事也不做。
+
+所以，从结果上看去就像是systemd path丢失了事件，但实际上是因为服务尚未退出的情况下再次启动服务不会做任何事情。
+可以加上一点休眠时间来耽搁一会：
+```bash
+$ touch /tmp/foo/a && sleep 0.1 && rm -rf /tmp/foo/a
+```
+
+上面的命令会成功执行两次对应操作。
+
+再比如，将`.service`文件中的ExecStart设置为`/usr/bin/sleep 5`，那么在5秒内的所有操作，除了第一次触发的事件外，其它都会丢失。
+
+systemd path的这个『bug』也有好处，因为可以让**瞬间产生的多个有关联关系的事件只执行单次任务**，从而避免了中间过程产生的事件也重复触发相关操作。
 
 # chkconfig和systemctl命令对比
 
@@ -847,4 +1062,6 @@ https://www.ruanyifeng.com/blog/2016/03/systemd-tutorial-part-two.html
 # Systemd 入门教程：命令篇
 https://www.ruanyifeng.com/blog/2016/03/systemd-tutorial-commands.html
 
+# systemd服务配置文件编写(2)
+https://www.junmajinlong.com/linux/systemd/service_2/
 ```
