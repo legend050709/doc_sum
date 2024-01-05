@@ -1,5 +1,8 @@
 ```table-of-contents
 ```
+# 背景
+​ 一般而言，DNS服务器是繁忙的 ，一台公网DNS会维护成千上万个zone，named服务不会轻易被重启，登陆dns服务器进行维护也会有极大的风险。所以需要对named进行远程管理。
+
 # 简介
 rndc（Remote Name Domain Controllerr）是一个远程管理bind的工具，通过这个工具可以在本地或者远程了解当前服务器的运行状况，也可以对服务器进行关闭、重载、刷新缓存、增加删除zone等操作。
 rndc 可以运行在其他计算机上，通过网络与DNS服务器进行连接，然后根据管理员的指令对named进程进行远程控制，此时，管理员不需要DNS服务器的根用户权限。
@@ -221,29 +224,100 @@ command is one of the following:
 >说明：`rndc`命令后面可以跟”-s”和”-p”选项连接到远程DNS服务器，以便对远程DNS服务器进行管理，但此时双方的密钥要一致才能正常连接。
 >在设置`rndc.conf`时一定要注意`key`的名称和预共享密钥一定要和`named.conf`相同，否则`rndc`工具无法正常工作。
 
+**选项**
+```shell
+
+-b source-address   绑定rndc客户端使用的源地址，因为一个网卡可有多个地址。
+-c config-file      指定连接时使用的配置文件，而不是默认的/etc/rndc.conf。
+-s server           指定要连接的服务器的IP地址。
+-p port             指定要连接的服务器的端口。
+-k key-file         指定连接时使用的密钥文件，而不是默认的/etc/rndc.key。
+-y key-id           指定要使用的密钥标识，必须与服务器一致。
+-v                  输出详细的日志信息。
+```
+
+
+**命令功能**
 ```bash
-rndc status                      #查询DNS服务器状态
-rndc reload                      #重新加载配置文件和zone file
-rndc reload zone_name            #重新加载指定zone file
-rndc reconfig                    #重读配置文件并加载新增的区域
-rndc querylog                    #关闭或开启查询日志
-rndc dumpdb                      #将高速缓存转储到转储文件 (named_dump.db)
-rndc freeze                      #暂停更新所有动态zone
-rndc freeze zone [class [view]]  #暂停更新一个动态zone
-rndc flush [view]                #刷新服务器的所有高速缓存
-rndc flushname name              #为某一视图刷新服务器的高速缓存
-rndc stats                       #将服务器统计信息写入统计文件中
-rndc stop                        #将暂挂更新保存到主文件并停止服务器
-rndc halt                        #停止服务器，但不保存暂挂更新
-rndc trace                       #打开debug, debug有级别的概念，每执行一次提升一次级别
-rndc trace LEVEL                 #指定 debug 的级别, trace 0 表示关闭debug
-rndc notrace                     #将调试级别设置为 0
-rndc restart                     #重新启动服务器（尚未实现）
-rndc addzone zone [class [view]] { zone-options } #增加一个zone
-rndc delzone zone [class [view]] #删除一个zone
-rndc tsig-delete keyname [view]  #删除一个TSIG key
-rndc tsig-list                   #查询当前有效的TSIG列表
-rndc validation newstate [view]  #开启/关闭dnssec
+rndc status                    #查询DNS服务器状态
+rndc reload                    #重新加载named.conf和新的域，但不会重新加载已存的域文件。
+rndc reload zone_name          #重新加载指定区域  
+```
+```shell
+reconfig                       #重读配置文件并加载新增的区域
+querylog                       #关闭或开启查询日志， 查询日志会输出到  /var/log/message, 繁忙时，可能会瞬间增大 message 
+
+dumpdb                          #将高速缓存转储到转储文件 (named_dump.db)
+freeze                          #暂停更新所有动态zone
+freeze zone [class [view]]      #暂停更新一个动态zone
+flush   [view]                  #刷新服务器的所有高速缓存
+flushname name                  #为某一视图刷新服务器的高速缓存
+stats                           #将服务器统计信息写入统计文件中    /var/named/data/named_stats.txt
+status                              #显示服务器状态。
+stop                                #将暂挂更新保存到主文件并停止服务器
+halt                                #停止服务器，但不保存暂挂更新
+trace                               #打开debug, debug有级别的概念，每执行一次提升一次级别
+trace LEVEL                         #指定 debug 的级别, trace 0 表示关闭debug
+notrace                                 #将调试级别设置为 0
+restart                                 #重新启动服务器（尚未实现）
+addzone zone  [class [view]]   { zone-options } #增加一个zone
+delzone  zone  [class [view]]                   #删除一个zone
+```
+
+范例：
+```shell
+# rndc  -s 192.168.10.11 reload   base07.com
+```
+
+
+
+#### 检查rndc管理状态
+```shell
+rndc status
+```
+####  rndc 管理静态域
+在静态域修改区域数据库文件(zone文件)后（包含zone中的`serial number`），使用以下命令重新加载区域数据库配置。
+如下，修改了`whbblog.cn`对应的zone文件之后，使用下列方式进行加载。
+```shell
+[root@localhost ~]# rndc reload whbblog.cn
+zone reload up-to-date
+You have new mail in /var/spool/mail/root
+```
+
+#### rndc 管理动态态域
+在动态域修改区域数据库文件后，使用以下命令冻结区域数据库文件配置。
+```shell
+[root@localhost ~]# rndc  freeze host.com
+rndc: 'freeze' failed: permission denied
+Flushing the zone updates to disk failed.
+```
+加载失败 检查权限问题，发现所属主和所属组都是`root`，应该修改权限为`named`。
+```shell
+[root@dns1 ~]# ll /var/named
+total 1084
+-rw-r--r-- 1 root  root   328 Jul 11 17:53 10.168.192.in-addr.arpa.zone
+drwxrwx--- 2 named named   75 Jul 18 03:16 data
+drwxrwx--- 2 named named   60 Jul 18 16:04 dynamic
+-rw-r--r-- 1 root  root   425 Jul 15 15:42 host.com.zone
+-rw-r--r-- 1 named named  698 Jul 16 10:02 host.com.zone.jnl
+```
+修改配置文件权限。
+```shell
+[root@dns1 ~]# chown named.named /var/named/host.com.zone
+[root@dns1 ~]# chmod 660 /var/named/host.com.zone
+```
+
+重新冻结区域数据库文件；
+```shell
+[root@localhost ~]# rndc  freeze host.com
+You have new mail in /var/spool/mail/root
+```
+
+重新加载区域配置文件；
+```shell
+[root@localhost ~]# rndc thaw host.com  
+The zone reload and thaw was successful.
+You have new mail in /var/spool/mail/root
 ```
 
 ### 范例

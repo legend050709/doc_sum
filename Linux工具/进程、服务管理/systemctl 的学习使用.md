@@ -90,6 +90,63 @@ systemctl start nginx    # (2)
 
 ![](attachments/Pasted%20image%2020231219162018.png)
 ![](attachments/Pasted%20image%2020231219162056.png)
+## systemd-analyze
+systemd-analyze是一个分析启动性能的工具，用于分析启动时服务时间消耗。它将列出有关每个服务启动所需时间的信息，包括启动时内核和用户空间所花费的时间。
+
+### 使用
+systemd-analyze可使用的命令：
+```bash
+- systemd-analyze [OPTIONS…] [time]
+- systemd-analyze [OPTIONS…] blame
+- systemd-analyze [OPTIONS…] critical-chain [UNIT…]
+- systemd-analyze [OPTIONS…] plot [> file.svg]
+- systemd-analyze [OPTIONS…] dot [PATTERN…] [> file.dot]
+- systemd-analyze [OPTIONS…] dump
+- systemd-analyze [OPTIONS…] set-log-level LEVEL
+- systemd-analyze [OPTIONS…] set-log-target TARGET
+- systemd-analyze [OPTIONS…] get-log-level
+- systemd-analyze [OPTIONS…] get-log-target
+- systemd-analyze [OPTIONS…] syscall-filter [SET…]
+- systemd-analyze [OPTIONS…] verify [FILES…]
+```
+
+### 范例
+使用`systemd-analyze blame`可以查看每个单元的启动时间。如下所示：
+```c
+  5.923s dev-sda1.device
+  5.543s dev-loop14.device
+  5.478s dev-loop15.device
+  5.121s dev-loop13.device
+  2.442s snapd.service
+  1.163s snapd.seeded.service
+  1.036s udisks2.service
+   964ms networkd-dispatcher.service
+   930ms fwupd.service
+   883ms apparmor.service
+   758ms ModemManager.service
+   677ms accounts-daemon.service
+   581ms systemd-udev-trigger.service
+   538ms systemd-journald.service
+   530ms NetworkManager-wait-online.service
+   528ms grub-common.service
+   514ms speech-dispatcher.service
+   499ms dev-loop4.device
+   493ms networking.service
+   481ms dev-loop7.device
+   474ms avahi-daemon.service
+   444ms dev-loop2.device
+   433ms dev-loop0.device
+   418ms NetworkManager.service
+   415ms dev-loop1.device
+   415ms systemd-modules-load.service
+   414ms dev-loop5.device
+   396ms dev-loop6.device
+   393ms dev-loop3.device
+   363ms dev-loop8.device
+   344ms systemd-random-seed.service
+```
+使用`systemd-analyze plot > boot.svg`生成一张启动详细信息矢量图，然后用图像浏览器或者网页浏览器打开查看 。
+![](attachments/Pasted%20image%2020240102141221.png)
 # systemd的Unit
 Systemd 可以管理所有系统资源。不同的资源统称为 Unit（单位）。
 简单说，单元就是 Systemd 的最小功能单位，是单个进程的描述。一个个小的单元互相调用和依赖，组成一个庞大的任务管理系统，这就是 Systemd 的基本思想。
