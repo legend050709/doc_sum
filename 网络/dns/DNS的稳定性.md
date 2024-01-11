@@ -1,3 +1,5 @@
+```table-of-contents
+```
 # 稳定性
 ## 权威 DNS 容灾
 ### DNS 解析流程

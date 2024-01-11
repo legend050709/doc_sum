@@ -2,10 +2,14 @@
 ```
 # DNS介绍
 ![](attachments/Pasted%20image%2020240104113047.png)
-DNS 的全称是 _Domain Name Systems_，它是一个由分层的 DNS 服务器实现的分布式数据库；它还是一个使得主机能够查询分布式数据库的应用层协议。DNS 协议运行在 UDP 协议上，使用 53 端口。
+DNS 的全称是 `Domain Name Systems`，DNS是一个分层级 （hierarchical ），分布式（decentralized）的网络数据库，完成主机名称和IP地址之间的相互映射。DNS 协议运行在 UDP 协议上，使用 53 端口。
 
 与 HTTP、FTP 和 SMTP 一样，DNS 协议也是一种应用层的协议，DNS 采用 client/server 模式，DNS client 发出查询请求，DNS server 响应请求，并通过 UDP 协议来传输 DNS 报文。
 ![](attachments/Pasted%20image%2020240104121432.png)
+
+
+DNS名称空间包含一个树状结构，如下所示：
+![](attachments/Pasted%20image%2020240110160858.png)
 
 除了提供主机名到 IP 地址的转换，DNS 还支持了下面几种重要的功能：
 - `主机别名(host aliasing)`，有着复杂主机名的主机能够拥有一个或多个其他别名，比如说一台名为 relay1.west-coast.enterprise.com 的主机，同时会拥有 enterprise.com 和 [www.enterprise.com](http://www.enterprise.com/) 的两个主机别名，在这种情况下，relay1.west-coast.enterprise.com 也称为**规范主机名**，而主机别名要比规范主机名更加容易记忆。应用程序可以调用 DNS 来获得主机别名对应的规范主机名以及主机的 IP地址。
@@ -105,7 +109,8 @@ AXFR 返回结果：
 
 # 域名
 域名由一系列字母（a～z，**不区分大小写**）、数字（0～9）、连接符（`-`）以及点号(`.`)分隔符组成，总长度不大于255。分隔符隔出的每段相当于一个层次的域名，级别低的在左，级别高的在右，每段长度不大于63。
-如域名dailyupdate.wangwang.taobao.com，三段域名分别为dailyupdate、wangwang、taobao、com，其中com的级别最高。
+如域名`dailyupdate.wangwang.taobao.com`，三段域名分别为`dailyupdate`、`wangwang`、`taobao`、`com`，其中`com`的级别最高。
+
 ## 域名结构
 **DNS 域**的本质是一种管理范围的划分，最大的域是根域 ，向下可以划分为顶级域 、二级域 、三级域 、四级域 等。相对应的域名是根域名 、顶级域名 、二级域名 、三级域名 等。不同等级的域名使用**点号**分隔，级别最低的域名写在最左边，而级别最高的域名写在最右边。
 
@@ -654,6 +659,217 @@ DNS 数据可缓存到各种不同的位置上，每个位置均将存储 DNS �
 
 ### 操作系统内核缓存
 在浏览器缓存查询后，会进行操作系统级 DNS 解析器的查询，操作系统级 DNS 解析器是 DNS 查询离开你的计算机前的第二站，也是本地查询的最后一个步骤。
+
+# DNS ANYCAST
+Anycast 是一种为一组端点提供多个路由路径的技术，每个端点都分配有相同的 IP 地址。 组中的每个设备在网络上通告相同的地址，路由协议用于选择最佳目的地。
+
+这里需要注意两个点：
+- IPv4协议本身是不支持Anycast技术的
+	- IPv4 anycast 通过BGP来实现。
+- IPv6协议原生支持Anycast技术，但是普及率要远低于IPv4
+
+## anycast 是什么
+Bgp+anycast是多个主机使用相同ip地址的一种技术，当报文发给该地址时，根据路由协议，选择最近（跳数最少）的主机服务。
+所以，在服务器数量足够多的前提下，anycast天然支持负载均衡和抵抗ddos攻击。
+简而言之，anycast就是不同服务器用了相同的ip地址，利用BGP，达到就近访问的效果。
+
+## 多播&单播&任播
+**Multicast（多播）**
+它是指网络中一个节点发出的信息被多个节点收到。实际上，在数据链路层和网络层都有Multicast，通常所说的Multicast大多是针对IP的。这种技术用于多媒体应用、多用户交互(如聊天室)、软件分发等，相比与传统的Unicast可以大大提高效率。在子网内实现
+Multicast 较为简单，跨越子网时需要路由器、网关等设备的支持。
+
+**Unicast(单播)**
+单播方式下，只有一个发送方和一个接收方。与之比较，组播是指单个发送方对应一组选定接收方。
+
+ **Anycast（任意播）**
+ Anycast 中文称为任意播。集Multicast和Unicast的特性于一身。
+从宏观上来说，Anycast类似于Multicast，同一种类型的数据流同时存在多个接收者。
+从微观上来说，Anycast又有着Unicast的唯一性。
+
+## anycast 会有地址冲突问题么？
+同一个IP地址配置在不同的主机上，这不是地址冲突了吗？
+
+我们知道，IP地址存在的目的就是为了指挥路由器选路，最终将数据包路由到目的地，那么IP地址冲突的结果是什么？
+**IP地址冲突不是问题，路由冲突才是！
+IP地址冲突只有导致路由器的路由冲突(be confusing)的时候才有问题**。
+
+在路由器看来，它们并不知道不同指向的下一跳最终将数据包导向不同的目的地，它们只是认为这只是通往同一个目的地的不同路径罢了！
+简单点说， Anycast之所以得以部署和实现，就是利用了IP协议逐跳寻址的特性！
+事实上，Anycast的结果是，相同的IP地址位于不同的主机，因此，它的弊端也是显而易见的。
+由于 逐跳的路由收敛 和 端到端的五元组连接 之间并没有同步，因此Anycast并不适合基于端到端连接的TCP应用。
+> 因为TCP是带有状态的，某一台设备的Anycast IP出现路由收敛时，已经建连的TCP报文发送给了其他的设备，导致TCP链接断开。
+
+### BGP的结合实践
+使用BGP，可实现ip不冲突;
+(1)设置多个服务器IP为相同IP，如1.1.1.1
+ >每一个服务器主机处在不同的地理位置，他们之间不在同一个广播域内。所以把所有主机配置成相同的IP地址并不会引起我们日常所见的IP地址冲突。
+(2)通过各个站点的BGP对互联网宣告1.1.1.0/24的网段
+(3)以上步骤完成以后，互联网路由表针对1.1.1.1/24会有三个不同的出口路由器，分别是北京，上海，广州（举例）
+(4)不同地区的用户根据就近原则，选择相应的主机。
+
+## anycast的优缺点
+### 优点
+- 负载均衡
+Anycast可以零成本实现负载均衡，无视流量大小。
+- 高可用
+当任意目的主机接入的网络出现故障，导致该目的主机不可达时，客户端请求可以在无人为干预的情况下自动被路由到目前可达的最近目的主机，在一定程度上为目标主机提供了冗余性;
+- 低时延
+anycast + BGP选路，做到不同地区的用户根据就近原则，选择相应的主机。
+### 缺点
+- **使用Anycast中的共享单播地址不能作为客户端发起请求**
+因为请求的响应不一定能返回到发起的Anycast单播地址。因此，目前Anycast仅适合一些特定的上层协议，从目前的实际应用来看， Anycast最广泛的应用是DNS的部署。
+
+- **Anycast严重依赖于BGP的选路原则**
+不同地区的用户根据就近原则，选择相应的主机。
+
+## anycast 应用
+Anycast实质上是一种网络技术，它借助于网络中动态路由协议实现服务的负载均衡和冗余。
+从实现类型上分，可以分为`subnet Anycast`和`Global Anycast`:
+- `subnet Anycast`
+指所有目的主机都位于同一网段，此方式仅提供负载均衡和冗余，对安全度提升没有实质效果。
+
+- `Global Anycast`
+指目的主机处于不同网段，可能处于不同城市，甚至分布在全球各地，在实际应用中`Global Anycast`中目标主机的部署除地理位置的考虑外，多接入不同自治域的网络中。
+
+AnyCast主要应用于大范围的DNS部署，CDN数据缓存，数据中心等。
+### 基于IP Anycast＋BGP的DNS部署
+**背景**：
+假设部署三个DNS服务器站点，地点分别在北京、上海、广州，且服务于全国的DNS解析。
+
+**常规方案**：
+为了实现三个DNS服务器负载均衡，通常会考虑到使用硬件负载均衡设备，例如常见的F5负载均衡设备等。
+
+**AnyCast方案**：
+方案优点：
+
+**负载均衡**
+通过AnyCast技术，无需要借助任何第三方负载均衡器，就可以轻松达到负载均衡的效果，同时还提供了冗余和高可靠性。
+![](attachments/Pasted%20image%2020240110203003.png)
+通过配置三个DNS站点的服务器IP为相同IP，例如1.1.1.1/32。然后通过各个站点的BGP对互联网宣告1.1.1.0/24的网段。
+以上步骤完成以后，互联网路由表针对1.1.1.1/24会有三个不同的出口路由器，分别是北京，上海，广州。
+
+**就近访问**
+假设现有用户都使用1.1.1.1作为DNS服务器，依据就近原则，若用户地域为东北，则会优先采用北京DNS服务器进行解析。
+同理，贵阳的宽带路由器通过查看BGP路由，发现1.1.1.1出口最优路由是在广州，那么贵阳用户的DNS数据包将被发送给广州的DNS服务器。而江南一带的则是上海DNS服务器负责提供解析服务。
+
+**故障容灾**
+若三台DNS服务器中某一台出现故障，如广东DNS服务宕机，BGP协议会立即停止通告此1.1.1.0/24的网段，Internet路由表将会只有北京和上海的DNS可供选择。
+
+### 防范DDOS攻击
+####  DDoS简述
+DoS攻击是指故意的攻击网络协议实现的缺陷或直接通过野蛮手段残忍地耗尽被攻击对象的资源，目的是让目标计算机或网络无法提供正常的服务或资源访问，使目标系统服务系统停止响应甚至崩溃。
+DDoS（分布式拒绝服务）指借助于客户/服务器技术，将多个计算机联合起来作为攻击平台，同时对一个或多个目标发动DoS攻击。
+####  DDoS分类
+DDOS攻击主要分为三类：流量型攻击；连接型攻击；特殊协议缺陷。
+#### 范例
+案例参考：以NTP协议为例，NTP协议基于C/S模式，客户发起NTP时间查询申请，服务器响应NTP查询。假设有成千上万的僵尸主机纷纷伪造如下数据包并不断连续发送给全球NTP服务器：
+
+- 伪造源地址：1.2.3.4               # 此地址为真正需要攻击的地址
+- 目标地址：全球各个NTP服务器地址     # 大批量提供响应的节点
+
+当全球各地的NTP服务器收到此查询以后，它会把查询结果发送回给真正的被攻击者1.2.3.4，此时IP地址为1.2.3.4的受害者收到全世界的NTP服务器发过来的数据包时，其有限的带宽链路就很容易产生拥塞并造成服务中断。
+受到的DDoS攻击流量=虚假数据包发送数量x全世界NTP服务器的数量。
+
+#### AnyCast防范DDOS攻击
+DDOS攻击最关键是需要把所有地理位置分散的小流量最终汇集为一个巨大的流量，从而发起攻击。
+
+在AnyCast环境下，由于多个地理位置不同的主机同时使用同一个IP地址。因此，DDOS攻击流量在穿越运营商路由器时，路由器会根据地理位置远近把数据包路由到距离源地址最近的受害者主机站点，从而间接又再次分散了整个DDOS流量。
+
+如上案例，假设IP地址为1.2.3.4的受害者采用了AnyCast协议部署网络，其服务器分布在全国各地。当DDOS洪流攻击时，不同的NTP服务器根据路由选择，把流量发送到距离NTP服务器最近的受害者服务器上。最终，大流量的攻击被逐步分解。
+
+### 大型服务的CDN部署
+AnyCast在大型企业中也常用于CDN部署，采用了Anycast技术为用户提供距离用户最近的Cache服务器，可大大提高了用户的服务体验。在全球建设了多个数据中心，凭借于AnyCast的高冗余性，任何一个数据中心出现网络、系统故障。均不会影响客户体验度，所有当地的客户流量会自动路由到其他就近的数据中心。相对传统企业网络面对网络节点故障的脆弱性，Anycast具有很强的优势。
+![](attachments/Pasted%20image%2020240110203709.png)
+
+
+## IPv6 和 Anycast
+在网一个接口上配置了一个IPv6地址之后，会进行DAD 检测，如果发现IPv6地址冲突，则 通过`ip addr`可以看到 `dadfailed` 的标记，后续主动发起请求内核无法使用该地址。
+![](attachments/Pasted%20image%2020240110202524.png)
+但是对于IPv4而言，发送免费ARP，即使存在冲突，也不会有任何影响。
+
+### 约束
+IPv6对Anycast进行了标准化，首先在RFC3513中，它对Anycast提出了两点约束：
+> An anycast address must not be used as the source address of an IPv6 packet.
+> An anycast address must not be assigned to an IPv6 host, that is, it may be assigned to an IPv6 router only.
+
+- IPv6 anycast IP不可以作为数据包的SIP地址
+- IPv6 anycast IP 不可以被配置到端上，可以存在于路由中。
+
+即：**在IPv6中，Anycast不是用来通信的，而是用来路由寻址的**。
+紧接着，RFC3513要求 **所有的路由器的所有含有IPv6地址的接口** 都必须配置一个 必选的Anycast地址。
+```text
+ 2.6.1 Required Anycast Address
+  The Subnet-Router anycast address is predefined. Its format is as
+ follows:
+  | n bits | 128-n bits |
+ ±———————————————–±—————+
+ | subnet prefix | 00000000000000 |
+ ±———————————————–±—————+
+  The “subnet prefix” in an anycast address is the prefix which identifies a specific link. 
+  This anycast address is syntactically the same as a unicast address for an interface on the link with the interface identifier set to zero.
+  Packets sent to the Subnet-Router anycast address will be delivered to one router on the subnet. 
+  All routers are required to support the Subnet-Router anycast addresses for the subnets to which they have interfaces.
+```
+比方说，路由R有两个接口，分别配置了两个IP地址：
+```bash
+e0: 240e:909:2001::4e3/64
+e1: 240e:101:4004::111/64
+```
+那么根据RFC的要求，这个路由器上将会生成下面的Anycast地址：
+```bash
+e0 Anycast:  240e:909:2001::/64
+e1 Anycast:  240e:101:4004::/64
+```
+
+### 设置与查看
+(1) 开启IPv6的转发
+```bash
+sysctl -w net.ipv6.conf.all.forwarding=1
+```
+
+(2) 查看anycast IP地址：` /proc/net/anycast6` 文件
+```bash
+[root@localhost src]# cat /proc/net/anycast6
+3    enp0s8          fe800000000000000000000000000000     1
+4    enp0s9          fe800000000000000000000000000000     1
+4    enp0s9          240e0918800300000000000000000000     1
+
+我在enp0s9上配置了如下的IPv6地址：
+[root@localhost src]# ip -6 addr ls dev enp0s9
+4: enp0s9: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qlen 1000
+    inet6 240e:918:8003::3f5/64 scope global
+       valid_lft forever preferred_lft forever
+    inet6 fe80::eb7c:b2da:7088:3c38/64 scope link noprefixroute
+       valid_lft forever preferred_lft forever
+```
+所以说，什么都不用干，Linux内核自动生成了其对应的Anycast地址，对应RFC3513的2.6.1 Required Anycast Address格式：`240e:918:8003::`。
+
+（3）查看组播地址：` /proc/net/igmp6`文件
+我们知道，这个 `240e:918:8003::` anycast IP 是可以被邻居发现而解析的，而我们知道，IPv6的邻居发现使用的是组播地址，其组播构成规则详见：
+对应组播地址： FF02::1:FF00:0000/104 Solicited-Node Address `RFC3513 -RFC4291`对其进行了增强更新。
+```text
+指定节点的组播地址：
+ Solicited-Node Address: FF02:0:0:0:0:1:FFXX:XXXX
+  Solicited-node multicast address are computed as a function of a node’s unicast and anycast addresses. 
+  A solicited-node multicast address is formed by taking the low-order 24 bits of an address(unicast or anycast) and appending those bits to the prefix
+ FF02:0:0:0:0:1:FF00::/104 resulting in a multicast address in the range FF02:0:0:0:0:1:FF00:0000 to FF02:0:0:0:0:1:FFFF:FFFF
+```
+```bash
+[root@localhost src]# cat /proc/net/igmp6
+1    lo              ff020000000000000000000000000001     1 0000000C 0
+1    lo              ff010000000000000000000000000001     1 00000008 0
+...
+# 下面这个便是！
+4    enp0s9          ff0200000000000000000001ff000000     2 00000004 0
+...
+```
+
+将Anycast地址作为默认网关的下一跳发送数据，最终邻居解析的时候，只要发送到组播地址 `ff02::1:FF00::` 就可以解析出该网段上的Anycast地址的MAC地址信息。
+
+## LB后端挂载多个DNS服务器
+![](attachments/Pasted%20image%2020240110191937.png)
+
+LB后端挂载DNS服务器，本身只是实现了负载均衡；没有实现就近访问。
 # DNS安全
 几乎所有的网络请求都会经过 DNS 查询，而且 DNS 和许多其他的 Internet 协议一样，系统设计时并未考虑到安全性，并且存在一些设计限制，这为 DNS 攻击创造了机会。
 
@@ -691,6 +907,32 @@ DNS 域名服务器使用的端口号是 53 ，并且同时支持 UDP 和 TCP �
 因为 DNS 响应报文中有一个**截断标志位**，用 TC 表示。当响应报文使用 **UDP 封装**，且报文长度大于 **512 字节**时，那么服务器只返回前 512 字节，同时 TC 标志位置位，表示报文进行了截断。当客户端收到 TC 置位的响应报文后，将采用 **TCP 封装**查询请求。DNS 服务器返回的响应报文长度大于 512 字节。
 ![](attachments/Pasted%20image%2020240104133159.png)
 
+当请求体和响应的大小比较小时，通过 TCP 协议进行传输不仅需要传输更多的数据，还会消耗更多的资源，多次通信以及信息传输带来的时间成本在 DNS 查询较小时是无法被忽视的，TCP 连接带来的可靠性在 DNS 的场景中没能发挥太大的作用。
+在 DNS 中存储较多的内容时，TCP 三次握手以及协议头带来的额外开销就不是关键因素了。不过我们 TCP 三次握手带来的三次网络传输耗时还是没有办法避免的，这也是我们在目前的场景下不得不接受的问题。
+- 当 DNS 数据包大小为 500 字节时，TCP 协议的额外开销为 ~41.2%；
+- 当 DNS 数据包大小为 1100 字节时，TCP 协议的额外开销为 ~20.7%；
+- 当 DNS 数据包大小为 2300 字节时，TCP 协议的额外开销为 ~10.3%；
+- 当 DNS 数据包大小为 4800 字节时，TCP 协议的额外开销为 ~5.0%；
+![](attachments/Pasted%20image%2020240108151643.png)
+
+### 小结
+重新回顾一下 DNS 查询选择 UDP 或者 TCP 两种不同协议时的主要原因：
+- UDP 协议
+    - DNS 查询的数据包较小、机制简单；
+    - UDP 协议的额外开销小、有着更好的性能表现；
+- TCP 协议
+    - DNS 查询由于 DNSSEC 和 IPv6 的引入迅速膨胀，导致 DNS 响应经常超过 MTU 造成数据的分片和丢失，我们需要依靠更加可靠的 TCP 协议完成数据的传输；
+    - 随着 DNS 查询中包含的数据不断增加，TCP 协议头以及三次握手带来的额外开销比例逐渐降低，不再是占据总传输数据大小的主要部分；
+
+ DNS **查询**在刚设计时主要使用 UDP 协议进行通信，而 TCP 协议也是在 DNS 的演进和发展中被加入到规范的：
+1. DNS 在设计之初就在区域传输中引入了 TCP 协议，在查询中使用 UDP 协议；
+2. 当 DNS 超过了 512 字节的限制，我们第一次在 DNS 协议中明确了『当 DNS 查询被截断时，应该使用 TCP 协议进行重试』这一规范；
+3. 随后引入的 EDNS 机制允许我们使用 UDP 最多传输 4096 字节的数据，但是由于 MTU 的限制导致的数据分片以及丢失，使得这一特性不够可靠；
+4. 在最近的几年，我们重新规定了 DNS 应该同时支持 UDP 和 TCP 协议，TCP 协议也不再只是重试时的选择；
+
+无论是选择 UDP 还是 TCP，最核心的矛盾就在于需要传输的数据包大小，如果数据包小到一定程度，UDP 协议绝对最佳的选择，但是当数据包逐渐增大直到突破 512 字节以及 MTU 1500 字节的限制时，我们也只能选择使用更可靠的 TCP 协议来传输 DNS 查询和响应。
+
+参考：[为什么 DNS 使用 UDP 协议](https://draveness.me/whys-the-design-dns-udp-tcp/)
 ## 什么时候用TCP进行传送
 DNS使用的通信方式，有UDP和TCP两种。一般情况下使用的是UDP进行DNS域名查询。但是，在以下两种情况会使用TCP进行域名查询：
 ![](attachments/Pasted%20image%2020231107195700.png)
@@ -771,4 +1013,10 @@ https://github.com/crisxuan/bestJavaer/blob/master/computer-network/network-dns.
 
 # 36 张图详解 DNS ：网络世界的导航
 https://www.sohu.com/a/705284462_121124376
+
+# DNS多点部署IP Anycast+BGP实战分析
+https://www.linuxidc.com/Linux/2014-08/105816.htm
+
+# anycast 技术浅析
+https://www.cnblogs.com/itzgr/p/10192799.html#_label3
 ```
