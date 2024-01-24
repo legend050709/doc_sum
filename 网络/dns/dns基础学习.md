@@ -29,6 +29,9 @@ DNS名称空间包含一个树状结构，如下所示：
 - **转发服务器（Forwarding Name Servers）**：
 发现非本机负责的请求后，不再向根发起请求，而是直接转发给指定的一台或多台服务器，自身并不保存查询
 
+## DNS Resolver(Local DNS Server)
+指本地域名服务器，它是DNS查找中的第一站，是负责处理发出初始请求的DNS服务器。
+运行商ISP分配的DNS如电信的114.114.114.114和谷歌的8.8.8.8等都属于DNS Resolver
 ## 主从服务器的关系
 ![](attachments/Pasted%20image%2020240104121221.png)
 
@@ -40,72 +43,6 @@ DNS名称空间包含一个树状结构，如下所示：
 其实就是主从的概念，各位应该也都比较熟悉了。
 
 **主域名服务器用来写，辅助域名服务器用来读，提供负载均衡的能力，缓解主域名服务器的压力。**
-
-## 区域传输(zone transfer)
-### 定义
-那么所谓区域传输(zone transfer)呢，就是辅助域名服务器与主域名服务器通信，并同步 RR 资源的过程。这样做的目的是为了保证多台服务器保证内容同步。
-
-### 传输协议
-**区域传输使用 TCP 而不是 UDP**
-
-如果使用UDP，限制传输数据 512B以内（DNS的UDP响应就是限制在512B以内）。由于数据同步传送的数据量比一个 DNS 请求和响应报文的数据量要多得多，因此使用TCP。
-![](attachments/Pasted%20image%2020240104133505.png)
-
-因此，**UDP 用于 client 和 server 的查询和响应**，**TCP 用于主从 server 之间的Zone传送**。
-
-### 特性
-**更改自动同步**
-RFC 标准协议通过 MASTER-SLAVE 架构，NOTIFY + XFR 机制实现数据自动同步，用户只需要在主服务器上更改域名，更改信息便可自动同步到从服务器 。
-![](attachments/Pasted%20image%2020240104162335.png)
-
-### zone同步机制
-#### 启动同步
-当辅助域名服务器启动时，将从主域名服务器执行区域传送。
-#### 定时检查
-辅域名服务器会定时向主域名服务器进行查询以便了解区域是否有变动。如有变动，则会执行一次区域传输。
-
-一旦启动区域传输，就会存在两种传输方式：
-1. 全量传输：即传输整个区域的消息，全量传输会传输整个区域（使用 AXFR）的消息。
-2. 增量传输：增量传输就是传输一部分消息，增量传输使用（使用 DNS IXFR）的消息。
-
-#### DNS NOTIFY
-但是使用轮询这种方式有一些弊端，因为从服务器会定期检查主服务器上内容是否更新，这是一种资源浪费，因为绝大多数情况下都是一次无效检查，所以为了改善这种情况，DNS 设计了 `DNS NOTIFY` 机制，`DNS NOTIFY` 允许修改区域内容后主服务器通知从服务器内容需要更新，应该启动区域传输。
-
-### 具体流程
-![](attachments/Pasted%20image%2020240104162652.png)
-
-（1）用户在 MASTER 上动态修改域名解析记录（如 NSUPDATE），修改成功后，域名所在 ZONE 的版本号加 1。
-
-`test.com`初始配置：
-![](attachments/Pasted%20image%2020240104162738.png)
-
-初始 SOA 序列号：
-![](attachments/Pasted%20image%2020240104162805.png)
-
-NSUPDTA 新增记录：
-![](attachments/Pasted%20image%2020240104162815.png)
-
-最新 SOA 序列号
-![](attachments/Pasted%20image%2020240104162831.png)
-
-（2）MASTER 向其配置的 SLAVE 节点发送 NOTIFY（一般是 UDP 报文），NOTIFY 信息中包含了修改域名所在的 ZONE 和该 ZONE 最新的版本号。
-
-NOTIFY 消息：
-![](attachments/Pasted%20image%2020240104162903.png)
-
-（3）SLAVE 在收到 NOTIFY 消息后，进行以下操作：
-- SLAVE 在收到 NOTIFY 消息后会给 MASTER 发送一个响应表示收到了 NOTIFY;
-- SLAVE 比较 NOTIFY 中的 ZONE 的版本号和本地的 ZONE 的版本号，如果本地的版本号不低于 NOTIFY 中的版本号，SLAVE 不做任何操作;
-- 如果 SLAVE 本地的版本号低于 NOTIFY 中的版本号，表示本地的 ZONE 数据已经落后，SLAVE 向 MASTER 发送 IXFR 请求; SLAVE 根据 REFRESH（定义在 ZONE 的 SOA 记录中）定时向 MASTER 发送 IXFR 请求，作为当 NOTIFY 的报文因为某些原因无法发送到 SLAVE 时的一种补偿机制。
-- 如果 IXFR 失败，会转向 AXFR;
-
-（4）MASTER 根据 SLAVE 请求的 XFR 类型返回对应的数据
-IXFR 返回格式和结果：
-![](attachments/Pasted%20image%2020240104163411.png)
-![](attachments/Pasted%20image%2020240104163415.png)
-
-AXFR 返回结果：
-![](attachments/Pasted%20image%2020240104163511.png)
 
 # 域名
 域名由一系列字母（a～z，**不区分大小写**）、数字（0～9）、连接符（`-`）以及点号(`.`)分隔符组成，总长度不大于255。分隔符隔出的每段相当于一个层次的域名，级别低的在左，级别高的在右，每段长度不大于63。
@@ -148,38 +85,141 @@ AXFR 返回结果：
 
 在域名结构中，节点在所属域中的**主机名**标识可以相同 ，但是**域名必须不同**。比如：清华大学和新浪公司下都有一台主机的标识是 mail ，但是两者的域名却是不同的，前者为 **mail.tsinghua.edu.cn**，而后者为 **mail.sina.com.cn**。
 ![](attachments/Pasted%20image%2020240104122631.png)
+## 域的分层授权
+域是从上到下授权的，每一层都只负责自己的直辖下层，而不负责下下层。
+例如根域给顶级域授权，顶级域给普通域授权，但是根域不会给普通域授权。和现实中的行政管理不一样，域的授权和管理绝对不会向下越级，因为它根本不知道下下级的域名是否存在。
+## 子域（Sub Domain）
+DNS 有层次结构。顶级域”.com”是根域”.”的子域，”baidu.com.”又是”.com.”的子域。
+TLD 下面可以有多个域名。例如，com 下面有 google.com 和 ubuntu.com。
+子域是相对父域来说的，指域名中的每一个段。各子域之间用小数点分隔开。放在域名最后的子域称为最高级子域，或称为一级域，在它前面的子域称为二级域。
+```bash
+比如：
+www.nansan.sz.hunk.tech.
 
-## 子域名（Sub Domain Name）
-DNS 有层次结构，TLD 下面可以有多个域名。例如，com 下面有 google.com 和 ubuntu.com。
-”子域名” 是指作为较高层级域名的一部分。所以说，ubuntu.com 可以说是 com 的子域名，
-每个域名可以控制它下面的子域名。
+	hunk.tech为父域
+	sz为hunk.tech的子域，为一级子域
+	nansan为hunk.tech的子域，为二级子域
+	www是主机
+```
 
+注：zone分为主机名zone和域名zone。其中，**主机名zone就不存在子域了。域名zone才可能存在子域**。
 
-## FQDN
-FQDN(Fully Qualified Domain Name)：完全合格域名/全程域名/完全限定域名/绝对域名。
+## 子域管理
+### 子域的区域数据文件
+**不管是不是子域，只要它是一个域，就必须要有dns服务器来负责该域的解析**。
+域的灵魂在于其区域数据文件，只有区域数据文件中才提供了域所需的所有数据，要让dns服务器能够正常工作，域数据必须要完整且正确。
+**完整的域数据至少要存储SOA记录，ns记录以及ns对应的a记录**。
+（1）如果没有ns记录，则表示该域缺少dns服务器，这是不可能的。
+（2）缺少ns对应的a记录则能知道dns服务器的存在以及其主机名，却找不到dns服务器，因为没有它的ip地址。
+（3）缺少了soa记录后，它指定不了哪个dns服务器是主dns服务器，以及一系列的附加属性(序列号、各种重试缓存时间等)。更关键的是soa是起始授权机构，缺少了soa记录表明父域没有对该域授权，该域没有自主权，它只是父域下的一部分(可能只是主机名上多了一截，例如wuda.video.longshuai.com)，所有的解析工作都需要由父域来完成，只有有了soa记录，才表明父域授权了该域，该域可以享受起始授权的权利，也就是具有自主权，可以独立完成解析工作。子域，同样是域的概念，因此它的区域数据文件也一样要满足这些不是条件的条件。
+
+### 子域在父域中的记录
+再回顾下dns解析流程，客户端向dns服务器发送递归查询后，dns服务器会查询根域，根域会告诉dns服务器负责解析顶级域的服务器地址，dns服务器再向顶级域服务器发起查询，顶级域服务器再告诉dns服务器再下一层次域的服务器地址，依次下去，直到找到最终主机地址并返回给客户端。
+在这个解析流程中，**父域总是将子域dns服务器的地址告诉dns服务器**。所以，父域是知道子域dns服务器的ip地址的，因此**在父域的区域数据文件中，必然要指定子域dns服务器的A记录**。
+
+另外，父域如何区分其内主机是普通的主机还是子域dns服务器？总不能让子域dns服务器被父域当成普通主机吧？区分的方法是**在父域的区域数据文件中使用NS记录来存储子域dns服务器信息**。这样一来，子域dns服务器不仅在父域的区域数据文件中有了NS记录，还有了A记录，父域就能将子域信息返回给查询发起者。
+
+### 划分子域
+比如，那种有子公司的公司，使用子域来管理的。
+在主DNS服务器`/etc/named.rfc1912.zones`独立一个zone区域，并生成文件，交由子域管理员管理此文件。
+
+> 注：子域的服务器还是和父域一个服务器。只不过子域下还有一些域名，这些域名单独划分一个域（即子域）来管理。
+
+比如：`sz`分公司。`hunk.tech`下划分`sz.hunk.tech`子域。
+```bash
+zone "sz.hunk.tech" IN {
+        type master;
+        file "named.sz.hunk.tech";
+        allow-update { none; };
+};
+```
+zone区域文件`named.sz.hunk.tech`内容如下：
+```bash
+$ORIGIN .
+$TTL 600    ; 10 minutes
+sz.hunk.tech        IN SOA  6-DNS-1.sz.hunk.tech. admin.sz.hunk.tech. (
+                21         ; serial
+                7200       ; refresh (2 hours)
+                600        ; retry (10 minutes)
+                86400      ; expire (1 day)
+                10800      ; minimum (3 hours)
+                )
+            NS  6-DNS-1.sz.hunk.tech.
+$ORIGIN sz.hunk.tech.
+6-DNS-1         A   192.168.4.200
+7-WEB-2         A   7.7.7.7
+www         CNAME   7-WEB-2
+```
+
+### 子域授权新服务器
+子域授权：在原有的域上再划分出一个小的区域并指定新DNS服务器。
+对子域进行授权，只需在父域的区域文件中直接授权即可。在子域的NS服务器上，直接创建子域的区域文件，管理资源记录。
+
+在这个小的区域中如果有客户端请求解析，则只要找新的子DNS服务器。这样的做的好处可以减轻主DNS的压力，也有利于管理。
+> 注：如果子域设置了主从DNS，那么，在委派的时候，也是需要把管理子域的主、从DNS服务器同时添加记录，否则可能会单点故障。
+
+#### 范例
+比如：bj 分公司。`hunk.tech`下划分`bj.hunk.tech`子域。
+```json
+zone "bj.hunk.tech" IN {
+        type master;
+        file "named.bj.hunk.tech";
+        allow-update { none; };
+};
+
+```
+
+zone区域文件`named.bj.hunk.tech`内容如下:
+```json
+$ORIGIN .
+$TTL 600        ; 10 minutes
+bj.hunk.tech            IN SOA  bj-dns.bj.hunk.tech. admin.bj.hunk.tech. (
+                                23         ; serial
+                                7200       ; refresh (2 hours)
+                                600        ; retry (10 minutes)
+                                86400      ; expire (1 day)
+                                10800      ; minimum (3 hours)
+                                )
+                        NS      bj-dns.bj.hunk.tech.
+$ORIGIN bj.hunk.tech.
+bj-dns                  A       192.168.4.204
+bj-WEB-2                A       8.8.8.8
+www
+```
+
+另外，在父域的DNS服务器上面的zone文件要定义委派的子域DNS的权威DNS服务器:
+```json
+bj                      NS      bj-dns                     #bj子域 的NS 记录为bj.hunk.tech中定义的DNS服务器
+bj-dns                  A       192.168.4.204               # 对应子域权威DNS的A记录
+```
+### 子域和区域的一部分的区别
+
+子域的区域数据文件中是可以没有SOA记录的，只不过此时子域没有得到父域授权，也就没有自主权，无法提供解析功能。这意味着这不是一个子域，而是父域的一部分，就相当于在父域的区域数据文件中使用`$INCLUDE`一样。
+
+可以认为授权了的子域是父域将自己的孩子送到了它们该到的地方，它们自己能够独挡一面，没有授权的子域实际上只是住在了父域的隔壁，它没有独立解析的能力，一切问题仍然需要父域来负责解答。如下图：
+![](attachments/Pasted%20image%2020240117164324.png)
+
+### 小结
+根据上述分析，应该就能明白在互联网上申请域名并向外界提供解析时，实际上是向申请机构的区域数据文件中添加NS记录和NS对应的A记录，仅此而已。
+由此也知，根域名和顶级域名的区域数据文件是无比巨大的，在其中存放了无数的NS记录和A记录。
+
+## 主机名、域名、FQDN
+### 域名
+不论是`www.baidu.com`还是`tieba.baidu.com`，它们的域名都是`baidu.com`，严格地说是`baidu.com.`。这是百度所购买的com域下的一个子域名。
+### 主机名
+对于`www.baidu.com`来说，主机名是`www`，对于`tieba.baidu.com`来说，主机名是`tieba`。其实严格来说，`www.baidu.com`和`tieba.baidu.com`才是主机名，它们都是`baidu.com`域下的主机。一个域下可以定义很多主机，只需配置好它的主机名和对应主机的`IP`地址即可。
+### FQDN
+FQDN(Fully Qualified Domain Name)：**完全合格域名/全程域名**/完全限定域名/绝对域名。**完全合格域名/全程域名**用的相对较多。
 即域名可以通过DNS进行解析，其公式 **FQDN = HostName + Domain，即全程域名=主机名+域**。
-与 FQDN 对应的，系统中的默认域名是**非合格域名**，会把当前的区域域名添加到尾部。例如，tsinghua 域内的主机上查找 mail ，本地解析器就会将这个名称转换为 FQDN ，即 **mail.tsinghua.edu.cn**，然后解析出 IP 地址。
+FQDN是指包含了所有域的主机名，其中包括根域。FQDN可以说是主机名的一种完全表示形式，它从逻辑上准确地表示出主机在什么地方。例如`www.baidu.com`的FQDN是`www.baidu.com.`，com后面还有个点，这是根域。
+#### PQDN
+与 FQDN 对应的，系统中的默认域名是**非合格域名/部分限定域名**(PQDN: Partially Qualified Domain Name)，会把当前的区域域名添加到尾部。例如，tsinghua 域内的主机上查找 mail ，本地解析器就会将这个名称转换为 FQDN ，即 `mail.tsinghua.edu.cn.`，然后解析出 IP 地址。
 ![](attachments/Pasted%20image%2020240104121831.png)
 
 **FQDN**的完整格式是以点结尾的域名。
 > DNS 系统中的域名可以是相对的，所以可能是模糊的。FQDN 是一个绝对名称，表示了它相对于域名系统中绝对根目录的位置。
 
-这门技术解决了**一个域多个主机**的问题。
-一个网站或者服务器集群一般都是有多个主机一起协作的。
-比如说包括正向代理服务器、反向代理服务器、Web服务器、Email服务器、OA服务器、FTP服务器等等，这个时候就涉及需不需要为每一个主机申请一个域名。
-有了这个技术之后每一个主机都可以自己申请一个 `Hostname` 来区别于其他的主机，这个时候就只需要一个域名就可以做到管理所有的主机。
-
-比如我申请了一个域名: `doheras.com`
-现在我有两个服务器需要用到这个域名，一个 FTP服务器，一个Web服务器，这两个服务器都需要用到 `doheras.com`这个域名，根据公式，我们知道可以采用 `hostname` 的方式来访问不同的主机：
-Web 服务器: `web.doheras.com`
-FTP 服务器: `ftp.doheras.com`
-
-### 主机（Host）
-你可以在一个域名下面定义其它主机。比如说，通过 api 主机(api.example.com) 允许 API 访问，通过 ftp 主机或者 files 主机(ftp.example.com 或者 files.example.com）允许 ftp 访问。主机名可以任意指定，只要它们在该域名下是唯一的。
-
-主机名和子域名之间的区别是主机定义计算机或资源，而子域名扩展父域。
-
-### 范例
+#### 范例
 zone 引导文件，如下所示：
 ```json
 zone "abc.com" IN {
@@ -299,7 +339,7 @@ secondary       IN  A       192.168.10.201
 
 # DNS解析流程
 将域名转换为对应的 IP 地址 的过程叫做**域名解析**。在域名解析过程中，DNS client 的主机调用解析器 （ Resolver ），向 DNS server 发出请求，DNS server 完成域名解析。
-![](attachments/Pasted%20image%2020240104122830.png)
+![](attachments/Pasted%20image%2020240112144506.png)
 
 
 **域名解析**是按照 DNS 分层结构的特点，自顶向下进行的。但是如果每一个域名解析都从根域名服务器开始，那么根域名服务器有可能无法承载海量的流量。在实际应用中，大多数域名解析都是在**本地域名服务器**完成。通过合理设置本地域名服务器，由本地域名服务器负责大部分的域名解析请求，提高域名解析效率。
@@ -341,6 +381,8 @@ DNS解析流程分为**递归查询**和**迭代查询**。
 递归查询是以本地名称服务器为中心查询， 递归查询是默认方式；
 迭代查询是以DNS客户端，也就是客户机器为中心查询。
 **其实DNS客户端到本地名称服务器是递归，而本地名称服务器和其他名称服务器之间是迭代。**
+
+![](attachments/Pasted%20image%2020240122190915.png)
 
 ##  递归查询（recursion）
 ![](attachments/Pasted%20image%2020231225120053.png)
@@ -395,6 +437,9 @@ DNS解析流程分为**递归查询**和**迭代查询**。
 **递归**：客户端只发一次请求，要求对方给出最终结果。
 **迭代**：客户端发出一次请求，对方如果没有授权回答（权威回答），它就会返回一个能解答这个查询的其它名称服务器列表，客户端会再向返回的列表中发出请求，直到找到最终负责所查域名的名称服务器，从它得到最终结果。
 
+例如A主机要查询C域中的一个主机，A所指向的DNS服务器为B，递归和迭代查询的方式是这样的：
+递归查询：`A --> B --> C --> B --> A`
+迭代查询：`A --> B A --> C --> A`
 
 ## 反向查询
 ### 定义
@@ -406,6 +451,14 @@ DNS解析流程分为**递归查询**和**迭代查询**。
 举个栗子：`www.tsinghua.edu.cn`的 IP 地址是 `166.111.4.100` ，那么在 in-addr.arpa 域中对应的节点就是 `100.4.111.166` 。
 ![](attachments/Pasted%20image%2020240104134548.png)
 
+
+## 非递归查询
+在某些情况下，并不希望NS服务器额外地为递归查询寻找答案，或是建立数据缓存。
+root名称服务器就是个例子。root名称服务器非常繁忙，不能再浪费额外的时间为递归查询寻找答案。
+
+oot名称服务器仅依据其拥有的权威数据作出应答。该应答可能包含着答案，但更有可能包含着到其他名称服务器的指引。
+由于root服务器不支持递归查询，所以它们不用为非权威数据建立缓存，否则它们的缓存将会非常巨大。
+
 ## 查询优先级
 ## 分级查询
 # DNS应答
@@ -413,12 +466,49 @@ DNS解析流程分为**递归查询**和**迭代查询**。
 - `有查询结果`（肯定答案）
 - `不存在查询结果`（否定答案）
 
+注：否定答案也会缓存，并且有缓存时间。
+例如某个Client请求`51cto.com`域下的ftp主机，但是实际上`51cto.com`下面可能根本没有这个ftp主机，那么`51cto.com`就会给否定答案，为了防止Client不死心的访问ftp搞破坏，`51cto.com`这个域负责解析的DNS服务器有必要给Client指定否定答案的缓存时间。
+
 ## 肯定答案分类
 ### 权威应答
 - DNS服务器自己直接负责的域返回的答案
 ### 非权威应答
 - DNS服务器未负责的域，由缓存或者查询到的记录返回的答案
 
+# DNS的泛域名解析
+DNS的泛域名解析，就是都匹配不到的时候，此时就会匹配到`*`的地址。
+```bash
+# cat /var/named/test.cn.zone
+$TTL 1D
+@       IN SOA  @ rname.invalid. (
+                                        0       ; serial
+                                        1D      ; refresh
+                                        1H      ; retry
+                                        1W      ; expire
+                                        3H )    ; minimum
+test.cn. NS     tk
+tk      A       10.0.0.200
+www     A       10.0.0.201
+www     A       10.0.0.202
+*       A       1.1.1.1
+```
+
+我们进行测试
+```bash
+[root@gitlab ~]# nslookup abc.test.cn
+Server:         10.0.0.200
+Address:        10.0.0.200#53
+Name:   abc.test.cn
+Address: 1.1.1.1
+
+[root@gitlab ~]# nslookup www.test.cn
+Server:         10.0.0.200
+Address:        10.0.0.200#53
+Name:   www.test.cn
+Address: 10.0.0.201
+Name:   www.test.cn
+Address: 10.0.0.202
+```
 # 资源记录RR
 当一个解析器把域名传递给DNS时，DNS所返回的是与该域名相关联的资源记录；DNS的主要功能就是将域名映射到资源记录上。
 
@@ -603,38 +693,324 @@ NS(Name Server)，域名服务器：用于确定哪些服务器（注意可能�
 ```
 意思是：这个zone的查询请向后面这部主机请求。如果此zone有两部以上的DNS服务器负责时，就必须写两个NS，而NS后面接的主机名称必须要有ip的对应，这时需要A记录。
 
+范例：
+```
+longshuai.com.  IN  NS  dnsserver.longshuai.com.
+```
+前三列仍然是声明性语句，表示`longshuai.com.`域内的DNS服务器(name server)为第四列值所表示的`dnsserver.longshuai.com.`主机。
+
+
+如果一个域内有多个dns服务器，则必然有主次之分，即master和slave之分。但在NS记录上并不能体现主次关系。例如：
+```bash
+longshuai.com.    IN  NS  dnsserver1.longshuai.com.  
+longshuai.com.    IN  NS  dnsserver2.longshuai.com.
+```
+表示主机”dnsserver1.longshuai.com.”和主机”dnsserver2.longshuai.com.”都是域”longshuai.com.”内的dns服务器，但没有区分出主次dns服务器。
+
+
+
 ## A记录
-格式为：
+A记录：address，存储的是域内主机名所对应的ip地址。
+格式如下：
 ```json
 [hostname] IN A [IP]
-```
 
-## AAAA记录
+范例：
+dnsserver.longshuai.com.    IN  A   172.16.10.15
+```
+客户端之所以能够解析到主机名对应的ip地址，就是因为dns服务器中的有A记录存储了主机名和ip的对应关系。  
+AAAA记录存储的是主机名和ipv6地址的对应关系。
 
 ## PTR记录
+PTR记录：pointer，和A记录相反，存储的是ip地址对应的主机名，该记录只存在于反向解析的区域数据文件中(并非一定)。格式如下：
+```bash
+16.10.16.172.in-addr.arpa.  IN  PTR  www.longshuai.com.
+```
+表示解析`172.16.10.16`地址时得到主机名`www.longshuai.com.`
+
+## Cname记录
+canonical name，表示规范名的意思，其所代表的记录常称为别名记录。
+之所以如此称呼，就是因为为规范名起了一个别名。
+什么是规范名？可以简单认为是fqdn。
+
+**格式如下**：
+```bash
+www1.longshuai.com.     IN  CNAME  www.longshuai.com.
+```
+最后一列就是规范名，而第一列是规范名即最后一列的别名。
+当查询”www1.longshuai.com.”，dns服务器会找到它的规范名”www.longshuai.com."，然后再查询规范名的A记录，也就获得了对应的IP地址并返回给客户端。
+
+**应用场景**：
+当需要多个域名指向同一个IP，此时可以将其中一个域名做A记录指向这个IP，然后将其他的域名做这个存在IP的域名的别名。
+当服务器的IP地址变更时，就不需要每个域名都进行更改，因为其他的域名都是别名，可以不更改，只需要更改这个A记录的IP地址即可。
+正常情况下，业务访问的都是别名。如下所示，`www.baidu.com.` 是 `www.a.shifen.com.`的别名。可以很方面的更改`www.a.shifen.com.`下的A记录的IP地址，而用户是无感知的。
+```bash
+# dig www.baidu.com
+
+; <<>> DiG 9.9.4-RedHat-9.9.4-51.el7 <<>> www.baidu.com
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 4849
+;; flags: qr rd ra; QUERY: 1, ANSWER: 3, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 4096
+;; QUESTION SECTION:
+;www.baidu.com.			IN	A
+
+;; ANSWER SECTION:
+www.baidu.com.		19	IN	CNAME	www.a.shifen.com.
+www.a.shifen.com.	42	IN	A	110.242.68.4
+www.a.shifen.com.	42	IN	A	110.242.68.3
+
+;; Query time: 7 msec
+;; SERVER: 10.6.6.6#53(10.6.6.6)
+;; WHEN: Mon Jan 15 16:01:47 CST 2024
+;; MSG SIZE  rcvd: 101
+```
+
+**范例**
+一个服务器的域名地址 `nyc3.example.com` 这个主机域名可能会提供不同的服务；
+比如说域名 `nyc3.example.com` 指向的主机既要去提供 `web`服务，也要提供 `ftp` 服务，那么这个时候就需要一个别名域名来指向原来的域名，这个时候就可以使用一个 A 记录来管理多个域名，为DNS后期修改配置提供方便。
+
+
+**使用**
+```bash
+别名-----> 规范名
+规范名-----> A记录A1/A2/A3...
+
+场景：
+如果服务器升级，则需要更换服务器的IP地址，即A记录。
+用户一般访问的是别名，用户要访问的域名(别名)不进行更改；
+只需要将规范名---->A记录映射中的 IP地址更改为新的服务器地址即可。
+```
+举个例子：有一台主机名为`host.example.com`的服务器，其对外ip为`10.110.72.29`；服务器提供了门户网站和邮箱两个服务，我们希望用户通过地址`www.example.com`和`mail.example.com`分别访问两个服务，那么DNS应该这样记录：
+```bash
++------------------+-------+------------------+
+| host.example.com | A     | 10.110.72.29     |
++------------------+-------+------------------+
+| www.example.com  | CNAME | host.example.com |
++------------------+-------+------------------+
+| mail.example.com | CNAME | host.example.com |
++------------------+-------+------------------+
+```
+这样的话，www和mail服务其实都是指向了同一个ip，当主机的ip地址变更时，只需更改A记录即可。
+
+### CNAME记录的常用用途
+CNAME记录是DNS记录的一种类型，有两个字段，即规范名称和别名。它被用来。
+
+- (1) 将同一实体或组织所拥有的一组网站引向该实体的主网站.
+- (2) 为不同的网络服务如电子邮件或`FTP`映射多个主机名，每个主机名都指向父域.
+- (3) 将CDN的地址作为你的网站源服务器的CNAME记录，从而确保试图访问服务器上的资源的用户被重定向到CDN。
+> 比如我要给 `www.vpsss.net` 这个域名加速，去阿里云 CDN 中添加` www.vpsss.net`，会生成 `www.vpsss.net.w.kunlungr.com` 这个 CNAME 地址，然后去阿里云解析 DNS 中给 `www.vpsss.net` 添加一个 CNAME 记录，记录值就是 `www.vpsss.net.w.kunlungr.com` 这个地址，立即生效。这样凡是访问 `www.vpsss.net` 的请求都会被指向这个 CNAME 地址，系统会自行把访问引导到距离最近的 CDN 节点，这样就实现了一个完整的加速过程。
+
+### CNAME 记录的限制
+#### CNAME冲突
+CNAME 记录将一个主机名映射到另一个主机名，但不允许同一主机名上的其他 DNS 记录（如 MX 记录、A记录、Txt记录）；但 DNSSEC 记录（如 RRSIG 和 NSEC）除外。
+
+> 因为 如果一个域名添加了CNAME后，继承了CNAME值中域名的全部记录，那么这个域名本身也就没有必要存在除CNAME以外的其他记录了，只要一个CNAME记录就全都包括了。
+#### zone的CNAME
+你可能想把一个zone的DNS解析转发到另一个zone的DNS解析，比如这样配置
+```bash
+old.taobao.com. IN CNAME new.taobao.com.
+```
+实际上上面的CNAME意图是错误的，因为`old.taobao.com`已经有了SOA和NS的记录。如果你为`old.taobao.com`配置了CNAME， 那么`old.taobao.com`在CNAME链中的角色是一个别名**alias**，在SOA和NS的角度看它的角色是一个权威名**canonical name**, 一个domain是不能同时承担这两种角色的。
+所以，正确的做法应该是为zone下面的domain设置CNAME，像下面这样：
+```bash
+    img01.old.taobao.com.    IN   CNAME   img.new.taobao.com.
+    img02.old.taobao.com.    IN   CNAME   img.new.taobao.com.
+```
+
+即：MX 和 NS 记录绝不能指向 CNAME 别名。
+
+#### 指向CNAME的CNAME
+CNAME 记录**可以**指向其他 CNAME 记录，但这不是一个好的做法，因为它效率低下。
+
+标准DNS协议是不鼓励指向CNAME的CNAME的，因为这样会导致cname loop，同时会增加解析时间。我遇到的一个DNS服务器 就因为没有做CNAME loop的检查，不断向系统申请资源从而导致内存暴增直至宕机。
+如果你决定你的DNS服务器不遵循标准DNS协议，支持多层CNAME的话，那么对于CNAME链的长度限制和CNAME loop的检查是 十分有必要的。
+
+#### 多个CNAME值
+一个domain name或许会有对应的对个CNAME，像下面这样：
+```bash
+img.taobao.com.    IN   CNAME   img01.taobaocdn.com.
+img.taobao.com.    IN   CNAME   img02.taobaocdn.com.
+img.taobao.com.    IN   CNAME   img03.taobaocdn.com.
+```
+这看起来好像是一个不可思议的配置。但是你可以这样实现你的DNS服务器来做基于CNAME的负载均衡(sounds pathologicall), 方法就是你的DNS服务器每次会随机返回上面三个CNAME中的一个(当然也可以是你设计的任何选择策略)。
+值得一体的是，BIND9不支持这种多值的CNAME。
+
+### CNAME 记录的 DNS 解析过程
+
+详细流程如下所示：
+- DNS 客户端（例如浏览器或网络设备）请求地址 www.example.com ，并创建 DNS 请求。
+- DNS 解析器接收请求并找到权威名称服务器，该服务器保存带有“example.com”域的 DNS 记录的 DNS 区域文件。
+- DNS请求被解析，CNAME记录返回给客户端。
+- 客户端发现 www.example.com 只是真实地址“example.com”的别名（CNAME），并为“example.com”发出新的 DNS 查询
+- 重复该过程，解析器返回“example.com”的 A 记录，其中包含 IP 地址。
+- DNS 客户端现在使用其 IP 地址连接到“example.com”。
+
+### 解析超时问题
+这几天有开发同学反馈说是线上的应用dns解析总是失败，我自己测试了连续dig 1000次都是正常的。今天也把合作方的同学一起叫上了。因为之前是看对方有的CNAME设置的TTL是0,造成每次需要重新解析，dns服务器没有办法做cache。
+
+今天排除了很久，后来看了线上的日志才发现问题的本质是业务量非常小，每天就几十笔调用，即便对方把TTL改成60后，实际每次应用服务器查询dns的时候，dns服务器都是需要重新递归一次（每次两三秒），所有可能没有解析出来应用都已经报错了。
+
+这个也没有啥好的解决的方式，要么应用把这个超时时间增大，要么自己另外跑个脚本周期性地访问dns缓存住这样的域名。
+
+### ALIAS 和 CNAME 的区别
+ALIAS 记录与 CNAME 一样，也将一个主机名映射到另一个主机名。
+但是，ALIAS 记录可以在同一主机名上拥有其他 DNS 记录，而 CNAME 则不然。
+此外，ALIAS 的性能 比 CNAME 更好，因为它不需要 DNS 客户端解析另一个主机名，它直接返回一个 IP。然而，ALIAS 记录也需要在幕后进行递归查找，这会影响性能。
+
+### A记录、CNAME和URL区别
+**区别**
+它们间区别如下：
+- A记录 —— 映射域名到一个或多个IP。
+- CNAME——映射域名到另一个域名（子域名），再由另一个域名提供ip地址。
+- URL转发——重定向一个域名到另一个URL地址，使用HTTP 301状态码。
+> URL转发，是通过服务器的特殊设置，将访问您当前域名的用户引导到您指定的另一个网络地址。
+
+
+（1）**A 记录和 CNAME 属于标准的 DNS 记录，而 URL 转发则实际上只是个简单的重定向。因为 CNAME 是基于 ip 的，而 URL 转发是基于网址。**
+（2）**URL 转发可以转发到某一个目录下，甚至某一个文件上。而 CNAME 是不可以，这就是 URL 转发和 CNAME 的主要区别所在。**
+（3）CNAME 可以随意设，但 URL 转发在一些缺少网络自由的国家是被禁止的，因为 URL 转发还分显示和隐式，很容易造成误解。
+
+**应用**
+了解以上区别，在应用方面：
+- A记录——适应于独立主机、有固定IP地址
+- CNAME——适应于虚拟主机、变动IP地址主机
+- URL转发——适应于更换域名又不想抛弃老用户
+
+**URL隐式转发**
+隐性转发：用的是`iframe`框架技术，非重定向技术;效果为浏览器地址栏输入`http://a.com`回车，打开网站内容是目标地址`http://www.dnspod.cn`的网站内容，但地址栏显示当前地址`http://a.com`。
+![](attachments/Pasted%20image%2020240122154239.png)
+
+**URL显性转发**
+用的是301重定向技术;效果为浏览器地址栏输入`http://a.com`回车，打开网站内容是目标地址`http://www.dnspod.cn`的网站内容，且地址栏显示目标地址`http://www.dnspod.cn`。
+
+
 ## MX记录
+MX记录：mail exchanger，邮件交换记录。负责转发或处理该域名内的邮件。和邮件服务器有关，且话题较大，所以不多做叙述，如有深入的必要，请查看《dns & bind》中”Chapter 5. DNS and Electronic Mail”。
+
 ```json
 #优先级:0-99，数字越小，级别越高，
  
 @ 600 IN MX 10 mail
 @ 600 IN MX 20 smtp
 ```
-## Cname记录
-CNAME-records ( Canonical name for an alias )是域名的别名。
-一个服务器的域名地址 nyc3.example.com 这个主机域名可能会提供不同的服务；
-比如说域名 nyc3.example.com 指向的主机既要去提供 web服务，也要提供 ftp 服务，那么这个时候就需要一个别名域名来指向原来的域名，这个时候就可以使用一个 A 记录来管理多个域名，为DNS后期修改配置提供方便。
+## TXT记录
+TXT（Text）记录：TXT记录是一种DNS记录类型，它允许域名的所有者在域名系统中存储文本信息。被用来标记存储在DNS中的不同类型的信息。
 
+### 作用
+如果希望对域名进行标识和说明，可以使用 TXT 记录，它们的主要用途包括电子邮件验证（如SPF和DKIM）、网站所有权验证、信息发布等。
+
+**SPF验证**
+SPF（Sender Policy Framework）用于登记某个域名拥有的用来**外发邮件的所有ip地址**。
+主要作用是**反垃圾邮件**，主要针对那些发信人伪造域名的垃圾邮件。通过在域名的 DNS TXT 记录中设置 SPF 记录，域名所有者可以指定哪些邮件服务器被允许发送来自他们域名的电子邮件。这有助于减少垃圾邮件和电子邮件欺诈。
+
+- SPF的TXT记录和MX记录区别
+
+MX记录的作用是给寄信者指明某个域名的邮件服务器有哪些；
+SPF格式的TXT记录的作用跟MX记录相反，它向收信者表明，哪些邮件服务器是经过某个域名认可发送邮件的。
+
+
+- 范例
+![](attachments/Pasted%20image%2020240120130944.png)
+
+大部分时间，TXT 记录是用来做 SPF 反垃圾邮件的。
+最典型的 SPF 格式的 TXT 记录例子为 “v=spf1 a mx ~all”，表示只有这个域名的 A 记录和 MX 记录中的 IP 地址有权限使用这个域名发送邮件。
+
+
+**DKIM验证**
+DKIM（DomainKeys Identified Mail） 是另一种电子邮件验证技术，它使用公钥加密来验证电子邮件的来源。
+域名所有者可以在 DNS TXT 记录中存储 DKIM 密钥，以便邮件接收者可以验证电子邮件的真实性和完整性。
+
+**验证网站所有权**
+某些服务提供商要求域名所有者在其 DNS 记录中添加特定的 TXT 记录，以证明他们拥有该域名。这可以用于验证域名的所有权，例如在 SSL 证书申请过程中。
+
+**信息发布**
+除了验证功能外，域名所有者还可以在 DNS TXT 记录中存储各种信息，例如公司联系信息、服务公告、加密密钥或任何其他文本信息。这些信息可以被其他人访问和利用，因此需要小心处理。
+
+
+**语法和格式**
+通常采用双引号括起来的文本字符串表示。
+每个 TXT 记录可以包含一个或多个文本字符串，每个字符串之间用空格或分号分隔。
+
+**检测TXT记录**
+![](attachments/Pasted%20image%2020240120130145.png)
 ## SRV记录
 SRV (Service)记录是从 RFC2052 中对 SRV资源进行了定义。SRV 被用来记录服务器提供什么样的服务。
 
 ## 其他
 ### SOA记录与NS记录的区别
-NS记录和SOA记录是任何一个DNS区域都不可或缺的两条记录，NS记录表示域名服务器记录，用来指定该域名由哪些DNS服务器来进行解析；
-SOA记录负责说明哪个DNS服务器是主服务器，以及主服务器和辅助服务器之间的一些关联参数。
+NS记录和SOA记录是任何一个DNS区域都不可或缺的两条记录。
+NS记录仅仅只是声明该域内哪台主机是dns服务器，用来提供名称解析服务，NS记录不会区分哪台dns服务器是master哪台dns服务器是slave。；
+SOA记录则用于指定哪个NS记录对应的主机是master dns服务器，也就是从多个dns服务器中挑选一台任命其为该域内的master dns服务器，其他的都是slave，都需要从master上获取域相关数据。
 
-假设hexun.com区域有两个DNS服务器负责解析，ns1.hexun.com是主服务器，ns2.hexun.com是辅助服务器，ns1.hexun.com的ip是202.99.16.1，ns2.hexun.com的ip是202.99.16.2。那么我们应该创建两条NS记录，当然，NS记录依赖A记录的解析，我们首先应该为ns1.hexun.com和ns2.hexun.com创建两条A记录。
+假设`hexun.com`区域有两个DNS服务器负责解析，`ns1.hexun.com`是主服务器，`ns2.hexun.com`是辅助服务器，`ns1.hexun.com`的ip是`202.99.16.1`，`ns2.hexun.com`的ip是`202.99.16.2`。那么我们应该创建两条NS记录，当然，NS记录依赖A记录的解析，我们首先应该为`ns1.hexun.com`和`ns2.hexun.com`创建两条A记录。
 
-NS记录说明了有两个DNS服务器（ns1.hexun.com 和 ns2.hexun.com）负责hexun.com的域名解析，但哪个是主服务器呢？NS记录并没有说明，这个任务由SOA记录来完成。
+NS记录说明了有两个DNS服务器（`ns1.hexun.com` 和 `ns2.hexun.com`）负责`hexun.com`的域名解析，但哪个是主服务器呢？NS记录并没有说明，这个任务由SOA记录来完成。
+
+### 泛域名(泛解析)
+泛解析是指将多个子域名解析到同一个IP地址，这种方式虽然方便，但可能导致多个子域名共享相同的资源，影响网站性能，建议尽量避免使用泛解析。
+
+- 泛解析：使用通配符 `*` 来匹配所有的子域名。
+- 混合泛解析：在泛解析的基础上，增加一个限制，使记录可以按照需求进行分类。
+
+**泛解析**
+当您需要解析的多个子域名对应为同一个 IP 时，可通过以下两种方式进行添加：
+- 普通添加方式：当您有多个子域名时，需添加多条记录进行解析。如下图所示：
+![](attachments/Pasted%20image%2020240122104808.png)
+
+- 泛解析添加方式：当您有多个子域名时，只需添加一条记录，即可对多个子域名进行解析。如下图所示：
+![](attachments/Pasted%20image%2020240122104820.png)
+```bash
+333.demo.com	A	6.6.6.6
+*.demo.com		A	6.6.6.6
+
+# 第一个解析记录优先级，大于，第二个泛解析记录
+```
+
+**混合泛解析**
+混合泛解析可通过在`*`前添加字符或者在`*`后添加字符。且仅支持添加3个字符。例如：`aaa*`或者`*aaa`。
+
+- 普通添加方式：当您有多个子域名时，需添加多条记录进行解析。如下图所示：
+![](attachments/Pasted%20image%2020240122104849.png)
+
+- 混合泛解析添加方式：当您有多个子域名时，只需按照分组添加记录，即可对多个子域名进行解析。如下图所示：
+![](attachments/Pasted%20image%2020240122104907.png)
+
+```bash
+原解析记录，如下：
+111.demo.com	A	6.6.6.6
+112.demo.com	A	6.6.6.6
+113.demo.com	A	6.6.6.6
+
+771.demo.com	A	7.7.7.7
+772.demo.com	A	7.7.7.7
+773.demo.com	A	7.7.7.7
+
+转为泛解析，如下：
+1*.demo.com		A	6.6.6.6
+7*.demo.com		A	7.7.7.7
+```
+
+### 记录的优先级
+**优先级**
+- 单独设置的域名解析优先级高于泛域名解析
+
+![](attachments/Pasted%20image%2020240122104226.png)
+以上示例，访问主机记录为 `blog` 时，将解析至 `2.2.2.2` 主机记录。其他未指定的主机记录将解析至 `1.1.1.1` 主机记录。
+
+
+- NS记录优先于A记录。
+即，如果一个主机地址同时存在NS记录和A记录，则A记录不生效。这里的NS记录只对子域名生效。
+
+- A记录优先于CNAME记录。
+即如果一个主机地址同时存在A记录和CNAME记录，则CNAME记录不生效。
+
+- MX记录可以通过设置优先级实现主辅服务器设置
+“优先级”中的数字越小表示级别越高。也可以使用相同优先级达到负载均衡的目的
+
 
 # DNS代理
 在使用了 **DNS 代理**（ DNS proxy ）功能的组网中，DNS client 将 DNS 请求报文直接发送给 DNS proxy 。DNS proxy 会先查找本地域名解析表，如果未查询到对应的解析表项，会将 DNS 请求报文转发给 DNS Server ，并在收到 DNS server 的应答报文后将其返回给 DNS client ，从而实现域名解析。
@@ -651,6 +1027,15 @@ NS记录说明了有两个DNS服务器（ns1.hexun.com 和 ns2.hexun.com）负�
 ## DNS 缓存方式
 DNS 数据可缓存到各种不同的位置上，每个位置均将存储 DNS 记录，它的生存时间由 TTL(DNS 字段) 来决定。
 
+从在浏览器的搜索框中输入URL。它会先后访问**浏览器缓存**、**操作系统的缓存**`/etc/hosts`、**最近的DNS服务器缓存**。如果都找不到，才是到根域，顶级（一级）域，二级域等DNS服务器进行查询请求。
+![](attachments/Pasted%20image%2020240122191032.png)
+
+于是请求过程就成了下图这样。可以看到上面提到的好几有缓存的地方我都加了个绿色的小文件图标，优先在缓存里做查询。
+![](attachments/Pasted%20image%2020240122191110.png)
+
+由于缓存了上面树状结构的信息，最近的DNS服务器也**不再需要每次都从根域开始查起**。比如在缓存里能找到`baidu.com`的服务器IP，就直接跳到二级域服务器上做查找就好了。
+正因为**多级缓存**的存在，每一层实际接收到的请求都大大减少了。并且每个人日常访问的网站也就那么几个，所以大部分时候都能命中缓存直接返回IP地址。
+
 ### 浏览器缓存
 现如今的 Web 浏览器设计默认将 DNS 记录缓存一段时间。因为越靠近 Web 浏览器进行 DNS 缓存，为检查缓存并向 IP 地址发出请求的次数就越少。发出对 DNS 记录的请求时，浏览器缓存是针对所请求的记录而检查的第一个位置。
 
@@ -659,6 +1044,68 @@ DNS 数据可缓存到各种不同的位置上，每个位置均将存储 DNS �
 
 ### 操作系统内核缓存
 在浏览器缓存查询后，会进行操作系统级 DNS 解析器的查询，操作系统级 DNS 解析器是 DNS 查询离开你的计算机前的第二站，也是本地查询的最后一个步骤。
+
+## 其他
+### 递归查询和缓存
+dns服务器接收到递归查询请求时，它需要帮忙去找答案，并亲自回复请求者。
+如果收到的是迭代查询请求，则将自己知道的消息(一般是自己负责的域信息，所以是权威消息)告诉请求者，让请求者亲自去查询。
+
+由于dns解析器发起的查询都是递归查询，所以一般客户端配置DNS指向谁就表示找谁帮忙做递归查询。
+**允许递归查询的服务器，由于要帮忙查询，所以在递归查询服务器上总是缓存了一些非权威数据。**
+
+**如果是非递归查询服务器，则不用缓存任何数据，只需返回其负责的域的权威数据即可。**
+
+### 缓存的非权威性
+要访问的主机IP可能会改变，所有使用缓存得到的答案不一定是对的，因此缓存给的答案是非权威的。缓存给的非权威答案应该设定缓存时间，这个缓存时间的长短由权威者指定。
+
+### 否定答案的缓存
+访问某个域下根本不存在的主机，这个域的DNS服务器也会给出答案，但是这是否定答案，否定答案也会缓存，并且有缓存时间。
+例如某个Client请求`51cto.com`域下的ftp主机，但是实际上`51cto.com`下面可能根本没有这个ftp主机，那么`51cto.com`就会给否定答案，为了防止Client不死心的访问ftp搞破坏，`51cto.com`这个域负责解析的DNS服务器有必要给Client指定否定答案的缓存时间。
+
+### 如何判断是缓存回复还是解析后回复
+dig测试时，如何区分是否是由缓存给答案还是解析后给答案，有些时候不是很好判断。
+
+例如，dig一下www1.baidu.com的别名记录。
+```bash
+[root@xuexi ~]# dig -t cname www1.baidu.com @172.16.10.15  
+  
+; <<>> DiG 9.8.2rc1-RedHat-9.8.2-0.62.rc1.el6 <<>> -t cname www1.baidu.com @172.16.10.15  
+;; global options: +cmd  
+;; Got answer:  
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 43817  
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 5, ADDITIONAL: 5  
+  
+;; QUESTION SECTION:  
+;www1.baidu.com.                        IN      CNAME  
+  
+;; ANSWER SECTION:  
+www1.baidu.com.     7200    IN   CNAME   www.baidu.com.  
+  
+;; AUTHORITY SECTION:  
+baidu.com.         86400   IN   NS  ns2.baidu.com.  
+baidu.com.         86400   IN   NS  dns.baidu.com.  
+baidu.com.         86400   IN   NS  ns3.baidu.com.  
+baidu.com.         86400   IN   NS  ns4.baidu.com.  
+baidu.com.         86400   IN   NS  ns7.baidu.com.  
+  
+;; ADDITIONAL SECTION:  
+ns4.baidu.com.     172800  IN   A   220.181.38.10  
+ns3.baidu.com.     172800  IN   A   220.181.37.10  
+ns2.baidu.com.     172800  IN   A   61.135.165.235  
+dns.baidu.com.     172800  IN   A   202.108.22.220  
+ns7.baidu.com.     172800  IN   A   119.75.219.82  
+  
+;; Query time: 527 msec  
+;; SERVER: 172.16.10.15#53(172.16.10.15)  
+;; WHEN: Thu Aug 10 04:53:07 2017  
+;; MSG SIZE  rcvd: 220
+```
+查询消耗了527毫秒。再次执行上面的dig，发现查询时间一定是0毫秒，因为是缓存给的答案。
+> 可以简单通过 查询消耗的时间来简单的进行判断。
+
+## 小结
+DNS是非常优秀的高并发分布式系统，**通过层次结构将服务进行拆分**，流量分散到多个服务器中。又通过加入**多级缓存**，让每个层级实际接收到的缓存大大减小，因此大大提高了系统的性能。这两点在做业务开发的过程中是可以借鉴的。
+
 
 # DNS ANYCAST
 Anycast 是一种为一组端点提供多个路由路径的技术，每个端点都分配有相同的 IP 地址。 组中的每个设备在网络上通告相同的地址，路由协议用于选择最佳目的地。
@@ -870,6 +1317,23 @@ sysctl -w net.ipv6.conf.all.forwarding=1
 ![](attachments/Pasted%20image%2020240110191937.png)
 
 LB后端挂载DNS服务器，本身只是实现了负载均衡；没有实现就近访问。
+
+# CDN 和 DNS
+下图是加入了CDN节点的资源请求过程图。
+![](attachments/Pasted%20image%2020240117165204.png)
+
+大致过程如下：
+(1).客户端向A公司总部的DNS服务器发起`www.a.com`的查询请求。
+
+(2).DNS服务器对`www.a.com`设置了CNAME记录指向CDN节点`www.a.cdn.com`，于是客户端再去查找`www.a.cdn.com`的IP地址。
+
+(3).根据`www.a.cdn.com`的域名，客户端最终会查找到CDN的DNS服务器上。该DNS服务器通过智能DNS(例如BIND的视图功能)为A公司按网络类型(电信、网通)、地理位置远近设置了不同的区域数据文件，每个区域数据文件中设置了对应地区、网络类型的一条或多条A记录指向A公司部署在该地区的缓存服务器。
+
+(4).客户端根据CDN-DNS返回的A记录IP地址，直接进行访问。这时访问的一般是缓存服务器，如果缓存未命中，则缓存服务器负责从总部服务器中请求数据并返回给客户端，同时缓存下来。
+
+甚至，A公司总部的DNS服务器上，还可以直接智能选择，并CNAME到不同区域的的服务器节点上，如下图，注意区域配置文件的设置内容包括CNAME和A记录。这时就无需向服务商购买CDN服务。
+![](attachments/Pasted%20image%2020240117165348.png)
+
 # DNS安全
 几乎所有的网络请求都会经过 DNS 查询，而且 DNS 和许多其他的 Internet 协议一样，系统设计时并未考虑到安全性，并且存在一些设计限制，这为 DNS 攻击创造了机会。
 
@@ -900,11 +1364,18 @@ DNSSEC 不会对数据进行加密，它只会验证你所访问的站点地址�
 有一些攻击是针对服务器进行的，这就需要 DNS 防火墙的登场了，DNS 防火墙是一种可以为 DNS 服务器提供许多安全和性能服务的工具。
 DNS 防火墙位于用户的 DNS 解析器和他们尝试访问的网站或服务的权威名称服务器之间。防火墙提供限速访问，以关闭试图淹没服务器的攻击者。如果服务器确实由于攻击或任何其他原因而导致停机，则 DNS 防火墙可以通过提供来自缓存的 DNS 响应来使操作员的站点或服务正常运行。
 
-# QA
 ## DNS 为什么同时使用 TCP 和 UDP
-DNS 域名服务器使用的端口号是 53 ，并且同时支持 UDP 和 TCP 协议 。为什么同时使用两种协议呢？
+### 使用UDP进行传输
+使用UDP用户服务器端口53发送消息。首选UDP协议，因为它速度快且开销低。
+由UDP携带的DNS报文长度被限制在512字节之内，其中不包括IP首部或UDP首部。较长的DNS报文被截断，TCP字段在首部中被设置为1。
 
-因为 DNS 响应报文中有一个**截断标志位**，用 TC 表示。当响应报文使用 **UDP 封装**，且报文长度大于 **512 字节**时，那么服务器只返回前 512 字节，同时 TC 标志位置位，表示报文进行了截断。当客户端收到 TC 置位的响应报文后，将采用 **TCP 封装**查询请求。DNS 服务器返回的响应报文长度大于 512 字节。
+UDP是DNS的Internet标准查询的推荐方式，但不包括区域传输。使用UDP发送的查询可能丢失，因此需要考虑重传策略。查询或查询的应答可能由网络重新排序，或者经DNS服务器处理过，因此解析程序不能依赖按顺序返回的应答。
+
+### 使用TCP进行传输
+通过TCP传输的DNS报文使用两个字节长度字段做前缀。这个长度字段给出报文长度，计算长度不包括这个长度字段。该长度字段使得在开始解析报文之前，底层处理能够组装好完整的报文。
+
+#### 为什么使用TCP
+因为 DNS 响应报文中有一个**截断标志位**，用 TC 表示。当响应报文使用 **UDP 封装**，且报文长度大于 **512 字节**(其中不包括IP首部或UDP首部)时，那么服务器只返回前 512 字节，同时 TC 标志位置位，表示报文进行了截断。当客户端收到 TC 置位的响应报文后，将采用 **TCP 封装**查询请求。DNS 服务器返回的响应报文长度大于 512 字节。
 ![](attachments/Pasted%20image%2020240104133159.png)
 
 当请求体和响应的大小比较小时，通过 TCP 协议进行传输不仅需要传输更多的数据，还会消耗更多的资源，多次通信以及信息传输带来的时间成本在 DNS 查询较小时是无法被忽视的，TCP 连接带来的可靠性在 DNS 的场景中没能发挥太大的作用。
@@ -937,7 +1408,7 @@ DNS 域名服务器使用的端口号是 53 ，并且同时支持 UDP 和 TCP �
 DNS使用的通信方式，有UDP和TCP两种。一般情况下使用的是UDP进行DNS域名查询。但是，在以下两种情况会使用TCP进行域名查询：
 ![](attachments/Pasted%20image%2020231107195700.png)
 
-1. 若客户端事先知道 DNS 响应报文的长度会大于 512 字节，则应当直接使用 TCP 建立连接
+1. 若客户端事先知道 DNS 响应报文的长度会大于 512 字节（其中不包括IP首部或UDP首部），则应当直接使用 TCP 建立连接
 2. 若客户端事先不知道 DNS 响应报文的长度，一般会先使用 UDP 协议发送 DNS 查询报文，若 DNS 服务器发现 DNS 响应报文的长度大于 512 字节，则多出来的部分会被 UDP 抛弃(截断 TrunCation)，那么服务器会把这个部分被抛弃的 DNS 报文首部中的 TC 标志位置为 1，以通知客户端该 DNS 报文已经被截断。客户端收到之后会重新发起一次 TCP 请求，从而使得它将来能够从 DNS 服务器收到完整的响应报文。
 > 当然了，在域名解析的时候，一般返回的 DNS 响应报文都不会超过 512 字节，用 UDP 传输即可。事实上，很多 DNS 服务器进行配置的时候，也仅支持 UDP 查询包。
 4. 区域传输的过程，而在进行区域传输的时候 DNS 会强制使用 TCP 协议。
@@ -949,7 +1420,9 @@ DNS使用的通信方式，有UDP和TCP两种。一般情况下使用的是UDP�
 ```c
 Messages carried by UDP are restricted to 512 bytes (not counting the IP or UDP headers). Longer messages are truncated and the TC bit is set in the header.
 ```
-512字节具体指UDP数据部分，没有UDP头部。需要注意UDP协议中的Length字段长度是包括UDP头部的。
+**512字节具体指UDP数据部分，没有UDP头部**。
+需要注意UDP协议中的`Length`字段长度是包括UDP头部的。
+
 ### 流程
 当使用UDP传输时，若响应数据超过DNS标准限制（超过512B），数据包便会发生截断，超出部分被丢弃，此时该flag位被置1。
 
@@ -1019,4 +1492,7 @@ https://www.linuxidc.com/Linux/2014-08/105816.htm
 
 # anycast 技术浅析
 https://www.cnblogs.com/itzgr/p/10192799.html#_label3
+
+# 阿里云中的DNS软件学习系列（++++++）
+https://developer.aliyun.com/group/dns/softwares/article?spm=a2c6h.27925324.detail.196.3b23217cBHpSWs&pageNum=2
 ```

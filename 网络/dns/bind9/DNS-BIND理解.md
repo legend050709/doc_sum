@@ -36,226 +36,42 @@ bind-9.11.4-16.P2.el7_8.3.x86_64
 - bind-export：
 - bind-license：
 
-
-查看`bind`包中的相关文件：
-```bash
-# rpm -ql bind-9.11.4
-/etc/logrotate.d/named
-/etc/named
-/etc/named.conf
-/etc/named.iscdlv.key
-/etc/named.rfc1912.zones
-/etc/named.root.key
-/etc/rndc.conf
-/etc/rndc.key
-/etc/rwtab.d/named
-/etc/sysconfig/named
-/run/named
-/usr/bin/arpaname
-/usr/bin/named-rrchecker
-/usr/lib/python2.7/site-packages/isc
-/usr/lib/python2.7/site-packages/isc-2.0-py2.7.egg-info
-/usr/lib/python2.7/site-packages/isc/__init__.py
-/usr/lib/python2.7/site-packages/isc/__init__.pyc
-/usr/lib/python2.7/site-packages/isc/__init__.pyo
-/usr/lib/python2.7/site-packages/isc/checkds.py
-/usr/lib/python2.7/site-packages/isc/checkds.pyc
-/usr/lib/python2.7/site-packages/isc/checkds.pyo
-/usr/lib/python2.7/site-packages/isc/coverage.py
-/usr/lib/python2.7/site-packages/isc/coverage.pyc
-/usr/lib/python2.7/site-packages/isc/coverage.pyo
-/usr/lib/python2.7/site-packages/isc/dnskey.py
-/usr/lib/python2.7/site-packages/isc/dnskey.pyc
-/usr/lib/python2.7/site-packages/isc/dnskey.pyo
-/usr/lib/python2.7/site-packages/isc/eventlist.py
-/usr/lib/python2.7/site-packages/isc/eventlist.pyc
-/usr/lib/python2.7/site-packages/isc/eventlist.pyo
-/usr/lib/python2.7/site-packages/isc/keydict.py
-/usr/lib/python2.7/site-packages/isc/keydict.pyc
-/usr/lib/python2.7/site-packages/isc/keydict.pyo
-/usr/lib/python2.7/site-packages/isc/keyevent.py
-/usr/lib/python2.7/site-packages/isc/keyevent.pyc
-/usr/lib/python2.7/site-packages/isc/keyevent.pyo
-/usr/lib/python2.7/site-packages/isc/keymgr.py
-/usr/lib/python2.7/site-packages/isc/keymgr.pyc
-/usr/lib/python2.7/site-packages/isc/keymgr.pyo
-/usr/lib/python2.7/site-packages/isc/keyseries.py
-/usr/lib/python2.7/site-packages/isc/keyseries.pyc
-/usr/lib/python2.7/site-packages/isc/keyseries.pyo
-/usr/lib/python2.7/site-packages/isc/keyzone.py
-/usr/lib/python2.7/site-packages/isc/keyzone.pyc
-/usr/lib/python2.7/site-packages/isc/keyzone.pyo
-/usr/lib/python2.7/site-packages/isc/parsetab.py
-/usr/lib/python2.7/site-packages/isc/parsetab.pyc
-/usr/lib/python2.7/site-packages/isc/parsetab.pyo
-/usr/lib/python2.7/site-packages/isc/policy.py
-/usr/lib/python2.7/site-packages/isc/policy.pyc
-/usr/lib/python2.7/site-packages/isc/policy.pyo
-/usr/lib/python2.7/site-packages/isc/rndc.py
-/usr/lib/python2.7/site-packages/isc/rndc.pyc
-/usr/lib/python2.7/site-packages/isc/rndc.pyo
-/usr/lib/python2.7/site-packages/isc/utils.py
-/usr/lib/python2.7/site-packages/isc/utils.pyc
-/usr/lib/python2.7/site-packages/isc/utils.pyo
-/usr/lib/systemd/system/named-setup-rndc.service
-/usr/lib/systemd/system/named.service
-/usr/lib/tmpfiles.d/named.conf
-/usr/lib64/bind
-/usr/libexec/generate-rndc-key.sh
-/usr/sbin/ddns-confgen
-/usr/sbin/dnssec-checkds
-/usr/sbin/dnssec-coverage
-/usr/sbin/dnssec-dsfromkey
-/usr/sbin/dnssec-importkey
-/usr/sbin/dnssec-keyfromlabel
-/usr/sbin/dnssec-keygen
-/usr/sbin/dnssec-keymgr
-/usr/sbin/dnssec-revoke
-/usr/sbin/dnssec-settime
-/usr/sbin/dnssec-signzone
-/usr/sbin/dnssec-verify
-/usr/sbin/genrandom
-/usr/sbin/isc-hmac-fixup
-/usr/sbin/lwresd
-/usr/sbin/named
-/usr/sbin/named-checkconf
-/usr/sbin/named-checkzone
-/usr/sbin/named-compilezone
-/usr/sbin/named-journalprint
-/usr/sbin/nsec3hash
-/usr/sbin/rndc
-/usr/sbin/rndc-confgen
-/usr/sbin/tsig-keygen
-/usr/share/doc/bind-9.11.4
-/usr/share/doc/bind-9.11.4/Bv9ARM.ch01.html
-/usr/share/doc/bind-9.11.4/Bv9ARM.ch02.html
-/usr/share/doc/bind-9.11.4/Bv9ARM.ch03.html
-/usr/share/doc/bind-9.11.4/Bv9ARM.ch04.html
-/usr/share/doc/bind-9.11.4/Bv9ARM.ch05.html
-/usr/share/doc/bind-9.11.4/Bv9ARM.ch06.html
-/usr/share/doc/bind-9.11.4/Bv9ARM.ch07.html
-/usr/share/doc/bind-9.11.4/Bv9ARM.ch08.html
-/usr/share/doc/bind-9.11.4/Bv9ARM.ch09.html
-/usr/share/doc/bind-9.11.4/Bv9ARM.ch10.html
-/usr/share/doc/bind-9.11.4/Bv9ARM.ch11.html
-/usr/share/doc/bind-9.11.4/Bv9ARM.ch12.html
-/usr/share/doc/bind-9.11.4/Bv9ARM.ch13.html
-/usr/share/doc/bind-9.11.4/Bv9ARM.html
-/usr/share/doc/bind-9.11.4/Bv9ARM.pdf
-/usr/share/doc/bind-9.11.4/CHANGES
-/usr/share/doc/bind-9.11.4/README
-/usr/share/doc/bind-9.11.4/isc-logo.pdf
-/usr/share/doc/bind-9.11.4/man.arpaname.html
-/usr/share/doc/bind-9.11.4/man.ddns-confgen.html
-/usr/share/doc/bind-9.11.4/man.delv.html
-/usr/share/doc/bind-9.11.4/man.dig.html
-/usr/share/doc/bind-9.11.4/man.dnssec-checkds.html
-/usr/share/doc/bind-9.11.4/man.dnssec-coverage.html
-/usr/share/doc/bind-9.11.4/man.dnssec-dsfromkey.html
-/usr/share/doc/bind-9.11.4/man.dnssec-importkey.html
-/usr/share/doc/bind-9.11.4/man.dnssec-keyfromlabel.html
-/usr/share/doc/bind-9.11.4/man.dnssec-keygen.html
-/usr/share/doc/bind-9.11.4/man.dnssec-keymgr.html
-/usr/share/doc/bind-9.11.4/man.dnssec-revoke.html
-/usr/share/doc/bind-9.11.4/man.dnssec-settime.html
-/usr/share/doc/bind-9.11.4/man.dnssec-signzone.html
-/usr/share/doc/bind-9.11.4/man.dnssec-verify.html
-/usr/share/doc/bind-9.11.4/man.dnstap-read.html
-/usr/share/doc/bind-9.11.4/man.genrandom.html
-/usr/share/doc/bind-9.11.4/man.host.html
-/usr/share/doc/bind-9.11.4/man.isc-hmac-fixup.html
-/usr/share/doc/bind-9.11.4/man.lwresd.html
-/usr/share/doc/bind-9.11.4/man.mdig.html
-/usr/share/doc/bind-9.11.4/man.named-checkconf.html
-/usr/share/doc/bind-9.11.4/man.named-checkzone.html
-/usr/share/doc/bind-9.11.4/man.named-journalprint.html
-/usr/share/doc/bind-9.11.4/man.named-nzd2nzf.html
-/usr/share/doc/bind-9.11.4/man.named-rrchecker.html
-/usr/share/doc/bind-9.11.4/man.named.conf.html
-/usr/share/doc/bind-9.11.4/man.named.html
-/usr/share/doc/bind-9.11.4/man.nsec3hash.html
-/usr/share/doc/bind-9.11.4/man.nslookup.html
-/usr/share/doc/bind-9.11.4/man.nsupdate.html
-/usr/share/doc/bind-9.11.4/man.pkcs11-destroy.html
-/usr/share/doc/bind-9.11.4/man.pkcs11-keygen.html
-/usr/share/doc/bind-9.11.4/man.pkcs11-list.html
-/usr/share/doc/bind-9.11.4/man.pkcs11-tokens.html
-/usr/share/doc/bind-9.11.4/man.rndc-confgen.html
-/usr/share/doc/bind-9.11.4/man.rndc.conf.html
-/usr/share/doc/bind-9.11.4/man.rndc.html
-/usr/share/doc/bind-9.11.4/named.conf.default
-/usr/share/doc/bind-9.11.4/notes.html
-/usr/share/doc/bind-9.11.4/notes.pdf
-/usr/share/doc/bind-9.11.4/sample
-/usr/share/doc/bind-9.11.4/sample/etc
-/usr/share/doc/bind-9.11.4/sample/etc/named.conf
-/usr/share/doc/bind-9.11.4/sample/etc/named.rfc1912.zones
-/usr/share/doc/bind-9.11.4/sample/var
-/usr/share/doc/bind-9.11.4/sample/var/named
-/usr/share/doc/bind-9.11.4/sample/var/named/data
-/usr/share/doc/bind-9.11.4/sample/var/named/my.external.zone.db
-/usr/share/doc/bind-9.11.4/sample/var/named/my.internal.zone.db
-/usr/share/doc/bind-9.11.4/sample/var/named/named.ca
-/usr/share/doc/bind-9.11.4/sample/var/named/named.empty
-/usr/share/doc/bind-9.11.4/sample/var/named/named.localhost
-/usr/share/doc/bind-9.11.4/sample/var/named/named.loopback
-/usr/share/doc/bind-9.11.4/sample/var/named/slaves
-/usr/share/doc/bind-9.11.4/sample/var/named/slaves/my.ddns.internal.zone.db
-/usr/share/doc/bind-9.11.4/sample/var/named/slaves/my.slave.internal.zone.db
-/usr/share/man/man1/arpaname.1.gz
-/usr/share/man/man1/named-rrchecker.1.gz
-/usr/share/man/man5/named.conf.5.gz
-/usr/share/man/man5/rndc.conf.5.gz
-/usr/share/man/man8/ddns-confgen.8.gz
-/usr/share/man/man8/dnssec-checkds.8.gz
-/usr/share/man/man8/dnssec-coverage.8.gz
-/usr/share/man/man8/dnssec-dsfromkey.8.gz
-/usr/share/man/man8/dnssec-importkey.8.gz
-/usr/share/man/man8/dnssec-keyfromlabel.8.gz
-/usr/share/man/man8/dnssec-keygen.8.gz
-/usr/share/man/man8/dnssec-keymgr.8.gz
-/usr/share/man/man8/dnssec-revoke.8.gz
-/usr/share/man/man8/dnssec-settime.8.gz
-/usr/share/man/man8/dnssec-signzone.8.gz
-/usr/share/man/man8/dnssec-verify.8.gz
-/usr/share/man/man8/genrandom.8.gz
-/usr/share/man/man8/isc-hmac-fixup.8.gz
-/usr/share/man/man8/lwresd.8.gz
-/usr/share/man/man8/named-checkconf.8.gz
-/usr/share/man/man8/named-checkzone.8.gz
-/usr/share/man/man8/named-compilezone.8.gz
-/usr/share/man/man8/named-journalprint.8.gz
-/usr/share/man/man8/named.8.gz
-/usr/share/man/man8/nsec3hash.8.gz
-/usr/share/man/man8/rndc-confgen.8.gz
-/usr/share/man/man8/rndc.8.gz
-/usr/share/man/man8/tsig-keygen.8.gz
-/var/log/named.log
-/var/named
-/var/named/data
-/var/named/dynamic
-/var/named/named.ca
-/var/named/named.empty
-/var/named/named.localhost
-/var/named/named.loopback
-/var/named/slaves
-```
 ## bind的工作端口
-- 53/UDP
-- 53/TCP
-（其主要工作在UDP端口，如果传送的数据太大导致失败，其会以TCP模式尝试重传）
-- 953/TCP : `rndc`的连接端口
+### UDP 53
+查询单条记录时，使用UDP 53
 
-## 重要文件
+### TCP 53
+如果DNS查询的响应传送的数据太大，其会以TCP模式尝试发起DNS请求以及响应。
+
+> 注：区域传输的时候 需要使用TCP 53 和 UDP 53。
+
+### TCP  953
+`rndc`的连接端口
+
+## 二进制文件
 **程序文件**：
 ```c
-/usr/sbin/named
-/usr/sbin/named-checkconf    # 检测/etc/named.conf文件语法
-/usr/sbin/named-checkzone    # 检测zone和对应zone文件的语法
+/usr/sbin/named              # dns 主程序
+/usr/sbin/named-checkconf    # 检测/etc/named.conf文件语法错误
+/usr/sbin/named-checkzone    # 检测zone和对应zone文件的语法错误
 /usr/sbin/rndc               # 远程dns管理工具
 /usr/sbin/rndc-confgen       # 生成rndc密钥
-```
 
+全部的程序文件如下所示：
+- named
+- nsupdate
+- rndc
+- dnssec-keygen
+- nslookup
+- dig
+- dnssec-makekeyset
+- dnssec-signkey
+- dnssec-signzone
+- named-checkconf
+- named-checkzone
+- rndc-confgen
+- host
+```
 
 **主程序目录**：/var/named
 ```c
@@ -264,11 +80,118 @@ bind-9.11.4-16.P2.el7_8.3.x86_64
 /var/named/slaves            # 从ns服务器文件夹
 ```
 
-**配置文件**：
+### 对配置文件进行语法检查
+**named-checkconf工具：检查主配置文件**
 ```bash
-/etc/named.conf              # bind主配置文件
-/etc/named.rfc1912.zones     # 定义zone的文件
+named-checkconf [主配置文件]       //检查主配置文件的语法错误
+named-checkconf -z [主配置文件]    //加载主配置文件中对应的区域数据库文件
 ```
+
+**named-checkzone工具：检查区域数据库文件**
+```bash
+named-checkzone  <域名>  [区域数据库文件]
+例：
+named-checkzone  yuji.com  yuji.com.zone
+```
+
+**named-compilezone**：对区域数据文件进行编译，并输出编译后的结果。
+```
+named-compilezone  -o  OUTFILE  <域名>  [区域数据库文件]
+```
+比如：
+```bash
+[root@xuexi named]# named-compilezone  -o  -  longshuai.com  /var/named/db.longshuai.com   
+zone longshuai.com/IN: loaded serial 1  
+longshuai.com.            21600 IN SOA    dnsserver.longshuai.com. xyz.longshuai.com. 1 10800 3600 604800 3600  
+longshuai.com.            21600 IN NS     dnsserver.longshuai.com.  
+dnsserver.longshuai.com.  21600 IN A      172.16.10.15  
+ftp.longshuai.com.        21600 IN A      172.16.10.17  
+mydb.longshuai.com.       21600 IN A      172.16.10.18  
+www.longshuai.com.        21600 IN A      172.16.10.16  
+www1.longshuai.com.       21600 IN CNAME  www.longshuai.com.  
+OK
+```
+## 配置文件
+**配置文件**：
+- 主配置文件：  **/etc/named.conf**
+- 根域配置文件： **/var/named/named.ca**
+- 区域配置文件： **/etc/named.rfc1912.zones**
+- 保存DNS解析记录的数据文件（区域数据库文件）位于： **/var/named/目录下**
+
+### 根域配置文件
+**根域配置文件位于： /var/named/named.ca**
+- 根域配置文件设定根域的域名数据库，包括根域中13台DNS服务器的信息。
+- 利用该文件可以让DNS服务器找到根DNS服务器，并初始化DNS的缓冲区。当DNS服务器接到客户端主机的查询请求时，如果在Cache中找不到相应的数据，就会通过根服务器进行逐级查询 。
+- 用户不需要进行修改该文件 。
+### 主配置文件（全局配置文件）
+**BIND服务的主配置文件位于： /etc/named.conf**。
+- 设置DNS服务器的全局参数
+- 包括监听地址和端口、区域数据文件存放的目录等
+- 使用 options{......}; 的配置段
+
+### 区域配置文件
+**区域配置文件位于：/etc/named.rfc1912.zones。**
+- 设置本服务器提供域名解析的特定DNS区域
+- 包括域名、服务器角色、数据文件名等
+- 使用 zone "区域名" IN{......}; 的配置段
+
+### 区域数据库文件（zone文件）
+BIND服务的区域数据库文件位于/var/named/ 目录下，具体文件名由管理员定义。一般格式为/var/named/域名.zone，例如：/var/named/yuji.com.zone。
+#### 资源记录
+主要包含以下三部分：
+**1）全局TTL配置项及SOA记录**
+- $TTL（Time To Live，生存时间）： 表示DNS记录在DNS服务器上的缓存时间，默认单位秒。
+- @：表示当前域名。
+- IN：表示使用 Internet 协议。
+- SOA（Start Of Authority，授权信息开始）：表示解析方式。
+- 分号 ";" 开始的部分表示注释信息
+
+**2）正向解析记录**
+- NS记录：域名服务器记录（Name Server）。
+- MX记录：邮件交换记录（Mail Exchange）。
+- A记录：地址记录（Address）。用来指定主机名（或域名）对应的IP地址记录。用于正向解析。
+- CNANE：别名记录。 这种记录允许您将多个名字映射到同一台计算机。
+```bash
+ NS  master                                //当前区域的DNS服务器名称    
+ master  IN    A     192.168.72.10        //记录DNS服务器master的IP地址
+             MX 10   mail.yuji.com        //MX为邮件交换记录，数字越大优先级越低
+             MX 20   mail2.yuji.com       //MX为邮件交换记录，数字越大优先级越低
+ mail    IN    A     192.168.72.103       //记录正向解析mail.yuji.com对应的IP
+ mail2   IN    A     192.168.72.104       //记录正向解析mail2.yuji.com对应的IP
+ www     IN    A     192.168.72.101       //记录正向解析www.yuji.com对应的IP
+ ftp     IN    A     192.168.72.102       //记录正向解析ftp.yuji.com对应的IP
+ web     IN   CNAME   WWW                 //CNAME使用别名，web是www的别名
+ *       IN    A     192.168.72.100      //泛域名解析，*表示任意主机名。泛域名有优先级，从上而下匹配。
+```
+
+**3）反向解析记录**
+PTR： 指针记录 (Pointer Record) ，用来指定IP地址对应的域名。用于反向解析。
+记录的如一列指定IP地址中的主机地址部分
+```bash
+NS        master          //当前区域的DNS服务器名称
+ master  IN     A      192.168.72.10     //记录DNS服务器的IP地址
+ 200     IN    PTR     www.nan.com       //记录反向解析192.168.72.200对应的IP地址
+ 201     IN    PTR     ftp.nan.com       //记录反向解析192.168.72.201对应的IP地址
+```
+
+**注意**
+- TTL可从全局继承
+- 使用 "@" 符号可用于引用当前区域的域名
+- 同一个名字可以通过多条记录定义多个不同的值；此时DNS服务器会以轮询方式响应。
+- 同一个值也可能有多个不同的定义名字；通过多个不同的名字指向同一个值进行定义；此仅表示通过多个不同的名字可以找到同一个主机。
+
+#### 区域数据库文件的特殊应用
+- **基于域名解析的负载均衡**
+同一域名对应到多个IP地址
+
+- **泛域名解析**
+找不到精确对应的A记录时，使用星号（*）进行匹配
+
+
+## BIND服务控制
+- systemctl [status|start|stop|restart] named.service
+- rndc reload 重新加载DNS服务
+
 ## 权限相关
 **bind权限相关**：安装完named会自动创建用户named系统用户
 # bind服务器
@@ -297,315 +220,182 @@ bind-9.11.4-16.P2.el7_8.3.x86_64
 - `非权威回答`
     - DNS服务器未负责的域，由缓存或者查询到的记录返回的答案
 
-## 主从DNS服务器的数据复制选项
-- `serial` : 序列号，即主DNS数据库的版本号。
-主服务器数据库内容发生变化时，其版本号需要递增，从服务器会对比与主服务器的数据库版本号，一样的版本号就不需要更新，否则需要更新。
+## 从服务器
+DNS从服务器也叫辅服DNS服务器，如果网络上某个节点只有一台DNS服务器的话，首先服务器的抗压能力是有限的，当压力达到一定的程度，服务器就可能会宕机罢工。
+其次如果这台服务器出现了硬件故障那么服务器管理的区域的域名将无法访问。
+为了解决这些问题，最好的办法就是使用多个DNS服务器同时工作，  并实现数据的同步，这样两台服务器就都可以实现域名解析操作。
 
-- `refresh` : 从服务器每多久到主服务器检查序列号的变化
+### 从服务器要点
+```
+1、应该为一台独立的名称服务器
+2、主DNS服务器的区域解析库文件中必须有一条NS记录指向从服务器
+3、从DNS服务器只需要定义区域，而无须提供解析库文件；解析库文件自动生成文件放置于/var/named/slaves/目录中，并且有写权限。
+4、主DNS和辅助DNS服务器设置区域复制权限。防止使用 dig -t axfr hunk.tech 抓取信息。
+5、主DNS和辅助DNS服务器时间应该同步，可通过ntp进行；
+6、bind程序的版本应该保持一致；否则，应该辅助DNS版本高，主DNS版本低
+```
 
-- `retry` : 从服务器到服务器请求同步解析库失败时，再次发起解析请求的时间间隔，这个时间需短时刷新时间。
+> 既然slave也是域数据解析的负责人(尽管它是从的)，因此在master上的区域数据文件中应该添加slave的ns记录，否则外部没法找到slave这个不完整的dns服务器来帮忙解析，且master也无法找到slave。
 
-- `expire` : 从服务器始终联系不到主服务器时，多久之后放弃从主服务器同步数据，超过此时间后，从服务器也将停止解析。
 
-- `negative answer` : 否定答案的缓存时长。
-
-注意：以上选项时间单位都支持`W`,`D`,`H`,`M`,这参数定义在资源记录的文件中，位置为SOA的后面，以（）包含，其括号前后都有空格。
-## 主从服务器的zone更新同步
-### 动态更新(Dynamic Update)
-### 通知(NOTIFY)
-![](attachments/Pasted%20image%2020231225113423.png)
-### 主从DNS之间的区域传送(zone transfer)
-![](attachments/Pasted%20image%2020231225111500.png)
-#### A full zone transfer(AXFR)
-`axfr` : 全量传送，一般为从服务器第一次读取，将会传送整个数据库。
-#### Incremental Zone Transfers (IXFR)
-`ixfr(incremental zone transfer)`  ：增量传送，仅传送变化的数据。
-![](attachments/Pasted%20image%2020231225112241.png)
-
-### zone文件更新(静态域和动态域维护)
-#### 静态域维护
-前提条件：在区域配置文件中 添加 allow-update { none; }; 表示不允许动态更新。如下所示：
-```shell
-[root@dns1 ~]# cat /etc/named.rfc1912.zones 
-zone "host.com" IN {
-        type  master;
-        file  "host.com.zone";
-        allow-update { none; };
+```
+定义从区域的方法：
+zone "ZONE_NAME" IN {
+	type slave;
+	masters { 主DNS服务器IP; };
+	file "slaves/ZONE_NAME.zone";
 };
 ```
 
-每次配置更改区域数据库文件(zone文件)，需要手动前滚`serial number`，通知辅DNS更新。
-```shell
-[root@dns1 ~]# cat /var/named/host.com.zone
-$TTL 600        ;10 minutes
-@                       IN SOA  dns.host.com. test.qq.com. (
-                                2021070705 ; serial number  需要手动+1
-                                10800      ; refresh (3 hours)
-                                900        ; retry (15 minutes)
-                                604800     ; expire (1 week)
-                                86400      ; minimum (1 day)
-                                )
-                        NS   dns.host.com.
-$ORIGIN host.com.
-$TTL 60 ; 1 minute
-dns1                    A    192.168.10.222
-dns2                    A    192.168.10.223
-test                    A    192.168.10.55
-dns                     A    192.168.10.222
+**很重要的一点：主从服务器时间不同步的话，则会导致各种意想不到的问题发生。因此，先配置NTP时间同步**
+
+### 从服务器什么时候进行zone同步
+```
+A.把辅助DNS的区域文件删除了
+    1.重启辅助DNS的named服务后可以恢复
+    2.主DNS服务器版本更新并重新加载时，辅助DNS会同步生成文件
+    3.主服务器上执行 `rndc retransfer 区域名称`
+    如：rndc retransfer 4.168.192.in-addr.arpa
+       rndc retransfer hunk.tech
+B.版本更新后，只要reload，会立即发生同步 
 ```
 
-#### 动态域维护nsupdate
-前提条件：在区域配置文件中 添加 allow-update { acl; }; 表示根据acl指定策略进行动态更新。可填写ip地址。
-```shell
-[root@dns1 ~]# cat /etc/named.rfc1912.zones 
-zone "host.com" IN {
-        type  master;
-        file  "host.com.zone";
-        allow-update { 192.168.10.222; };
+### 从服务器上的zone文件查看
+
+辅助DNS辅助器生成的区域文件，Centos 6 可以使用`cat`等文本工具查看；
+Centos 7 已经使用data格式存放，需要使用这个命令配合参数查看:
+```bash
+# 输出到标准输出
+named-compilezone -f raw -o -  zone_name  zone文件
+
+# 输出到指定文件(/tmp/zone.out)
+named-compilezone -f raw -o -  zone_name  zone文件
+```
+
+范例如下所示：
+```bash
+# named-compilezone  -o  /tmp/aa.out  longshuai.com  /var/named/db.longshuai.com   
+zone longshuai.com/IN: loaded serial 1
+dump zone to /tmp/aa.out...done
+OK
+
+# cat /tmp/aa.out
+longshuai.com.            21600 IN SOA    dnsserver.longshuai.com. xyz.longshuai.com. 1 10800 3600 604800 3600  
+longshuai.com.            21600 IN NS     dnsserver.longshuai.com.  
+dnsserver.longshuai.com.  21600 IN A      172.16.10.15  
+ftp.longshuai.com.        21600 IN A      172.16.10.17  
+mydb.longshuai.com.       21600 IN A      172.16.10.18  
+www.longshuai.com.        21600 IN A      172.16.10.16  
+www1.longshuai.com.       21600 IN CNAME  www.longshuai.com.  
+```
+
+### 从服务器也可以是其他从服务器的主
+还可以配置slave从另一个slave上复制区域数据，这种情况下，master是slave1的主，slave1是slave2的主。如下图：
+![](attachments/Pasted%20image%2020240117153926.png)
+
+配置方式一样很简单，只需将slave2主机的named.conf中的zone区域配置成如下格式：
+```bash
+zone "domain" IN {  
+    type slave;  
+    masters { slave1_ip };  
 };
 ```
-每次配置更改区域数据库文件，不需要手动前滚`serial number`，自动通知辅DNS更新。
+当然，master的区域数据文件中也应该制定slave2的ns记录和A记录。
 
-##### nsupdate
-`nsupdate`是一个动态`DNS`更新工具，可以向DNS服务器提交更新记录的请求，它可以从区文件中添加或删除资源记录，而不需要手动进行编辑区文件。
-使用 `nsupdate` 等工具进行动态配置。​ 使用`nsupdate` 不会更改区域数据库文件，而是产生了一个`jnl`的数据文件，不能使用文本编辑器打开，只能使用完全区域数据传送查看。
-注：`jnl`文件（`journal`文件）是`BIND9`动态更新的时候记录更新内容所生成的日志文件。
+## 转发(forward)服务器
+### 介绍
+转发功能可以用来在一些服务器上产生一个大的缓存，从而减少到外部服务器链路上的流量。它可以使用在和internet没有直接连接的内部网络进行域名服务器上，用来提供对外部域名的查询。
 
-**优缺点**
-- 优点
-	- 命令简单，便于记忆
-	- 不用手动变更SOA的serial序列号，自动滚动
-	- 不需要重启/重载BIND9服务/配置，生效快
-	- 可以通过配置acl实现远程管理
+其中，转发设备称之为转发者，被转发设备称之为转发器（转发选项所指定的机器称为转发器）。
+![](attachments/Pasted%20image%2020240117144840.png)
+> **转发者转发给转发器的查询是递归查询，转发器必须要亲自回复转发者**，也就是说转发者其实就相当于一个客户端。
 
+### 配置
+内网DNS服务器转发内网主机对于外网的域名查询。
+只有当服务器对查询记录是非授权的，并且缓存中没有相关记录时，才会进行转发。
+> 注意：被转发的服务器需要能够为请求者做递归，否则转发请求不予进行。
+```bash
+recursion yes
+```
 
-- 缺点
-	- jnl文件无法使用文本文件的方式打开
-	- 只能依赖完全区域传送查看所有区域的记录
-	- 更新操作复杂，先删再增
-	- 远程管理有安全隐患，需要加强审计
-	- 动态域在rndc管理上多一步
-
-
-**使用方法**
-```shell
-#发送请求到servername服务器的port端口.如果不指定servername,nsupdate将把请求发送给当前去的主DNS服务器.
-server servername [ port ]
-
-# 添加一条资源记录
-update add domain-name ttl [ class ] type data…
-
-# 删除domain-name的资源记录.如果指定了type和data,仅删除匹配的记录。
-update delete domain-name [ ttl ] [ class ] [ type [ data... ] ]
-
-
-# 将要求信息和更新请求发送到DNS服务器.等同于输入一个空行
-send
-
-# 退出nsupdate工具
-quit
+关闭`dnssec`功能：
+```
+dnssec-enable no;
+dnssec-validation no;
 ```
 
 
+### 作用范围
+#### 全局转发
+对非本机所负责解析区域的请求，全转发给指定的服务器。
+```bash
+语法格式：
+    Options { 
+        forward first 或 only; 
+        forwarders { ip;可以有多个，用;号隔开};
+    };
 
-**范例**
-```shell
-# 前提条件：允许设备动态修改配置，将以下参数修改为any或者指定ip。
-allow-update { any; };
-
-添加记录
-
-[root@dns1 ~]# nsupdate
-> server 192.168.10.222
-> update add aaa.host.com 600 IN A 192.168.10.224
-> send
-> quit 
-```
-查看测试结果：
-```shell
-[root@dns2 ~]# dig -t AXFR host.com @192.168.10.222
-
-; <<>> DiG 9.11.4-P2-RedHat-9.11.4-26.P2.el7_9.5 <<>> -t AXFR host.com @192.168.10.222
-;; global options: +cmd
-host.com.               600     IN      SOA     dns.host.com. test.qq.com. 2021070706 10800 900 604800 86400
-host.com.               600     IN      NS      dns.host.com.
-aaa.host.com.           600     IN      A       192.168.10.224
-dns.host.com.           60      IN      A       192.168.10.222
-dns1.host.com.          60      IN      A       192.168.10.222
-dns2.host.com.          60      IN      A       192.168.10.223
-test.host.com.          60      IN      A       192.168.10.55
-host.com.               600     IN      SOA     dns.host.com. test.qq.com. 2021070706 10800 900 604800 86400
-;; Query time: 0 msec
-;; SERVER: 192.168.10.222#53(192.168.10.222)
-;; WHEN: Fri Jul 16 10:09:54 CST 2021
-;; XFR size: 8 records (messages 1, bytes 234)
+范例：
+    forward first;
+    forwarders { 192.168.4.204; };
 ```
 
-### 主从同步范例
-**环境准备：**
-```c
-192.168.10.222 dns1.host.com 主dns服务器
-192.168.10.223 dns2.host.com 辅dns服务器
+- first：默认值。服务器首先将请求转发列表中的设定的DNS主机 ，如果转发列表中的DNS主机不应答，该主机将从根DNS开始找应答。
+- only：**仅转发**；只会请求转发列表中的设定的DNS主机 ，如果转发列表中的DNS主机不应答，也不会自己去查询。
+
+#### 转发区
+仅转发对特定的区域的请求，比全局转发优先级高。
+
+```bash
+语法格式：
+    zone "ZONE_NAME" IN {
+        type forward;
+        forward first 或 only;
+        forwarders { ip;可以有多个，用;号隔开};
+    };
 ```
 
-**配置要点：**
-```c
-- 辅助DNS的Bind版本必须小于主DNS的软件版本。
-- 主DNS named.conf里配置allow-transfer和also-notify选项
-- 辅助DNS主配置文件中option段，masterfile-format text；
-- 辅助DNS的配置文件里 type:slave
-- 启动辅助DNS时，检查完全区域传送：dig -t axfr @192.168.10.222
-- 辅助DNS不可修改主DNS配置。
+范例：
+```bash
+	zone "longshuai.com" IN {  
+	    type forward;  
+	    forwarders { 172.16.10.15; };  
+	};
 ```
-#### 配置主DNS
-配置主配置文件，添加以下字段：
-- `allow-transfer { 192.168.10.223; };` 
-允许本区域传输至特定的从DNS服务器。
-- `also-notify { 192.168.10.223; };`
-主动通知从域名服务器（辅助DNS）进行更新，在主域名服务器进行更新后，而不需要在等规定的时间后才通知从域名服务器进行更新。
+只有查询”longshuai.com”结尾的记录都将转发到`172.16.10.15`上。
+但要注意，是`longshuai.com`结尾，而不是限制其域为”longshuai.com”，所以如果发出`png.img.longshuai.com`的查询请求，也会被转发，但实际上这是`longshuai.com`的子域`img.longshuai.com`中的主机。
 
-主配置文件中主要修改以下字段：
-```json
-[root@dns1 ~]# cat /etc/named.conf 
-options {
-        listen-on port 53 { 192.168.10.222; };
-        allow-query     { any; };
-        allow-transfer { 192.168.10.223; };
-        also-notify { 192.168.10.223; };       
-};
-```
+#### 禁转发区
+![](attachments/Pasted%20image%2020240117145714.png)
 
-在zone引导配置中添加正解域和反解域：
-```json
-[root@dns1 ~]# vi /etc/named.rfc1912.zones 
-vi /etc/named.rfc1912.zones
-zone "host.com" IN {
-        type  master;
-        file  "host.com.zone";
-        allow-update { none; };
-};
-zone "10.168.192.in-addr.arpa" IN {
-        type master;
-        file "10.168.192.in-addr.arpa.zone";
-        allow-update { none; };
-};
+```bash
+options {  
+    directory "/var/named";  
+    forwarders { 172.16.10.15; };  
+};  
+  
+zone "longshuai.com" IN {  
+    type master;  
+    forwarders {};  
+};  
+  
+zone "." IN {  
+    type hint;  
+    file "named.ca";  
+};  
+  
+include /etc/named.rfc1912.zones;
 ```
 
-配置区域数据库文件：
-```json
-[root@dns1 ~]# cd /var/named/
-[root@dns1 named]# cat host.com.zone 
-$TTL 600        ;10 minutes
-@                       IN SOA  dns.host.com. test.qq.com. (
-                                2021070705 ; serial
-                                10800      ; refresh (3 hours)
-                                900        ; retry (15 minutes)
-                                604800     ; expire (1 week)
-                                86400      ; minimum (1 day)
-                                )
-                        NS   dns.host.com.
-$ORIGIN host.com.
-$TTL 60 ; 1 minute
-dns1                    A    192.168.10.222
-dns2                    A    192.168.10.223
-test                    A    192.168.10.55
-dns                     A    192.168.10.222
+### 分类
+#### 转发优先
+默认转发：如果转发器无法查询到结果，也就是说转发者获取不到来自转发器的答案，则转发者自己也会去查询。
+”forward first”，先转发，转发失败时自行查询，这是默认值。
+#### 仅转发
+仅转发：它只转发，即使获取不到转发器的回复，也不会自己去查询。
+要配置成”仅转发”dns服务器，只需加上”forward only”指令即可。
 
-[root@dns1 named]# cat 10.168.192.in-addr.arpa.zone 
-$TTL 600 ;10min
-@       IN      SOA     dns.host.com    17614902580@163.com (
-                        2021071101      ;serial number
-                        10600           ;refresh 3 hours
-                        900             ;retry 15 minites
-                        604800          ;expire 1 week
-                        86400           ;minimum 1 day
-                        )
-                ns      dns.host.com.
-$ORIGIN 10.168.192.in-addr.arpa.
-$TTL 60
-222     PTR     dns1.host.com.
-223     PTR     dns2.host.com.
-224     PTR     dns3.host.com.
-```
-
-#### 配置辅助DNS
-修改主配置文件 /etc/named.conf，修改以下三个位置：
-```json
-[root@dns2 ~]# cat /etc/named.conf
-options {
-        listen-on port 53 { 192.168.10.223; };
-        allow-query     { any; };
-        masterfile-format text;
-};
-```
-
-辅助dns检查主dns完全区域数据传送，解析列表如下:
-```json
-[root@dns2 slaves]#  dig -t AXFR host.com @192.168.10.222
-
-; <<>> DiG 9.11.4-P2-RedHat-9.11.4-26.P2.el7_9.5 <<>> -t AXFR host.com @192.168.10.222
-;; global options: +cmd
-host.com.               600     IN      SOA     dns.host.com. test.qq.com. 2021070705 10800 900 604800 86400
-host.com.               600     IN      NS      dns.host.com.
-dns.host.com.           60      IN      A       192.168.10.222
-dns1.host.com.          60      IN      A       192.168.10.222
-dns2.host.com.          60      IN      A       192.168.10.223
-test.host.com.          60      IN      A       192.168.10.55
-host.com.               600     IN      SOA     dns.host.com. test.qq.com. 2021070705 10800 900 604800 86400
-;; Query time: 0 msec
-;; SERVER: 192.168.10.222#53(192.168.10.222)
-;; WHEN: Thu Jul 15 16:13:37 CST 2021
-;; XFR size: 7 records (messages 1, bytes 214)
-```
-
-配置辅助dns的zone引导配置，添加正解域和反解域：
-```json
-[root@dns2 slaves]# cat /etc/named.rfc1912.zones
-
-zone "host.com" IN {
-        type slave ;
-        masters {192.168.10.222 ;} ;
-        file "slaves/host.com.zone" ;
-};
-zone "10.168.192.in-addr.arpa" IN {
-        type slave;
-        masters {192.168.10.222 ;} ;
-        file "slaves/10.168.192.in-addr.arpa.zone";
-};
-
-```
-**注意：我们只有在/etc/named.rfc1912.zone中添加了需要同步的域名，辅助dns才会进行同步。不添加的域名dns是不会进行同步**。
-
-
-重启辅DNS服务器：
-```shell
-# systemctl restart named
-```
-
-查看是否有区域数据库文件传输到辅助DNS slaves文件夹下:
-```shell
-[root@dns2 ~]# ls /var/named/slaves/
-10.168.192.in-addr.arpa.zone  host.com.zone
-```
-
-在主DNS测试辅DNS是否可以解析。如果可以解析则说明主辅配同步完成：
-```shell
-[root@dns1 ~]# dig dns.host.com @192.168.10.223 +short
-192.168.10.222
-```
-
-### 区域传输tune调优
-参考:  [zone transfer tune](https://kb.isc.org/docs/aa-00726)
-**潜在问题**：
-![](attachments/Pasted%20image%2020231225161101.png)
-即：zone更新的延迟生效、zone更新的同时影响对于client的dns请求等。
-
-**master 服务器调优*：
-![](attachments/Pasted%20image%2020231225161905.png)
-![](attachments/Pasted%20image%2020231225162526.png)
-
-**slave服务器调优**：
-![](attachments/Pasted%20image%2020231225163005.png)
+几乎不会去配置仅转发dns服务器。实际上，操作系统中设置dns指向的地方，就是在设置仅转发功能，例如`/etc/resolv.conf`文件中所设置的`nameserver`，这就是仅转发功能。
 
 
 # bind配置文件
@@ -625,7 +415,316 @@ zone "10.168.192.in-addr.arpa" IN {
 
 `/etc/rndc.conf`： `rndc`（远程名称服务器控制器）配置文件
 
+### 配置格式
+下面是 BIND 9.2.4 支持的 named.conf 选项的摘要。
+```bash
+options  {
+        blackhole { <address_match_element>; ... };
+        coresize <size>;
+        datasize <size>;
+        deallocate-on-exit <boolean>; // obsolete
+        directory <quoted_string>;
+        dump-file <quoted_string>;
+        fake-iquery <boolean>; // obsolete
+        files <size>;
+        has-old-clients <boolean>; // obsolete
+        heartbeat-interval <integer>;
+        host-statistics <boolean>; // not implemented
+        host-statistics-max <integer>; // not implemented
+        interface-interval <integer>;
+        listen-on [ port <integer> ] { <address_match_element>; ... };
+        listen-on-v6 [ port <integer> ] { <address_match_element>; ... };
+        match-mapped-addresses <boolean>;
+        memstatistics-file <quoted_string>; // not implemented
+        multiple-cnames <boolean>; // obsolete
+        named-xfer <quoted_string>; // obsolete
+        pid-file <quoted_string>;
+        port <integer>;
+        random-device <quoted_string>;
+        recursive-clients <integer>;
+        rrset-order { [ class <string> ] [ type <string> ] [ name
+            <quoted_string> ] <string> <string>; ... }; // not implemented
+        serial-queries <integer>; // obsolete
+        serial-query-rate <integer>;
+        stacksize <size>;
+        statistics-file <quoted_string>;
+        statistics-interval <integer>; // not yet implemented
+        tcp-clients <integer>;
+        tkey-dhkey <quoted_string> <integer>;
+        tkey-gssapi-credential <quoted_string>;
+        tkey-domain <quoted_string>;
+        transfers-per-ns <integer>;
+        transfers-in <integer>;
+        transfers-out <integer>;
+        treat-cr-as-space <boolean>; // obsolete
+        use-id-pool <boolean>; // obsolete
+        use-ixfr <boolean>;
+        version <quoted_string>;
+        allow-recursion { <address_match_element>; ... };
+        allow-v6-synthesis { <address_match_element>; ... };
+        sortlist { <address_match_element>; ... };
+        topology { <address_match_element>; ... }; // not implemented
+        auth-nxdomain <boolean>; // default changed
+        minimal-responses <boolean>;
+        recursion <boolean>;
+        provide-ixfr <boolean>;
+        request-ixfr <boolean>;
+        fetch-glue <boolean>; // obsolete
+        rfc2308-type1 <boolean>; // not yet implemented
+        additional-from-auth <boolean>;
+        additional-from-cache <boolean>;
+        query-source <querysource4>;
+        query-source-v6 <querysource6>;
+        cleaning-interval <integer>;
+        min-roots <integer>; // not implemented
+        lame-ttl <integer>;
+        max-ncache-ttl <integer>;
+        max-cache-ttl <integer>;
+        transfer-format ( many-answers | one-answer );
+        max-cache-size <size_no_default>;
+        check-names <string> <string>; // not implemented
+        cache-file <quoted_string>;
+        allow-query { <address_match_element>; ... };
+        allow-transfer { <address_match_element>; ... };
+        allow-update-forwarding { <address_match_element>; ... };
+        allow-notify { <address_match_element>; ... };
+        notify <notifytype>;
+        notify-source ( <ipv4_address> | * ) [ port ( <integer> | * ) ];
+        notify-source-v6 ( <ipv6_address> | * ) [ port ( <integer> | * ) ];
+        also-notify [ port <integer> ] { ( <ipv4_address> | <ipv6_address>
+            ) [ port <integer> ]; ... };
+        dialup <dialuptype>;
+        forward ( first | only );
+        forwarders [ port <integer> ] { ( <ipv4_address> | <ipv6_address> )
+            [ port <integer> ]; ... };
+        maintain-ixfr-base <boolean>; // obsolete
+        max-ixfr-log-size <size>; // obsolete
+        transfer-source ( <ipv4_address> | * ) [ port ( <integer> | * ) ];
+        transfer-source-v6 ( <ipv6_address> | * ) [ port ( <integer> | * ) ];
+        max-transfer-time-in <integer>;
+        max-transfer-time-out <integer>;
+        max-transfer-idle-in <integer>;
+        max-transfer-idle-out <integer>;
+        max-retry-time <integer>;
+        min-retry-time <integer>;
+        max-refresh-time <integer>;
+        min-refresh-time <integer>;
+        sig-validity-interval <integer>;
+        zone-statistics <boolean>;
+};
+
+controls {
+        inet ( <ipv4_address> | <ipv6_address> | * ) [ port ( <integer> | *
+            ) ] allow { <address_match_element>; ... } [ keys { <string>; ... } ];
+        unix <unsupported>; // not implemented
+};
+
+acl <string> { <address_match_element>; ... };
+
+logging {
+        channel <string> {
+                file <logfile>;
+                syslog <optional_facility>;
+                null;
+                stderr;
+                severity <logseverity>;
+                print-time <boolean>;
+                print-severity <boolean>;
+                print-category <boolean>;
+        };
+        category <string> { <string>; ... };
+};
+
+view <string> <optional_class> {
+        match-clients { <address_match_element>; ... };
+        match-destinations { <address_match_element>; ... };
+        match-recursive-only <boolean>;
+        key <string> {
+                algorithm <string>;
+                secret <string>;
+        };
+        zone <string> <optional_class> {
+                type ( master | slave | stub | hint | forward );
+                allow-update { <address_match_element>; ... };
+                file <quoted_string>;
+                ixfr-base <quoted_string>; // obsolete
+                ixfr-tmp-file <quoted_string>; // obsolete
+                masters [ port <integer> ] { ( <ipv4_address> |
+                    <ipv6_address> ) [ port <integer> ] [ key <string> ]; ... };
+                pubkey <integer> <integer> <integer> <quoted_string>; //
+                    obsolete
+                update-policy { ( grant | deny ) <string> ( name |
+                    subdomain | wildcard | self ) <string> <rrtypelist>; ... };
+                database <string>;
+                check-names <string>; // not implemented
+                allow-query { <address_match_element>; ... };
+                allow-transfer { <address_match_element>; ... };
+                allow-update-forwarding { <address_match_element>; ... };
+                allow-notify { <address_match_element>; ... };
+                notify <notifytype>;
+                notify-source ( <ipv4_address> | * ) [ port ( <integer> | *
+                    ) ];
+                notify-source-v6 ( <ipv6_address> | * ) [ port ( <integer>
+                    | * ) ];
+                also-notify [ port <integer> ] { ( <ipv4_address> |
+                    <ipv6_address> ) [ port <integer> ]; ... };
+                dialup <dialuptype>;
+                forward ( first | only );
+                forwarders [ port <integer> ] { ( <ipv4_address> |
+                    <ipv6_address> ) [ port <integer> ]; ... };
+                maintain-ixfr-base <boolean>; // obsolete
+                max-ixfr-log-size <size>; // obsolete
+                transfer-source ( <ipv4_address> | * ) [ port ( <integer> |
+                    * ) ];
+                transfer-source-v6 ( <ipv6_address> | * ) [ port (
+                    <integer> | * ) ];
+                max-transfer-time-in <integer>;
+                max-transfer-time-out <integer>;
+                max-transfer-idle-in <integer>;
+                max-transfer-idle-out <integer>;
+                max-retry-time <integer>;
+                min-retry-time <integer>;
+                max-refresh-time <integer>;
+                min-refresh-time <integer>;
+                sig-validity-interval <integer>;
+                zone-statistics <boolean>;
+        };
+        server {
+                bogus <boolean>;
+                provide-ixfr <boolean>;
+                request-ixfr <boolean>;
+                support-ixfr <boolean>; // obsolete
+                transfers <integer>;
+                transfer-format ( many-answers | one-answer );
+                keys <server_key>;
+                edns <boolean>;
+        };
+        trusted-keys { <string> <integer> <integer> <integer>
+            <quoted_string>; ... };
+        allow-recursion { <address_match_element>; ... };
+        allow-v6-synthesis { <address_match_element>; ... };
+        sortlist { <address_match_element>; ... };
+        topology { <address_match_element>; ... }; // not implemented
+        auth-nxdomain <boolean>; // default changed
+        minimal-responses <boolean>;
+        recursion <boolean>;
+        provide-ixfr <boolean>;
+        request-ixfr <boolean>;
+        fetch-glue <boolean>; // obsolete
+        rfc2308-type1 <boolean>; // not yet implemented
+        additional-from-auth <boolean>;
+        additional-from-cache <boolean>;
+        query-source <querysource4>;
+        query-source-v6 <querysource6>;
+        cleaning-interval <integer>;
+        min-roots <integer>; // not implemented
+        lame-ttl <integer>;
+        max-ncache-ttl <integer>;
+        max-cache-ttl <integer>;
+        transfer-format ( many-answers | one-answer );
+        max-cache-size <size_no_default>;
+        check-names <string> <string>; // not implemented
+        cache-file <quoted_string>;
+        allow-query { <address_match_element>; ... };
+        allow-transfer { <address_match_element>; ... };
+        allow-update-forwarding { <address_match_element>; ... };
+        allow-notify { <address_match_element>; ... };
+        notify <notifytype>;
+        notify-source ( <ipv4_address> | * ) [ port ( <integer> | * ) ];
+        notify-source-v6 ( <ipv6_address> | * ) [ port ( <integer> | * ) ];
+        also-notify [ port <integer> ] { ( <ipv4_address> | <ipv6_address>
+            ) [ port <integer> ]; ... };
+        dialup <dialuptype>;
+        forward ( first | only );
+        forwarders [ port <integer> ] { ( <ipv4_address> | <ipv6_address> )
+            [ port <integer> ]; ... };
+        maintain-ixfr-base <boolean>; // obsolete
+        max-ixfr-log-size <size>; // obsolete
+        transfer-source ( <ipv4_address> | * ) [ port ( <integer> | * ) ];
+        transfer-source-v6 ( <ipv6_address> | * ) [ port ( <integer> | * ) ];
+        max-transfer-time-in <integer>;
+        max-transfer-time-out <integer>;
+        max-transfer-idle-in <integer>;
+        max-transfer-idle-out <integer>;
+        max-retry-time <integer>;
+        min-retry-time <integer>;
+        max-refresh-time <integer>;
+        min-refresh-time <integer>;
+        sig-validity-interval <integer>;
+        zone-statistics <boolean>;
+};
+
+lwres {
+        listen-on [ port <integer> ] { ( <ipv4_address> | <ipv6_address> )
+            [ port <integer> ]; ... };
+        view <string> <optional_class>;
+        search { <string>; ... };
+        ndots <integer>;
+};
+
+key <string> {
+        algorithm <string>;
+        secret <string>;
+};
+
+zone <string> <optional_class> {
+        type ( master | slave | stub | hint | forward );
+        allow-update { <address_match_element>; ... };
+        file <quoted_string>;
+        ixfr-base <quoted_string>; // obsolete
+        ixfr-tmp-file <quoted_string>; // obsolete
+        masters [ port <integer> ] { ( <ipv4_address> | <ipv6_address> ) [
+            port <integer> ] [ key <string> ]; ... };
+        pubkey <integer> <integer> <integer> <quoted_string>; // obsolete
+        update-policy { ( grant | deny ) <string> ( name | subdomain |
+            wildcard | self ) <string> <rrtypelist>; ... };
+        database <string>;
+        check-names <string>; // not implemented
+        allow-query { <address_match_element>; ... };
+        allow-transfer { <address_match_element>; ... };
+        allow-update-forwarding { <address_match_element>; ... };
+        allow-notify { <address_match_element>; ... };
+        notify <notifytype>;
+        notify-source ( <ipv4_address> | * ) [ port ( <integer> | * ) ];
+        notify-source-v6 ( <ipv6_address> | * ) [ port ( <integer> | * ) ];
+        also-notify [ port <integer> ] { ( <ipv4_address> | <ipv6_address>
+            ) [ port <integer> ]; ... };
+        dialup <dialuptype>;
+        forward ( first | only );
+        forwarders [ port <integer> ] { ( <ipv4_address> | <ipv6_address> )
+            [ port <integer> ]; ... };
+        maintain-ixfr-base <boolean>; // obsolete
+        max-ixfr-log-size <size>; // obsolete
+        transfer-source ( <ipv4_address> | * ) [ port ( <integer> | * ) ];
+        transfer-source-v6 ( <ipv6_address> | * ) [ port ( <integer> | * ) ];
+        max-transfer-time-in <integer>;
+        max-transfer-time-out <integer>;
+        max-transfer-idle-in <integer>;
+        max-transfer-idle-out <integer>;
+        max-retry-time <integer>;
+        min-retry-time <integer>;
+        max-refresh-time <integer>;
+        min-refresh-time <integer>;
+        sig-validity-interval <integer>;
+        zone-statistics <boolean>;
+};
+
+server {
+        bogus <boolean>;
+        provide-ixfr <boolean>;
+        request-ixfr <boolean>;
+        support-ixfr <boolean>; // obsolete
+        transfers <integer>;
+        transfer-format ( many-answers | one-answer );
+        keys <server_key>;
+        edns <boolean>;
+};
+
+trusted-keys { <string> <integer> <integer> <integer> <quoted_string>; ... };
+```
 ## 主配置文件`named.conf`
+named.conf是named默认加载的配置文件，该配置文件中使用`#`或`/**/`或`//`作为注释符号，每个非注释语句都必须使用分号`;`结束。
+
 BIND 9 配置由**块、语句和注释**组成。
 - 注释
 - 语句
@@ -654,6 +753,7 @@ named.conf，每个语句都要使用分号结尾
 |parental-agents|定义要由主要和次要区域使用的委派代理列表|
 
 重点说明下：acl、view、logging、options、zone等模块
+
 ### 范例
 ```json
 # named.conf主配置文件参数详解 
@@ -721,6 +821,7 @@ C 语言的注释风格，分别是`/* xxx */` 以及 `//`。 如下所示：
 - `statistics-file`：用来设置状态统计文件的位置，可以自己定义。；
 - `memstatistics-file` ：用来设置服务器输出的内存使用统计信息。默认保存在 `/var/named/data` 目录下，文件名为 `named.memstats`；
 - `allow-query`：用来设置允许DNS查询的客户端地址，默认值为`localhost`, 可以设置为某个网段、任意地址、具体的某台主机三种情况。例如，要修改为任意地址，就在括号内的加入 `any`，也可以引用之前创建的 `acl` 内的所有地址；
+
 - `recursion`：用于设置递归查询，一般客户机和服务器之间属于递归查询，即当客户机向DNS服务器发出查询请求后，若DNS服务器本身不能解析，则会向另外的DNS服务器发出查询请求，得到结果后转交给客户机。此选项有`yes`和`no`两个值。这个选项用于设置 Failover 非常有用；
 - `dnssec-enable`： 选项用来设置是否启用`DNSSEC`支持，`DNSSEC`可以用来验证`DNS数据`的有效性，该选项有`yes`和`no`两个值，默认值为`yes`。
 - `dnssec-validation`：选项用来设置是否启用DNSSEC确认，默认值为`yes`，可以选择 `auto`。
@@ -738,8 +839,56 @@ C 语言的注释风格，分别是`/* xxx */` 以及 `//`。 如下所示：
     - `cyclic`： 创建一个循环，循环输出资源记录；
     - `none`： 完全随机的资源返回形式；
 
+- `sortlist`：基于查询的client的范围，返回响应的DNS记录的顺序。可在全局`option`以及具体的 `view`中进行配置。
+
+### recursion 递归
+一般客户机和服务器之间属递归查询，当客户机向本地DNS服务器发出请求后,若DNS服务器本身不能解析,则会向另外的DNS服务器发出查询请求，得到结果后转交给客户机。
+主机向本地域名服务器的查询一般都是采用递归查询。
+
+#### 配置参数
+![](attachments/Pasted%20image%2020240114222708.png)
+- **recursion**
+如果是yes，并且一个DNS询问要求递归，那么服务器将会做所有能够回答查询请求的工作。如果recursion是off的，并且服务器不知道答案，它将会返回一个推荐（referral）响应。默认值是yes。
+注意把recursion设为no，不会阻止用户从服务器的缓存中得到数据，它仅仅阻止新数据作为查询的结果被缓存。服务器的内部操作还是可以影响本地的缓存内容，如NOTIFY地址查询。
+
+- **allow-recursion**
+设定哪台`Client`主机可以进行递归查询。如果没有设定，缺省是允许所有主机进行递归查询。
+注意禁止一台主机的递归查询，并不能阻止这台主机查询已经存在于服务器缓存中的数据。
+权威服务器`不应允许`递归查询，防止服务器被用于`DNS放大分布式拒绝服务攻击`，并更好地保护其免受缓存中毒攻击。
+
+- **recursive-clients**
+服务器同时为用户执行的递归查询的最大数量。默认值1000，因为每个递归用户使用许多内存，一般为20KB，主机上的recursive-clients选项值必须根据实际内存大小调整。
+
+#### 配置格式
+```bash
+recursion yes | no;
+recursive-clients number;
+allow-recursion { address_match_list | any | none;};
+```
+范例：
+```bash
+recursion      yes;
+allow-recursion   { any; };
+或
+allow-recursion { 10.0/16; };
+recursive-clients 25;
+```
+
+**配置建议**
+- 如果你要建立一个 授权域名服务器服务器, 那么不要开启recursion（递归）功能。
+- 如果你要建立一个 递归 DNS 服务器, 那么需要开启recursion 功能。
+- 如果你的递归DNS服务器有公网IP地址, 你必须开启访问控制功能，只有那些合法用户才可以发询问. 如果不这么做的话，那么你的服服务就会受到DNS 放大攻击。实现BCP38将有效抵御这类攻击。
+
+使用非递归查询服务器需要注意:
+1. 保证该非递归服务器不出现在客户机的`/etc/resolv.conf` 的 `server`中；
+2. 保证该非递归服务器不被其他 name server 当成转发器 （forwarder）；
+
+注：内网中的`Client`的 `/etc/resolv.conf` 的 `server` 为内网DNS服务器的地址；内网 DNS 服务器可以解析内网的域名、主机名等，同时也可以转发外网的域名查询。此时内网的DNS服务器可以开启递归查询，这样对于外网的域名查询，得到响应后，也可以进行缓存。否则，不开启递归查询，那么对于外网的域名查询，在内网DNS服务器上没有缓存。正常情况下，内网DNS服务器配置的转发器为知名的DNS服务器，比如`8.8.8.8`，对于`8.8.8.8`外网DNS服务器上，正常情况下也是开启了递归查询。因为外网DNS服务器也需要递归查询，才可以缓存记录，以及减轻访问其的Client的压力。
+
 ## 主配置文件中的区域zone配置
-### Zone 的引导配置
+除了option，还必需有区域的配置。zone关键字后面接的是域和类，域是自定义的域名，IN是internet的简称，是bind 9中的默认类，所以可以省略。
+
+### Zone引导配置
 正向解析域名的引导文件，通过以下的格式进行定义：
 ```json
 zone "<YOUR DNS Domain Name >" {
@@ -753,6 +902,7 @@ zone "<YOUR IP ADDRESS>-addr.arpa" {
 }
 ```
 #### 字段说明
+
 `named.rfc1912.zones`主配置文件的区域配置
 ```c
 zone "ZONE_NAME" IN {
@@ -1004,23 +1154,130 @@ zone <string> [ <class> ] {
 
 ```
 
-- class: 上面的 class 一般默认指**IN**类型。
--  `zone "ZONE_NAME“ `：定义解析库名字。通常和解析库文件前缀对应起来。
--  `type `：
-	-  `master `：指的是主dns解析
-	-  `slave `：指的是从dns解析
-		> 注：slave服务器不需要配置具体的`zone`文件以及`zone`引导配置。因为slave启动成功后，会自动同步master里面的RR记录，并且表明同步来的zone记录的type是slave类型，以及 master的`ip`地址。
-	-  `hint `：指的是根域名解析（根提示域）
-	-  `forward `：指的是转发（取值为`first` or `only`），需要配置`forwarders`字段。
-	> 注：`forward `字段只有当forwarders 列表中有内容的时候才有意义。当值是 first，默认情况下，使服务器先查询设置的forwarders，如果它没有得到回答，服务器就会查询全局options转发器寻找答案。如果设定的是 only，服务器就只会把请求转发到指定的服务器上去。
+##### class
+上面的 class 一般默认指**IN**类型。
 
--  `file ` ：指定存放dns记录的数据文件名称（位置默认在/var/named下面）
-file的前缀通常和zone的名字通常对应起来，然后加一个.zone的后缀。
--  `allow-update `：是否允许客户主机或服务器自行更新dns记录。
-- `allow-transfer`: 用来给出 Failover 或者是 递归查询DNS服务器的IP地址，如果之前在 `options` 里配置的`allow-transfer` 如果设置成了参数 `yes`， 那么需要在这里指出递归查询服务器的IP地址；
-- `in-view`: 
+##### `zone ZONE_NAME`
+定义解析库名字。通常和解析库文件前缀对应起来。
+
+##### type
+type定义该域的类型是`master|slave|stub|hint|forward`中的哪种。
+
+**master**
+指的是主dns解析。
+
+**slave**
+指的是从dns解析
+> 注：slave服务器不需要配置具体的`zone`文件以及`zone`引导配置。因为slave启动成功后，会自动同步master里面的RR记录，并且表明同步来的zone记录的type是slave类型，以及 master的`ip`地址。
+
+**hint**
+指的是根服务器。
+![](attachments/Pasted%20image%2020240116161732.png)
+![](attachments/Pasted%20image%2020240116162134.png)
+为什么要根服务器列表？
+> 因为所有域名的 DNS 记录查询入口都在这里，就好像你要进入一个多级的目录，你得一级一级地进入，而根服务器就是入口。
+
+
+所有递归服务器上都会内置这张表。
+
+```bash
+zone "." IN {  
+    type hint;  
+    file "named.ca";  
+};
+```
+
+```bash
+# cat /var/named/named.ca
+
+; <<>> DiG 9.11.3-RedHat-9.11.3-3.fc27 <<>> +bufsize=1200 +norec @a.root-servers.net
+; (2 servers found)
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 46900
+;; flags: qr aa; QUERY: 1, ANSWER: 13, AUTHORITY: 0, ADDITIONAL: 27
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1472
+;; QUESTION SECTION:
+;.				IN	NS
+
+;; ANSWER SECTION:
+.			518400	IN	NS	a.root-servers.net.
+.			518400	IN	NS	b.root-servers.net.
+.			518400	IN	NS	c.root-servers.net.
+.			518400	IN	NS	d.root-servers.net.
+.			518400	IN	NS	e.root-servers.net.
+.			518400	IN	NS	f.root-servers.net.
+.			518400	IN	NS	g.root-servers.net.
+.			518400	IN	NS	h.root-servers.net.
+.			518400	IN	NS	i.root-servers.net.
+.			518400	IN	NS	j.root-servers.net.
+.			518400	IN	NS	k.root-servers.net.
+.			518400	IN	NS	l.root-servers.net.
+.			518400	IN	NS	m.root-servers.net.
+
+;; ADDITIONAL SECTION:
+a.root-servers.net.	518400	IN	A	198.41.0.4
+b.root-servers.net.	518400	IN	A	199.9.14.201
+c.root-servers.net.	518400	IN	A	192.33.4.12
+d.root-servers.net.	518400	IN	A	199.7.91.13
+e.root-servers.net.	518400	IN	A	192.203.230.10
+f.root-servers.net.	518400	IN	A	192.5.5.241
+g.root-servers.net.	518400	IN	A	192.112.36.4
+h.root-servers.net.	518400	IN	A	198.97.190.53
+i.root-servers.net.	518400	IN	A	192.36.148.17
+j.root-servers.net.	518400	IN	A	192.58.128.30
+k.root-servers.net.	518400	IN	A	193.0.14.129
+l.root-servers.net.	518400	IN	A	199.7.83.42
+m.root-servers.net.	518400	IN	A	202.12.27.33
+a.root-servers.net.	518400	IN	AAAA	2001:503:ba3e::2:30
+b.root-servers.net.	518400	IN	AAAA	2001:500:200::b
+c.root-servers.net.	518400	IN	AAAA	2001:500:2::c
+d.root-servers.net.	518400	IN	AAAA	2001:500:2d::d
+e.root-servers.net.	518400	IN	AAAA	2001:500:a8::e
+f.root-servers.net.	518400	IN	AAAA	2001:500:2f::f
+g.root-servers.net.	518400	IN	AAAA	2001:500:12::d0d
+h.root-servers.net.	518400	IN	AAAA	2001:500:1::53
+i.root-servers.net.	518400	IN	AAAA	2001:7fe::53
+j.root-servers.net.	518400	IN	AAAA	2001:503:c27::2:30
+k.root-servers.net.	518400	IN	AAAA	2001:7fd::1
+l.root-servers.net.	518400	IN	AAAA	2001:500:9f::42
+m.root-servers.net.	518400	IN	AAAA	2001:dc3::35
+
+;; Query time: 24 msec
+;; SERVER: 198.41.0.4#53(198.41.0.4)
+;; WHEN: Thu Apr 05 15:57:34 CEST 2018
+;; MSG SIZE  rcvd: 811
+```
+
+
+**forward**
+指的是转发（取值为`first` or `only`），需要配置`forwarders`字段。
+> 注：`forward `字段只有当forwarders 列表中有内容的时候才有意义。当值是 first，默认情况下，使服务器先查询设置的forwarders，如果它没有得到回答，服务器就会查询全局options转发器寻找答案。如果设定的是 only，服务器就只会把请求转发到指定的服务器上去。
+
+##### file
+指定存放zone的数据库文件名称；一般是相对路径，这个路径相对于您在 `options` 语句中的目录中创建的 `directory`（默认为：`/var/named`） 相对。
+
+`file`的前缀通常和`zone`的名字通常对应起来，然后加一个.zone的后缀。
+
+##### allow-query
+`allow-query` 中定义的任何主机都可以查询此 zone。
+
+##### allow-update
+是否允许客户主机或服务器自行更新dns记录。
+
+##### allow-transfer
+控制`区域转移`；区域转移允许指定的服务器获取您 `区域中所有数据的转储`；
+区域转移应该受到限制，以使潜在的攻击者更难执行一个DNS查询来快速获取您区域中的所有资源记录。
+`主服务器必须配置允许转移`，以允许您的`从服务器`执行区域转移。您应该禁止其他主机执行区域传输。您可能允许`localhost`执行区域传输以帮助进行故障排除。
+
+
+##### in-view
+多个view共享 zone配置。
+
 > BIND9.10+ only. "in-view", was added that lets multiple views refer to the same in-memory instance of a zone. Allows a zone clause within one view to be used by another view. This allows both views to use the same zone without the overhead of loading it more than once.
-> The **view-name** must refer to a valid view which contains a zone of the same name and the view containing the zone must have been previously defined (only backward references to views are allowed, not forward references).
+> The view-name must refer to a valid view which contains a zone of the same name and the view containing the zone must have been previously defined (only backward references to views are allowed, not forward references).
 
 ```json
 格式：
@@ -1028,6 +1285,43 @@ in-view "view-name";
 
 范例：
 in-view "internal";
+```
+
+#### 特殊域名的配置
+##### 根域名”.”的区域配置
+```bash
+zone "." IN {  
+    type hint;  
+    file named.ca;  
+}
+```
+type hint表示该区域”.”类型为hint。
+回顾dns解析流程，在客户端让dns服务器迭代查询时，迭代查询的第一步就是让dns服务器去找根域名服务器。但是dns服务器如何知道根域名服务器在哪里？这就是hint类型的作用，它提示dns服务器根据其区域数据文件named.ca中的内容去获取根域名地址，并将这些数据缓存起来，下次需要根域名地址时直接查找缓存即可。
+> 因此，只有根区域”.”才会设置为hint类型。
+
+##### ”localhost”域名
+”localhost”域名(用于解析localhost为127.0.0.1)和127.0.0.1的方向查找区域。
+```bash
+zone "localhost" IN {  
+        type master;  
+        file "named.localhost";  
+        allow-update { none; };  
+};  
+   
+zone "1.0.0.127.in-addr.arpa" IN {  
+        type master;  
+        file "named.loopback";  
+        allow-update { none; };  
+};
+```
+
+当然，反向查找区域可以定义为域而不是直接定义成主机。但这样的话，就需要相对应地修改/var/named/named.loopback文件。例如：
+```bash
+zone "0.0.127.in-addr.arpa" IN {  
+        type master;  
+        file "named.loopback";  
+        allow-update { none; };  
+};
 ```
 
 #### 范例
@@ -1063,7 +1357,7 @@ view "khand" {
 >注：自定义的配置解析库文件（Zone files）,一般是在/var/named下写，文件名格式一般写为ZONE_NAME.zone。
 
 
-### 区域文件(Zone文件)
+### zone数据库配置(Zone文件)
 zone文件：保存 RR (Record Resource) 信息的文件。
 zone文件包括正向Zone文件和反向Zone文件。
 DNS正解: 域名解析->返回IP；
@@ -1144,11 +1438,7 @@ mirrors     IN  A   172.24.8.30
 ftp         IN  CNAME   www
 ```
 
-在 zone file 中：
-注释的符号是：`;`
-`$ORIGIN [REGION NAME]` 设定了当前的解析域名区域；
-`@`：代表当前的区域；
-> 一般在`$ORIGIN [REGION NAME]` 设定了当前的区域；否则，就默认为在主配置文件`named.conf`中当前文件对应的 `ZONE_NAME`。
+在 zone file （区域数据库文件）中：注释的符号是：`;`
 
 比如：
 ```josn
@@ -1176,21 +1466,93 @@ domain.com. ns.domain.com. admin.domain.com. (
              604800 )   ; Negative Cache TTL
 ```
 
-##### TTL
-- TTL：定义区域中数据文件里面的各项记录的默认TTL值，单位为秒；
-RR都会被保存在DNS的解析服务器的cache上，有一个失效的时间，TTL就是控制这个失效时间的一个参数；
-这个参数可以单独进行设定，也可以在 SOA 设定中进行配置：
+##### `$`符号
+`$`符号：定义宏。
+最常见的是`$TTL`、`$ORIGIN`。origin的的意思是起点，可以自行定义`$ORIGIN`的值。
 
+**`$ORIGIN [REGION NAME]`**
+ 设定了当前的解析域名区域；
+`$ORIGIN longshuai.com.`表示`$ORIGIN`的值为”longshuai.com.”，未定义`$ORIGIN`时，值为`zone domain-name`的 `domain-name` 部分。
+
+```josn
+;
+; BIND data file for local loopback interface
+;
+; Import ZSK / KSK
+;
+;
+$ORIGIN domain.com.
+; 我们已经定义了一个区域，那么在定义 SOA 的时候可以进行两种定义方式
+@ IN SOA ns.domain.com. admin.domain.com. (
+                  3     ; Serial
+             604800     ; Refresh
+              86400     ; Retry
+            2419200     ; Expire
+             604800 )   ; Negative Cache TTL
+; 或者我们不需要 at-sign - @ 符号，直接引用ORIGIN的名字
+；在这里这两条配置代表的含义是一样的
+domain.com. ns.domain.com. admin.domain.com. (
+                  3     ; Serial
+             604800     ; Refresh
+              86400     ; Retry
+            2419200     ; Expire
+             604800 )   ; Negative Cache TTL
+```
+
+##### fqdn自动补齐
+在区域数据文件中，没有使用点号”.”结尾的，在实际使用的时候都会自动补上域名(即`$ORIGIN`)，使其变为fqdn。
+例如区域”longshuai.com.”，以下是完全格式的资源记录：
+```bash
+dnsserver.longshuai.com.    IN  A   172.16.10.15
+```
+可以缩写为：
+```bash
+dnsserver    IN    A   172.16.10.15
+```
+因为`dnsserver`后没有点，所以会补齐整个域名”longshuai.com.”。
+实际上，自动补齐的部分是`$ORIGIN`的值，只不过默认没定义`$ORIGIN`时，`$ORIGIN`的值为zone定义的域名，所以默认是自动补齐域名。
+
+##### `@`符号
+可以使用@符号来缩写`$ORIGIN`的值。
+由于自定义的区域数据文件中，一般不会主动定义`$ORIGIN`的值，而第一个资源记录一般都是SOA记录，所以此时SOA记录中的第一列就可以使用`@`符号，其它地方只要值为`$ORIGIN`，都可以使用@符号缩写。例如：
+
+```bash
+@     IN  SOA  dnsserver  xyz. ( 1 3h 1h 1w 1h )  
+@     IN  NS   dnsserver
+```
+##### 重复最近一个名称
+**区域数据文件中的第一列可以使用空格或制表符使该列继承上一行的第一列的值。**
+
+例如第一行定义的是SOA记录，第一列是”longshuai.com.”，那么第二行定义的NS记录中，其第一列就可以留空来继承第一行第一列的”longshuai.com.”。不止第一行和第二行，第三行也可以继承第二行的第一列，第n+1行也可以继承第n行的第一列，只要它们的值一样即可。
+```bash
+# vim /var/named/db.longshuai.com 
+$TTL 6h
+@         IN  SOA    dnsserver   xyz ( 1 3h 1h 1w 1h )
+@         IN  NS     dnsserver
+ 
+dnsserver IN  A      172.16.10.15
+www       IN  A      172.16.10.16
+ftp       IN  A      172.16.10.17
+mydb      IN  A      172.16.10.18
+ 
+www1      IN  CNAME  www
+```
+##### TTL
+TTL：定义区域中数据文件里面的各项记录的默认TTL值，单位为秒；
+RR都会被保存在DNS的解析服务器的cache上，有一个失效的时间，TTL就是控制这个失效时间的一个参数。
+在区域数据文件中，`$TTL`的定义表示其后的记录都以此TTL为准，直到遇到下一个`$TTL`。也就是说，两个`$TTL`之间的所有记录都以前面的`$TTL`为准。不过大多数时候，一个区域数据文件中只会在第一行定义一个`$TTL`值，表示该文件中所有记录都使用该缓存周期值。
+
+这个参数可以单独进行设定，也可以在 SOA 设定中进行配置。
 - 单独设定： `$TTL [TIME]`
 - 在 SOA 中进行设定： `SOA - Negative Cache TTL`
 
 ##### SOA记录
-- SOA：SOA记录，@代表相应的域名，每个区域数据文件只能有一个SOA，其中参数如下：
-	- serial：表示配置文件的修改版本，格式为年月日加上修改的次数；
-	- refresh：设定辅助dns和主dns进行同步的间隔时间；
-	- retry：如果辅助dns进行更新失败后，间隔多久进行重试；
-	- expiry：设定辅助dns与主dns同步失败后，多长时间后清除对应的记录；
-	- minimum：默认最小的TTL值，如果在前面没有设置TTL，则以此值为准。
+SOA：SOA记录，@代表相应的域名，每个区域数据文件只能有一个SOA，其中参数如下：
+- serial：表示配置文件的修改版本，格式为年月日加上修改的次数；
+- refresh：设定辅助dns和主dns进行同步的间隔时间；
+- retry：如果辅助dns进行更新失败后，间隔多久进行重试；
+- expiry：设定辅助dns与主dns同步失败后，多长时间后清除对应的记录；
+- minimum：默认最小的TTL值，如果在前面没有设置TTL，则以此值为准。
 
 - **注意**：
 >在所有的配置中，`ns.domain.com != ns.domain.com.` ，必须注意在 zone file 中的配置文件的最后 `.` 必须不能省略；
@@ -1226,22 +1588,50 @@ www             IN      CNAME       Server1
 
 
 #### 反向区域文件
-区域名称：是网络地址的反向.in-addr.arpa.
-一个IP只能对应唯一的FQDN反解PTR记录，且应该与正解域对应。
-> 注意：需要注意一点的是反解析对应的配置文件应该不带有点分十进制ip地址的最后一份。例如解析的IP为`192.168.31.113` 配置文件应该写为`31.168.192.in-addr.arpa` 其中`113`这里不写，是在后面添加解析时使用。
+反向查找是根据ip地址查找其对应的主机名。
+在/etc/named.conf中，需要定义`zone  *.in-addr.arpa`，其中`*`是点分十进制ip的反写，可以是反写ip后的任意一段长度，例如`127.0.0.1`反写后是`1.0.0.127`，所以zone所定义的可以是”1.0.0.127”、”0.0.127”、”0.127”，甚至是”127”，长度位数不同，在区域数据文件中需要补全的数值就不同。
+另外，在zone文件中，反解域也是要有SOA记录的，在反解域中ns记录就不用在写A记录了，因为反解区域文件只可以有PTR，不可以有A记录。反向查找区域的各种缓存时间可以都设置长一点，因为用的不多。
 
-```c
-比如：
-192.168.111. –> 111.168.192.in-addr.arpa.
-
-配置方法：
-在/etc/named.rfc1512.zones文件下插入下面内容：
-zone "Reverse_Net_Addr.in-addr.arpa" IN {
-    type {master|slave|forward};
-    file "Net_Addr.zone"
-}
+##### 范例
+***定义区域引导配置**
+```bash
+zone "16.172.in-addr.arpa" IN {
+    type master;
+    file "172.16.zone";
+};
 ```
-另外，在zone文件中，反解域也是要有SOA记录的，在反解域中ns记录就不用在写A记录了，因为反解区域文件只可以有PTR，不可以有A记录。
+
+**创建区域数据文件**
+```bash
+(1) 修改权限：
+# chown :named 172.16.zone 
+# chmod o-r 172.16.zone
+
+(2) 编辑内容
+$ORIGIN 16.172.in-addr.arpa.
+$TTL 86400
+@   IN  SOA ns1.qhdlink.com. admin.qhdlink.com. (
+                            2017081001;serial
+                            1H;refresh
+                            15M;retry
+                            1W;expire
+                            1D);TTL
+
+    IN  NS ns1.qhdlink.com.
+1.72  IN  PTR     ns1.qhdlink.com.
+1.100 IN  PTR     www.qhdlink.com.
+2.100 IN  PTR     www.qhdlink.com.
+3.100 IN  PTR     www.qhdlink.com.
+4.100 IN  PTR     mx1.qhdlink.com.
+```
+
+**重载区域和配置文件**
+```bash
+# named-checkconf -----------检测named.conf语法
+# named-checkzone "ZONE_NAME" FILE_NAME ---------检测域名、区域数据库文件语法
+# rndc reload ------------重载配置文件
+# systemctl reload named.service
+```
 
 #### slave和master中的zone配置差异
 **master(primary)中的zone配置**：
@@ -1440,9 +1830,9 @@ dns02-114.host.com.
 #dig 后面ip为需要解析的ip，@后面ip为dns服务器ip
 ```
 
-## 主配置文件中的acl 和 view块
+## 主配置文件中的acl 
 一般来说，ACL模块用来控制哪些主机可以访问域名解析服务器，使用`ACL`访问控制列表可以使配置简单而清晰，一次定义之后可以在多处使用，不会使配置文件因为大量的 IP 地址而变得混乱。
-采用这个配置可以有效防范DOS以及Spoofing攻击。
+采用这个配置可以有效防范`DOS`以及`Spoofing`攻击。
 
 ACL匹配客户端是否能够接入到域名服务器基于三个基本的特征:
 - 客户端的IPv4或者IPv6地址
@@ -1490,8 +1880,21 @@ acl "complex" {             //定义一个名为complex的ACL
 - `any` : 任意
 - `local/localhost` : 本机
 - `localnet` : 本机IP所属的网络
+### EDNS中ACL的使用
+#### 匹配client的ACL方式
+![](attachments/Pasted%20image%2020240120113126.png)
+- Client的 IP
+- TSIG Key
+- ECS
 
-### 使用ACL
+#### 注意
+鉴于bind acl并非是最精确匹配，只是线性匹配；
+配置的时候必须要注意 View的配置顺序。
+> 注：ACL的定义和VIew的定义是并行的，并不是ACL在View中定义。
+
+
+
+### ACL 配置语句
 定义了 ACL 之后，可以在任何可以使用ACL匹配的子句中使用。
 下面简单介绍常用的子句：
 
@@ -1505,30 +1908,158 @@ acl "complex" {             //定义一个名为complex的ACL
 
 注意：上面列出的一些配置子句既可以出现在全局配置 **options** 语句里，又可以出现在 **zone** 声明语句里，当在两处同时出现时，**zone** 声明语句中的配置将会覆盖全局配置 **options** 语句中的配置。
 
-### View 视图格式
-​`view`语句定义了视图功能。视图是`BIND9`提供的强大的新功能，允许`DNS`服务器根据客户端的不同，有区别地回答`DNS`查询，每个视图定义了一个被特定客户端子集见到的`DNS`名称空间。
+## 主配置文件中的view
+`view`语句定义了视图功能。视图是`BIND9`提供的强大的新功能，允许`DNS`服务器根据客户端的不同，有区别地回答`DNS`查询。
+比如，不同机房/不同运营商的用户查询某个域名，得到不同的A记录。
 
-**视图语句的顺序是很重要的**。一位用户的请求将会在它所匹配的第一个视图中被解答。
-在视图语句中定义的域只对匹配视图的用户是可用的。通过在多个视图中用相同名称定义一个域，不同域数据可以传给不同的用户。
+**视图语句的顺序是很重要的**。**一位用户的请求将会在它所匹配的第一个视图中被解答**。
+### View 格式
+
+在`view语`句中定义的`zone`只对匹配视图的用户是可用的。
+通过在多个视图中用相同名称定义一个域(但是对应的不同的zone文件)，不同域数据可以传给不同的用户。
 
 视图的定义格式，如下所示：
 ```json
-view view_name [ class ] {
-    match-clients { address_match_list } ;
-    match-destinations { address_match_list } ;
-    match-recursive-only <boolean> ;
-   [ view_option ; ... ]
-   [ zone-statistics yes_or_no ; ]
-   [ zone_statement ; ... ]
-} ;
+view <string> <optional_class> {
+        match-clients { <address_match_element>; ... };
+        match-destinations { <address_match_element>; ... };
+        match-recursive-only <boolean>;
+        key <string> {
+                algorithm <string>;
+                secret <string>;
+        };
+        zone <string> <optional_class> {
+                type ( master | slave | stub | hint | forward );
+                allow-update { <address_match_element>; ... };
+                file <quoted_string>;
+                ixfr-base <quoted_string>; // obsolete
+                ixfr-tmp-file <quoted_string>; // obsolete
+                masters [ port <integer> ] { ( <ipv4_address> |
+                    <ipv6_address> ) [ port <integer> ] [ key <string> ]; ... };
+                pubkey <integer> <integer> <integer> <quoted_string>; //
+                    obsolete
+                update-policy { ( grant | deny ) <string> ( name |
+                    subdomain | wildcard | self ) <string> <rrtypelist>; ... };
+                database <string>;
+                check-names <string>; // not implemented
+                allow-query { <address_match_element>; ... };
+                allow-transfer { <address_match_element>; ... };
+                allow-update-forwarding { <address_match_element>; ... };
+                allow-notify { <address_match_element>; ... };
+                notify <notifytype>;
+                notify-source ( <ipv4_address> | * ) [ port ( <integer> | *
+                    ) ];
+                notify-source-v6 ( <ipv6_address> | * ) [ port ( <integer>
+                    | * ) ];
+                also-notify [ port <integer> ] { ( <ipv4_address> |
+                    <ipv6_address> ) [ port <integer> ]; ... };
+                dialup <dialuptype>;
+                forward ( first | only );
+                forwarders [ port <integer> ] { ( <ipv4_address> |
+                    <ipv6_address> ) [ port <integer> ]; ... };
+                maintain-ixfr-base <boolean>; // obsolete
+                max-ixfr-log-size <size>; // obsolete
+                transfer-source ( <ipv4_address> | * ) [ port ( <integer> |
+                    * ) ];
+                transfer-source-v6 ( <ipv6_address> | * ) [ port (
+                    <integer> | * ) ];
+                max-transfer-time-in <integer>;
+                max-transfer-time-out <integer>;
+                max-transfer-idle-in <integer>;
+                max-transfer-idle-out <integer>;
+                max-retry-time <integer>;
+                min-retry-time <integer>;
+                max-refresh-time <integer>;
+                min-refresh-time <integer>;
+                sig-validity-interval <integer>;
+                zone-statistics <boolean>;
+        };
+        server {
+                bogus <boolean>;
+                provide-ixfr <boolean>;
+                request-ixfr <boolean>;
+                support-ixfr <boolean>; // obsolete
+                transfers <integer>;
+                transfer-format ( many-answers | one-answer );
+                keys <server_key>;
+                edns <boolean>;
+        };
+        trusted-keys { <string> <integer> <integer> <integer>
+            <quoted_string>; ... };
+        allow-recursion { <address_match_element>; ... };
+        allow-v6-synthesis { <address_match_element>; ... };
+        sortlist { <address_match_element>; ... };
+        topology { <address_match_element>; ... }; // not implemented
+        auth-nxdomain <boolean>; // default changed
+        minimal-responses <boolean>;
+        recursion <boolean>;
+        provide-ixfr <boolean>;
+        request-ixfr <boolean>;
+        fetch-glue <boolean>; // obsolete
+        rfc2308-type1 <boolean>; // not yet implemented
+        additional-from-auth <boolean>;
+        additional-from-cache <boolean>;
+        query-source <querysource4>;
+        query-source-v6 <querysource6>;
+        cleaning-interval <integer>;
+        min-roots <integer>; // not implemented
+        lame-ttl <integer>;
+        max-ncache-ttl <integer>;
+        max-cache-ttl <integer>;
+        transfer-format ( many-answers | one-answer );
+        max-cache-size <size_no_default>;
+        check-names <string> <string>; // not implemented
+        cache-file <quoted_string>;
+        allow-query { <address_match_element>; ... };
+        allow-transfer { <address_match_element>; ... };
+        allow-update-forwarding { <address_match_element>; ... };
+        allow-notify { <address_match_element>; ... };
+        notify <notifytype>;
+        notify-source ( <ipv4_address> | * ) [ port ( <integer> | * ) ];
+        notify-source-v6 ( <ipv6_address> | * ) [ port ( <integer> | * ) ];
+        also-notify [ port <integer> ] { ( <ipv4_address> | <ipv6_address>
+            ) [ port <integer> ]; ... };
+        dialup <dialuptype>;
+        forward ( first | only );
+        forwarders [ port <integer> ] { ( <ipv4_address> | <ipv6_address> )
+            [ port <integer> ]; ... };
+        maintain-ixfr-base <boolean>; // obsolete
+        max-ixfr-log-size <size>; // obsolete
+        transfer-source ( <ipv4_address> | * ) [ port ( <integer> | * ) ];
+        transfer-source-v6 ( <ipv6_address> | * ) [ port ( <integer> | * ) ];
+        max-transfer-time-in <integer>;
+        max-transfer-time-out <integer>;
+        max-transfer-idle-in <integer>;
+        max-transfer-idle-out <integer>;
+        max-retry-time <integer>;
+        min-retry-time <integer>;
+        max-refresh-time <integer>;
+        min-refresh-time <integer>;
+        sig-validity-interval <integer>;
+        zone-statistics <boolean>;
+};
 ```
 
-**字段解析**：
-- `match_clients`和`matach-destinations`：根据用户的源地址("address_match_list")匹配视图定义的"match_clients"和用户的目的地址("address_match_list")匹配视图定义的"matach-destinations"。如果没有被指定，match-clients和match-destinations默认匹配所有地址。
-- `match-recursive-only`：一个视图也可以做为match-recursive-only来指定，意思是来自匹配用户的递归请求将会匹配该视图。
-- `class`：视图精确到类。如果没有给定任何类，就假设为IN类。如果在配置文件中没有view语句，在IN类中就会自动产生一个默认视图匹配于任何用户，任何指定在配置文件的zone配置被看作是此默认视图的一部分。
+**`match_clients`和`matach-destinations`**：
+根据用户的源地址("address_match_list")匹配视图定义的"match_clients"和用户的目的地址("address_match_list")匹配视图定义的"matach-destinations"。如果没有被指定，match-clients和match-destinations默认匹配所有地址。
 
-### ACL和View实现智能DNS
+**`match-recursive-only`**
+一个视图也可以做为match-recursive-only来指定，意思是来自匹配用户的递归请求将会匹配该视图。
+
+**`class`**
+视图精确到类。如果没有给定任何类，就假设为IN类。如果在配置文件中没有view语句，在IN类中就会自动产生一个默认视图匹配于任何用户，任何指定在配置文件的zone配置被看作是此默认视图的一部分。
+
+### 注意实现
+(1).所有的`zone`都必须要定义在`view`中，尽管默认的`named.conf`根本没有定义`view`，但是此时所有的`zone`都定义在了一个隐含的默认的视图中。
+
+(2). view中`match-clients`指令的匹配方式是**从前向后匹配**的，如果在第一个view中匹配了，则后面定义的view将不会生效，所以**定义的view的先后顺序是很重要的**。
+
+(3).绝大多数`named.conf`中的指令都能写在`view`中，只有很少量的指令不允许。
+例如`acl`指令。对于本该封装在`options`中的指令，如果想定义在`view`中，则不应该在`view`中使用`options`，因为`options`定义的是全局默认值，配置文件中只能出现一次，所以可以直接在view中写指令，这样会覆盖全局options。
+
+(4).不同的view中定义的相同的zone，它们使用的区域文件一般不同（并非必须不同），否则就没有自定义view的必要。
+
+### View实现智能DNS
 ACL及视图的配合使用，可实现智能DNS的实现：
 
 **主配置文件中的内容**：
@@ -1665,7 +2196,28 @@ logging {
 每一个`channel`可以指定一个 `category` 来指定记录的事件类型。
 
 - `category`
- `category` 用来区分不同的类别或者场景，比如：客户端请求（`client request`）、配置文件解析处理（`Configuration file parsing and processing`）。
+ `category` 定义哪些类的信息需要写入日志。
+ 用来区分不同的类别或者场景，比如：客户端请求（`client request`）、配置文件解析处理（`Configuration file parsing and processing`）。
+
+每种类别的数据可以被发送给一个或多个通道。例如统计类别的信息发送到系统日志通道且发送到自定义日志文件通道，而查询类别只发送到自定义日志文件通道。
+![](attachments/Pasted%20image%2020240117165623.png)
+
+```bash
+logging {  
+    channel my_syslog {          /* 定义日志通道my_syslog */   
+        syslog daemon;           /* my_syslog通道的日志写入到系统日志syslog，并指定使用daemon工具记录 */   
+        severity warning;        /* 该通道只记录严重级别为warning及以上的信息 */   
+    };  
+    channel my_file {           /* 定义第二个日志通道my_file */   
+        file "log.msgs";        /* my_file通道的日志写入到自定义的文件log.msgs中 */   
+        severity info;          /* 该通道记录日志级别为info 及以上的信息 */   
+    };  
+    category statistics {my_syslog;my_file;};  /* 统计类别statistics的信息使用my_syslog和my_file通道记录 */   
+    category queries {my_file;};               /* 查询类别queries的信息记录使用my_file通道记录 */   
+    category default {null;};                  /* 除了上述两个自定义的类别，其余绝大部分的类别的信息都丢弃 */     
+//category default { my_file; };           /* 或者不丢弃，将其记录到my_file通道指定的文件也可以 */   
+};
+```
 
 ### 原理
 首先需要创建一个 `channel` 来规定输出日志流的格式还以及日志文件名、文件版本。
@@ -1676,13 +2228,32 @@ logging {
 `channel` 的配置规则：
 - 所有的日志输出都需要 channel 来指定输出格式，BIND9 对于创建 channel 的数量没有限制。
 - 每一个 channel 都需要为该通道的日志信息指定一个 `destination clause` - 目的句柄；
->目的句柄在 channel 阶段被配置，这个目的句柄用来区分： 
+ 
+#### 通道的目的位置
+通道的有四种位置可选
 >1）输出到具体的文件的名字 - `file`；
+file:使用自定义的文件路径。可以指定该日志文件有几个版本(versions)和多大(size)时就进行轮替，不指定大小限制时日志文件将无限制增长。
+例如以下定义方式：每个日志文件增长到10M大小就创建新的文件来记录新的日志，最多记录3个版本的日志文件，当第三个日志文件my_logs2也到10M后将删除最早的日志文件继续记录。
+```bash
+channel my_file {  
+    file my_logs versions 3 size 10M;  
+    severity info;  
+};
+```
+
 >2）输出到具体的系统日志工具中（syslog/syslogd）- `syslog`；
+syslog:使用系统日志来记录，同时需要指定使用哪种工具(facility)来记录。
+有kern、user、mail、daemon、auth、syslog、lpr、news、uucp、cron、authpriv、ftp、local0、local1、local2、local3、local4、local5、local6 和local7这么多种工具可选。默认是daemon，也建议使用daemon。
+
 >3）输出到终端显示- 标准错误流(standard error stream)；
+使用stderr方式的通道将把使用该通道来记录的信息输出到stderr。
+
 >4）或者该错误消息直接被丢弃 - `null`。
-- channel 的配置可以规定每一个错误日志消息的响应级别，默认的响应级别是`info`。
-- channel 还可以控制输出错误日志消息的格式，可以包含：响应时间戳、category名字、严重等级等。
+使用null方式的通道将把使用该通道来记录的信息全部丢弃。
+
+#### 通道的其他配置
+channel 的配置可以规定每一个错误日志消息的响应级别，默认的响应级别是`info`。
+channel 还可以控制输出错误日志消息的格式，可以包含：响应时间戳、category名字、严重等级等（`print-time boolean`;`print-severity boolean`和`print-category boolean`）。
 
 #### `channel` 的配置参数
 - `buffered`: 用来规定是否刷新错误日志的文件，其参数值为`<boolean>`，在 BIND9 中 `<boolean>` 值的参数值为 `yes` / `no`，如果设置成为 `yes` 那么日志消息流(一般每一个错误日志消息都是一个 Log Entry)就不会刷新，而是被保存在缓冲区中了，不会刷新到文件中。
@@ -1705,6 +2276,10 @@ logging {
 5. info
 6. debug 
 7. dynamic
+
+
+其中前5种级别和系统日志syslog系统相同，后两种(debug和dynamic) 是BIND独有，且debug还可以按照level进行细分。
+但是写日志是一项非常消耗性能的操作，所以默认都是定义在info级别上。在正常使用环境中，除了调试时可能需要记录debug或者dynamic级别信息，其余至少都记录到info级别甚至更严格的级别。
 ```
 
 - `stderr`：将通道指向服务器的标准错误流。这是为了在服务器作为前台进程运行时使用；
@@ -1715,6 +2290,8 @@ logging {
 
 ### `category` 的配置
 `category`词组配置规则：`category <config_string> { <channel_name_string>; ... };`
+
+#### `category` 分类
 
 |类别|说明|
 |---|---|
@@ -1733,6 +2310,39 @@ logging {
 |xfer-in|从远程名称服务器到本地名称服务器的区传送|
 |xfer-out|从本地名称服务器到远程名称服务器的区传送|
 
+
+### 默认的channel和类别
+当没有在`named.conf`中定义任何`logging`字句时，发现在`/var/log/messages`中还是记录了很多DNS相关的日志，为什么没定义还是有记录呢？
+因为有BIND默认定义的日志记录方式。
+
+在BIND中默认定义了4个channel，分别使用4种通道路径。这些channel你无法重定义它们，即使你不想要它们、不书写它们，BIND还是会自己创建它们。
+只有一种方法：新添加通道并指定使用该通道的类别，使你想记录的日志不使用默认的定义。
+
+以下是默认定义的通道：
+```bash
+channel default_syslog {  
+    syslog daemon;  
+    severity info;  
+};  
+channel default_debug {  
+    file "named.run";  
+    severity dynamic;  
+};  
+channel default_stderr {  
+    stderr;  
+severity info;  
+};  
+channel null {  
+    null;  
+};
+```
+
+在BIND 9 中所指定的默认类别语句如下:
+```bash
+category default { default_syslog;default_debug; };
+```
+
+也就是说，对于你没有指定的绝大多数类别的信息都使用通道`default_syslog`和通道`default_debug`来记录。由于默认定义了null通道，所以你想把`default`匹配的类别信息全部丢弃的话，可以直接使用`categroy default { null; };`来丢弃。
 
 ### 范例
 ```json
@@ -1773,9 +2383,37 @@ logging{
 };
 ```
 
+
 ## 主配置文件中的 control 块
-controls语句声明了系统管理员用于管理名称服务器远程操作的控制通道。
-`rndc`使用这些控制通道向名称服务器发送命令，并从名称服务器检索非dns结果。
+在/etc/named.conf中，可以使用controls指令来设置接收控制消息的通道，以及允许控制本机的控制者。
+定义方式如下：
+```bash
+controls {  
+    inet local_ip port PORT_NUM  allow { control_ip_list; } 
+    keys { "rndc-key"; };  
+};
+```
+
+范例：
+```bash
+# rndc controls
+controls {
+    inet * port 953 allow { any; }
+    keys { kwai_rndc_key; rndc-key; };
+};
+```
+
+在上述格式中：
+
+**local_ip和PORT_NUM**
+设置的是dns服务器开启的tcp通道，表示监听在本机某个IP地址local_ip上的PORT_NUM端口上。
+其中local_ip可以使用`*`表示监听在本机所有地址上，port可以省略，默认监听端口为953。
+
+**allow关键字**
+定义允许连接本通道的主机列表，也就是限定谁能控制本机dns服务器。
+
+**keys关键字**
+定义的是连接本通道时需要进行密钥认证，只有认证通过的才能成功连接通道。这个key在后面介绍rndc时会说明。
 
 ## 安全性配置
 ### 背景
@@ -1800,6 +2438,257 @@ DNSSEC 在 DNS协议中新增加的两个安全的功能：
 每个zone都会发布一个公钥，递归解析器可以检索公钥以验证区域中的数据，区域的公钥也必须经过签名。
 >每一个 DNS Zone 在配置的时候 BIND 服务会为其创建一个公钥和私钥的配对的秘钥对。 DNS zone 的所有者使用该区域的私钥对区域内的DNS数据进行加密，并为这些数据生成签名。 DNS 解析器生成的 公钥 对该区域内所有的 DNS数据验证真实性。如果有效，证明DNS数据合法。
 
+# DNS BIND主辅同步之TSIG加密
+## 背景
+服务器之间数据配置文件传输的安全性，比如从服务器从主服务器同步数据，防止数据配置文件传输过程中遭到篡改。
+## 介绍
+Transaction signatures(TSIG：事务签名)通常是一种确保DNS消息安全，并提供安全的服务器与服务器之间通讯的机制。
+
+TSIG可以保护以下类型的DNS服务器：Zone区域传送、Notify、动态更新、递归查询邮件。
+TSIG使用**共享秘密**和单向散列函数来验证DNS信息。TSIG 可确认 DNS 之信息是由某特定 DNS Server 所提供。通常TSIG 应用于域名服务器间的区带传输，确保数据不会被篡改或产生 dns spoofing。
+
+## 流程
+### 生成`TSIG`
+#### `dnsssec-kengen`工具
+使用bind提供的工具`dnsssec-kengen`生成共享密钥。
+```text
+dnssec-keygen  
+DNSSEC 密钥生成工具
+
+-a 选择加密算法
+    对于DNSSEC 值必须是 RSAMD5, RSASHA1(强制实现), DSA(推荐), NSEC3RSASHA1, NSEC3DSA, RSASHA256, RSASHA512, ECCGOST
+    对于TSIG/TKEY, 值必须是DH (Diffie Hellman), HMAC-MD5(强制实现),HMAC-SHA1, HMAC-SHA224, HMAC-SHA256, HMAC-SHA384, HMAC-SHA512
+
+-b 指定密钥中的位数。
+    密钥大小的选择取决于使用的算法。
+    RSAMD5 和 RSASHA1 密钥必须在 512 和 2048 位之间。
+    Diffie-Hellman 密钥必须在 128 和 4096 位之间。
+    DSA 密钥必须在 512 和 1024 位之间，并且必须是 64 的整数倍。
+    HMAC-MD5 密钥必须在 1 位和 512 位之间。
+
+-f  在 KEY/DNSKEY 记录的标志字段中设置指定的标志。唯一识别的标志是 KSK（Key Signing Key，密钥签名密钥）DNSKEY。
+
+-h 列出 dnssec-keygen 的选项和参数的简短摘要
+
+-n 指定密钥的所有者类型,可以选择ZONE或者HOST。
+    nametype 的值必须是 ZONE（对于 DNSSEC 区域密钥 (KEY/DNSKEY)）、HOST 或 ENTITY（对于与主机相关的密钥 (KEY)）、USER（对于与用户相关的密钥 (KEY)）或 OTHER (DNSKEY).
+    这些值不区分大小写。缺省值是 ZONE（用于生成 DNSKEY）
+
+-r 指定随机源，有助与生成速度。
+    如果操作系统不提供 /dev/random 或等效设备，则缺省的随机源是键盘输入.
+
+-K（大写） <directory>: 设置要写入的密钥文件的目录
+```
+#### 在主DNS服务器中生成密钥
+```bash
+#dnssec-keygen -a HMAC-SHA512 -b 512 -n HOST -K /root/dnskey/ -r /dev/urandom hunk-tech-key
+
+选项解读：
+    -a HMAC-SHA512  :采用HMAC-SHA512加密算法
+    -b 512          :生成的密钥长度为512位
+    -n HOST         :指定密钥的所有者类型为主机类型
+    -K /root/dnskey/:指定生成密钥的目录
+    -r /dev/urandom :指定生成密钥使用的随机数来源，否则将会让你在键盘上敲入随机字符，导致会非常慢。
+    hunk-tech-key   :密钥的名称
+```
+
+之后，会在指定的目录/root/dnskey/生成2个文件。
+```c
+Khunk-tech-key.+165+40008.key     # 公钥
+Khunk-tech-key.+165+40008.private # 私钥
+
+内容类似如下：
+#cat Khunk-tech-key.+165+40008.key 
+hunk-tech-key. IN KEY 512 3 165 MmQEQV+fSKe/uEKfxcpMa4avCFPTY3ipmcg+JqaPU2dV9yYx9rOdXesP aVnUyv6XarzJ3ml1H2gCgR0cDf3TGg==
+
+#cat Khunk-tech-key.+165+40008.private 
+Private-key-format: v1.3
+Algorithm: 165 (HMAC_SHA512)
+Key: MmQEQV+fSKe/uEKfxcpMa4avCFPTY3ipmcg+JqaPU2dV9yYx9rOdXesP aVnUyv6XarzJ3ml1H2gCgR0cDf3TGg==
+Bits: AAA=
+Created: 20180206083046
+Publish: 20180206083046
+Activate: 20180206083046
+
+```
+
+注：TSIG 只有一组密码，并无公开/私密金钥之分。如上，2个文件中的Key是相同的。
+
+
+#### 在主DNS服务器上创建密钥验证文件
+```bash
+#vim /etc/named/dns-key
+
+key "hunk-tech-key" {   > 这个双引号内填写的字符串可以是任意的。这个字符串主从必须要一致。这个例子使用dnssec-keygen生成时指定的密钥的名称
+        algorithm HMAC-SHA512;   > 这个加密算法填写的是dnssec-keygen生成时指定的加密算法
+        secret "MmQEQV+fSKe/uEKfxcpMa4avCFPTY3ipmcg+JqaPU2dV9yYx9rOdXesPaVnUyv6XarzJ3ml1H2gCgR0cDf3TGg==";  > 这里填写的生成密钥中K*.private文件中的key值。注意双引号和分号
+};
+```
+
+修改密钥验证文件所有者与权限
+```bash
+#chown root:named /etc/named/dns-key
+#chmod 640 /etc/named/dns-key
+```
+
+#### 修改主DNS服务器的主配置文件
+```bash
+# vim /etc/named.conf
+include "/etc/named/dns-key"; # 加载秘钥验证文件
+options {
+    allow-transfer { key hunk-tech-key; };       > 定义有key的主机才能同步。
+    notify yes;
+    ....
+}
+```
+
+或者 
+
+```bash
+# vim /etc/named.conf
+
+include "/etc/named/dns-key"; # 加载秘钥验证文件
+
+options {
+    .....
+    dnssec-enable yes;
+    dnssec-validation yes;
+    allow-update { localhost;192.168.7.253; };      > 定义仅有本机和从DNS才可以动态更新
+    allow-transfer { localhost;192.168.7.253; };    > 定义只允许本机和从DNS主机才能使用区域传送
+    notify yes;
+    .....
+}
+
+以下行不在全局定义的范围内，不要误写入options的{ }中
+server 192.168.7.253 { keys hunk-tech-key; };       > 定义与从dns服务器使用密钥通讯
+```
+
+
+#### 从DNS服务器创建密钥认证文件
+方法一：从主服务器导入密钥验证文件
+```bash
+为了确保传输的文件没有被破坏，请使用md5sum之类的哈希算法进行校验
+#md5sum /etc/named/dns-key > /etc/named/md5sum
+#scp /etc/named/* 192.168.7.253:/etc/named/
+```
+
+方法二：在从DNS服务器上面创建完全相同内容的密钥认证文件
+
+
+然后，修改密钥验证文件所有者与权限。
+```
+#chown root:named /etc/named/dns-key
+#chmod 640 /etc/named/dns-key
+```
+#### 修改从DNS服务器的主配置文件
+```bash
+# vim /etc/named.conf
+
+include "/etc/named/dns-key"; # 加载秘钥验证文件
+
+options {
+    .....
+    dnssec-enable yes;
+    dnssec-validation yes;
+    allow-update { none; };             > 不允许客户端动态更新
+    allow-transfer { localhost; };      > 定义只允许本机才能使用区域传送
+    ......
+}
+
+如果只想要在某个zone中使用密钥传送，按以下写法即可
+    zone "hunk.tech" {
+            type slave;
+            masters { 192.168.7.254 key hunk-tech-key; };
+            ...
+    }
+
+如果有多个zone中需要使用密钥传送，保持zone的设置不更改，只需要定义一个全局的server配置项即可
+    server 192.168.7.254 { keys hunk-tech-key; };
+```
+
+#### 在主DNS服务以及从服务器上生效配置
+分别在主服务器，从服务器上执行下面的命令。
+```bash
+#named-checkconf
+#rndc reload
+```
+
+
+#### 测试TSIG
+在从DNS服务器
+```
+#dig -t axfr hunk.tech -k /etc/named/dns-key @192.168.7.254    > -k 指定密钥
+```
+使用专用的动态更新工具来测试
+```
+#nsupdate -k /etc/named/dns-key 
+> server 192.168.7.254
+> zone hunk.tech
+> update add 9.hunk.tech 600 A 9.9.9.9
+> send
+> quit
+```
+
+在主DNS服务器日志中可以看到
+```
+client 192.168.7.254#42738: view net_192: signer "hunk-tech-key" approved
+client 192.168.7.254#42738: view net_192: updating zone 'hunk.tech/IN': adding an RR at '9.hunk.tech' A
+```
+
+在从DNS服务器日志中可以看到
+```
+transfer of 'hunk.tech/IN/net_192' from 192.168.7.254#53: connected using 192.168.7.253#34324
+zone hunk.tech/IN/net_192: transferred serial 61: TSIG 'hunk-tech-key'
+transfer of 'hunk.tech/IN/net_192' from 192.168.7.254#53: Transfer completed: 1 messages, 11 records, 428 bytes, 0.006 secs (71333 bytes/sec)
+```
+
+#### 配置zone同步key
+由于bind的主辅同步可以控制到具体的zone，所以TSIG可以对不同的zone，配置不同的TSIG，不过要通过view配置。
+
+如主服务器：
+```bash
+view "tisg"{
+    match-clients{
+        key "tisg";
+        192.168.36.0/24;
+    };
+    allow-transfer { key xxx; };
+    zone "."{
+        type hint;
+        file "named.root";
+    };
+    zone "test.com"{
+        type master;
+        also-notify{
+            192.168.36.189;
+        };
+        file "tisg/test.com.zone";
+    };
+};
+```
+
+如辅服务器：
+```bash
+view "tisg"{
+    match-clients{
+        key "tisg";
+        192.168.36.0/24;
+    };
+    allow-transfer { key xxx; };
+    zone "."{
+        type hint;
+        file "/var/named/named.root";
+    };
+    zone "test.com"{
+        type slave;
+        masters{
+            192.168.36.54;
+        };
+        file "tisg/test.com.zone";
+    };
+};
+```
+
 # DNS测试工具
 常见的DNS测试工具为 `dig`, `host`, `nslookup` 等。
 
@@ -1819,4 +2708,14 @@ https://bind9.readthedocs.io/en/latest/
 
 # bind9 
 https://kb.isc.org/docs/aa-00726
+
+# Centos DNS服务(二)-bind主从配置与基于TSIG加密的动态更新
+https://developer.aliyun.com/article/486620
+
+# DNS和bind从基础到深入
+https://www.junmajinlong.com/linux/dns_bind/index.html
+
+
+# Bind 之recursion递归
+http://www.hangdaowangluo.com/archives/1631
 ```

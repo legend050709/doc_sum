@@ -3,6 +3,7 @@
 # EDNS
 ## EDNS定义
 扩展DNS机制EDNS(Extension Mechanisms for DNS)：在遵循已有的DNS消息格式的基础上增加一些字段，来支持更多的DNS请求业务。
+
 第一组扩展由Internet工程任务组于1999年发布，名称为RFC2671，也称为EDNS0，由RFC6891在2013年进行了更新，将缩写略微更改为EDNS（0）。
 
 需要注意的是，像DNS服务器这样一个大型且广泛应用的系统软件，新增加扩展协议的时候一定要考虑到向后兼容性(backward compatibility)，即你增加了你这个特性的消息传输给未支持该特性的服务器时，后者依然能正确处理。
@@ -152,7 +153,42 @@ ECS 简单说就是把用户的IP信息暴露给权威DNS服务器。但为了�
 将DNS请求通过HttpDNS接口发起查询。
 这样绕过了运营商的LocalDNS，用户解析域名的请求通过Http协议直接透传到了腾讯的HttpDNS服务器IP上，用户在客户端的域名解析请求将不会遭受到运营商解析转发，DNS污染，劫持，出口多NAT等等困扰
 
-## 范例
+## ECS使用
+在`bind` `9.11`中需要开启ECS需要在编译的时候指定`Geoip`:
+```bash
+yum install -y  GeoIP  
+./configure --with-geoip=--with-geoip=/usr/share/GeoIP/
+```
+
+### EDNS中ACL配置
+目前bind的ACL中是把ECS 带的Client地址作为一个独立的特征做匹配
+![](attachments/Pasted%20image%2020240120114451.png)
+如上所示，EDNS的ECS配置和报文IP层的SIP的配置不同。
+
+范例：
+```bash
+acl zone1 { ecs 10.0.0.0/8 ;  10.0.0.0/8;  };  
+acl zone2 { ecs 172.0.0.0/8; 172.0.0.0/8; };  
+view  "zone1" { match-clients  {zone1;}; zone "test.org" { type master; file "zone/test.org" ;}; };  
+view  "zone2" { match-clients  {zone2;}; zone "test.org" { type master; file "zone2/test.org" ;}; };
+```
+发现IP头SIP在10.0.0.0/8内的源地址，带172.0.0.0/8的subnet时始终命中zone1，无法到达预期的效果。
+原因：**鉴于bind acl并非是最精确匹配，只是线性匹配，配置的时候必须要把ecs view写在最前面**，否则即使请求带了ECS OPTION，也会因为源地址先匹配到其他view而达不到效果。
+
+
+正确的写法：
+```bash
+acl zone1 { ecs 10.0.0.0/8;  10.0.0.0/8;  };  
+acl zone2 { ecs 172.0.0.0/8;172.0.0.0/8; };  
+acl ecs-zone1 { ecs 10.0.0.0/8;  };  
+acl ecs-zone2 { ecs 172.0.0.0/8;};  
+view  "ecs-zone1" { match-clients  {ecs-zone1;}; zone "test.org" { type master; file "ecszone/test.org" ;}; };  
+view  "ecs-zone2" { match-clients  {ecs-zone2;}; zone "test.org" { type master; file "ecszone2/test.org" ;}; };  
+view  "zone1" { match-clients  {zone1;}; zone "test.org" { type master; file "zone/test.org" ;}; };  
+view  "zone2" { match-clients  {zone2;}; zone "test.org" { type master; file "zone2/test.org" ;}; };
+```
+
+## ECS范例
 用200.0.0.1/24作为用户所在的网段：
 ```bash
 $ dig -t A www.zhxfei.com @172.16.130.129 +subnet=200.0.0.1/24

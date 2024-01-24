@@ -8,7 +8,6 @@ rndc（Remote Name Domain Controllerr）是一个远程管理bind的工具，通
 rndc 可以运行在其他计算机上，通过网络与DNS服务器进行连接，然后根据管理员的指令对named进程进行远程控制，此时，管理员不需要DNS服务器的根用户权限。
 
 # 流程
-
 `rndc`  通过一个 TCP 连接与DNS服务器实行连接时，需要通过数字证书进行认证，而不是传统的用户名/密码方式。
 `rndc` 在连接通道中发送命令时，必须使用经过服务器认可的密钥加密。
 因此，使用`rndc`管理`bind`前需要使用`rndc`生成一对密钥文件，一个保存于`rndc`的配置文件中，另一个保存于 `bind` 主配置文件中。
@@ -16,89 +15,8 @@ rndc 可以运行在其他计算机上，通过网络与DNS服务器进行连接
 > 为了生成双方都认可的密钥，可以使用`rndc-confgen`命令产生密钥和相应的配置，再把这些配置分别放入`named.conf`和`rndc`的配置文件`rndc.conf`中。
 
 `rndc`默认监听在953号端口（TCP），其实在bind9中`rndc`默认就是可以使用，不需要配置密钥文件。
-# 使用
-## 生成rndc的key
-### 原理
-在当前版本下，rndc和named都只支持HMAC-MD5认证算法，在通信两端使用共享密钥。
-它为命令请求和named的响应提供 TSIG类型的认证。所有经由通道发送的命令都必须被一个服务器所知道的 key_id 签名。
-为了生成双方都认可的密钥，可以使用`rndc-confgen`命令产生密钥和相应的配置，再把这些配置分别放入`named.conf`和`rndc`的配置文件`rndc.conf`中。
 
-如果`rndc-confgen`命令执行时卡住，是因为系统的熵值不足了。因为`rndc-confgen`命令默认会去`/dev/random`和`/dev/urandom`读取随机数生成密钥，第一顺序是`/dev/random`。
-
-- `/dev/random`：从熵池中取随机数，如果熵池中的随机数被用尽，则阻塞相关进程
-- `/dev/urandom`：从熵池中取随机数，如果熵池中的随机数被用尽，则用软件生成伪随机数
-
-```bash
-rndc-confgen -r /dev/urandom >/etc/rndc.conf
-```
-
-### 范例
-执行命令`rndc-confgen`，生成rndc的key，内容如下：
-```bash
-[root@k8s-dns ~]# rndc-confgen -r /dev/urandom
-# Start of rndc.conf
-key "rndc-key" {
-        algorithm hmac-md5;
-        secret "PmY9ozjj3+pkKJ4NXLpIlQ==";
-};
-
-options {
-        default-key "rndc-key";
-        default-server 127.0.0.1;
-        default-port 953;
-};
-# End of rndc.conf
-
-# Use with the following in named.conf, adjusting the allow list as needed:
-# key "rndc-key" {
-#       algorithm hmac-md5;
-#       secret "PmY9ozjj3+pkKJ4NXLpIlQ==";
-# };
-# 
-# controls {
-#       inet 127.0.0.1 port 953
-#               allow { 127.0.0.1; } keys { "rndc-key"; };
-# };
-# End of named.conf
-```
-
-- **更新控制器设备上的 `rndc.conf` 配置文件**
-然后更新 `rndc.conf` 配置文件，将`rndc-confgen`生成的如下部分复制到`rndc.conf`文件中：
-```bash
-[root@k8s-dns ~]# cat /etc/rndc.conf 
-# Start of rndc.conf
-key "rndc-key" {
-        algorithm hmac-md5;
-        secret "waEmuOMU3OnrTsvdOBDQdQ==";
-};
-
-options {
-        default-key "rndc-key";
-        default-server 10.1.1.250;
-        default-port 953;
-};
-```
-
-- **更新DNS服务器上的 `rndc.key` 配置文件**
-再然后更新DNS服务器上的`rndc.key`配置文件，将`1rndc-confgen`生成的如下部分复制到`rndc.key`文件中：
-> 注：服务器中的 `/etc/named.conf` 配置中 include了 `rndc.key` 配置文件 。
-
-
-```
-[root@k8s-dns ~]# cat /etc/rndc.key 
-key "rndc-key" {
-      algorithm hmac-md5;
-      secret "waEmuOMU3OnrTsvdOBDQdQ==";
-};
-
-controls {
-      inet 10.1.1.250 port 953
-              allow { 10.1.1.250;10.1.1.254; } keys { "rndc-key"; };
-};
-```
-**注意**：这里要配置一下controls段的acl，限定好哪些主机可以使用`rndc`远程管理DNS服务。
-## rndc使用
-### 语法
+# 语法
 ```bash
 # rndc --help
 rndc: invalid argument --
@@ -220,7 +138,161 @@ command is one of the following:
 `-s server`: 指定远程DNS服务器的地址。若不显示置顶，默认为`127.0.0.1`
 `-p port`：指定`rndc`连接远程的 Port，若不显式指定，则默认为`953`。
 
-### 常用命令
+```bash
+语法格式：
+rndc --> rndc (953/tcp)
+rndc COMMAND
+
+COMMAND:
+    reload:             重载主配置文件和区域解析库文件
+    reload zonename:    重载区域解析库文件
+    retransfer zonename: 手动启动区域传送，而不管序列号是否增加
+    notify zonename:    重新对区域传送发通知
+    reconfig:           重载主配置文件
+    querylog:           开启或关闭查询日志文件/var/log/message.可以详细到DNS查询的细节。生产中不建议打开，除非用于排错。
+    trace:              递增debug一个级别
+	    trace LEVEL:    指定使用的级别
+    notrace：           将调试级别设置为 0
+    flush：             清空DNS服务器的所有缓存记录
+    freeze              关闭动态更新
+    thaw                启用动态更新
+```
+
+# 生成rndc的key
+## 原理
+在当前版本下，rndc和named都只支持HMAC-MD5认证算法，在通信两端使用共享密钥。
+它为命令请求和named的响应提供 TSIG类型的认证。所有经由通道发送的命令都必须被一个服务器所知道的 key_id 签名。
+为了生成双方都认可的密钥，可以使用`rndc-confgen`命令产生密钥和相应的配置，再把这些配置分别放入`named.conf`和`rndc`的配置文件`rndc.conf`中。
+
+如果`rndc-confgen`命令执行时卡住，是因为系统的熵值不足了。因为`rndc-confgen`命令默认会去`/dev/random`和`/dev/urandom`读取随机数生成密钥，第一顺序是`/dev/random`。
+
+- `/dev/random`：从熵池中取随机数，如果熵池中的随机数被用尽，则阻塞相关进程
+- `/dev/urandom`：从熵池中取随机数，如果熵池中的随机数被用尽，则用软件生成伪随机数
+
+```bash
+rndc-confgen -r /dev/urandom >/etc/rndc.conf
+```
+
+## 范例
+执行命令`rndc-confgen`，生成rndc的key，内容如下：
+```bash
+[root@k8s-dns ~]# rndc-confgen -r /dev/urandom
+# Start of rndc.conf
+key "rndc-key" {
+        algorithm hmac-md5;
+        secret "PmY9ozjj3+pkKJ4NXLpIlQ==";
+};
+
+options {
+        default-key "rndc-key";
+        default-server 127.0.0.1;
+        default-port 953;
+};
+# End of rndc.conf
+
+# Use with the following in named.conf, adjusting the allow list as needed:
+# key "rndc-key" {
+#       algorithm hmac-md5;
+#       secret "PmY9ozjj3+pkKJ4NXLpIlQ==";
+# };
+# 
+# controls {
+#       inet 127.0.0.1 port 953
+#               allow { 127.0.0.1; } keys { "rndc-key"; };
+# };
+# End of named.conf
+```
+
+### 更新控制器设备上的 `rndc.conf` 配置文件
+然后更新 `rndc.conf` 配置文件，将`rndc-confgen`生成的如下部分复制到`rndc.conf`文件中：
+```bash
+[root@k8s-dns ~]# cat /etc/rndc.conf 
+# Start of rndc.conf
+key "rndc-key" {
+        algorithm hmac-md5;
+        secret "waEmuOMU3OnrTsvdOBDQdQ==";
+};
+
+options {
+        default-key "rndc-key";
+        default-server 10.1.1.250;
+        default-port 953;
+};
+```
+**options段**
+用于配置默认项。可以配置的指令包括default-server、default-port、default-key，表示当没有任何地方指定这些项的值时将采用这些默认值。
+
+**server段**
+用于配置待控制的dns服务器。
+server关键字后接的是dns服务器的主机名或ip地址。在此段落内，可以配置的指令包括：key、port、addresses。
+其中key表示连接此server时将使用该key进行配对；
+port表示要连接的dns服务器的rndc端口号；
+addresses指定要连接的dns服务器地址；当使用了该指令时将替代server关键字后的主机名或ip地址，addresses后可以紧跟着端口号。
+
+**key段**
+定义key值。只有两个指令，一个是algorithm，目前只支持hmac-md5，另一个指令是secret，表示该key段所使用的key。secret段加密的key可以使用rndc-confgen生成，只需使用不同的随机数即可。
+
+以下是在172.16.10.16上设置的rndc.conf，用于控制172.16.10.9和172.16.10.15这两台dns服务器。
+```bash
+key "rndc-key" {  
+        algorithm hmac-md5;  
+        secret "QDCyDaU8El7quzv3vB3z9A==";  
+};  
+  
+options {  
+        default-key "rndc-key";  
+        default-server 127.0.0.1;  
+        default-port 953;  
+};  
+  
+server localhost {  
+    key    "rndc-key";  
+};  
+  
+server 172.16.10.9 {  
+    key  "rndc-key";  
+    port 953;  
+};  
+  
+server 172.16.10.15 {  
+    key "rndc-key";  
+    port 953;  
+};   
+  
+# Use with the following in named.conf, adjusting the allow list as needed:  
+# key "rndc-key" {  
+#       algorithm hmac-md5;  
+#       secret "QDCyDaU8El7quzv3vB3z9A==";  
+# };  
+#   
+# controls {  
+#       inet 127.0.0.1 port 953  
+#        allow { 127.0.0.1; } keys { "rndc-key"; };  
+# };  
+# End of named.conf
+```
+
+### 更新受控制DNS服务器上的 `rndc.key` 配置文件
+再然后更新DNS服务器上的`rndc.key`配置文件，将`1rndc-confgen`生成的如下部分复制到`rndc.key`文件中：
+> 注：服务器中的 `/etc/named.conf` 配置中 include了 `rndc.key` 配置文件 。
+
+
+```
+[root@k8s-dns ~]# cat /etc/rndc.key 
+key "rndc-key" {
+      algorithm hmac-md5;
+      secret "waEmuOMU3OnrTsvdOBDQdQ==";
+};
+
+controls {
+      inet 10.1.1.250 port 953
+              allow { 10.1.1.250;10.1.1.254; } keys { "rndc-key"; };
+};
+```
+**注意**：这里要配置一下controls段的acl，限定好哪些主机可以使用`rndc`远程管理DNS服务。
+# rndc使用
+
+## 常用命令
 >说明：`rndc`命令后面可以跟”-s”和”-p”选项连接到远程DNS服务器，以便对远程DNS服务器进行管理，但此时双方的密钥要一致才能正常连接。
 >在设置`rndc.conf`时一定要注意`key`的名称和预共享密钥一定要和`named.conf`相同，否则`rndc`工具无法正常工作。
 
@@ -271,11 +343,11 @@ delzone  zone  [class [view]]                   #删除一个zone
 
 
 
-#### 检查rndc管理状态
+## 检查rndc管理状态
 ```shell
 rndc status
 ```
-####  rndc 管理静态域
+##  rndc 管理静态域
 在静态域修改区域数据库文件(zone文件)后（包含zone中的`serial number`），使用以下命令重新加载区域数据库配置。
 如下，修改了`whbblog.cn`对应的zone文件之后，使用下列方式进行加载。
 ```shell
@@ -284,7 +356,7 @@ zone reload up-to-date
 You have new mail in /var/spool/mail/root
 ```
 
-#### rndc 管理动态态域
+## rndc 管理动态态域
 在动态域修改区域数据库文件后，使用以下命令冻结区域数据库文件配置。
 ```shell
 [root@localhost ~]# rndc  freeze host.com
@@ -320,8 +392,19 @@ The zone reload and thaw was successful.
 You have new mail in /var/spool/mail/root
 ```
 
-### 范例
-#### 查询DNS服务状态（可以取值做监控）
+## 查询缓存
+```bash
+rndc dumpdb
+```
+## 清空DNS缓存
+```bash
+rndc flush
+```
+
+
+
+# 范例
+## 查询DNS服务状态（可以取值做监控）
 ```bash
 # rndc 和 named 服务在一个机器上
 rndc -c /etc/rndc.conf status
@@ -347,7 +430,7 @@ tcp clients: 0/100
 server is up and running
 ```
 
-#### 管理静态域(allow-update { none; };)
+## 管理静态域(allow-update { none; };)
 ```json
 zone "boy.com" IN {
     type master;
@@ -362,7 +445,7 @@ zone "boy.com" IN {
 zone reload up-to-date
 ```
 
-#### 管理动态域（allow-update { 10.1.1.250; };）
+## 管理动态域（allow-update { 10.1.1.250; };）
 ```json
 zone "boysec.cn" IN {
     type master;

@@ -10,6 +10,9 @@ DNS-Rcode作为DNS应答报文中有效的字段，主要用来说明DNS应答�
 
 # DNS请求结果具体分析
 ## NXDOMAIN
+```bash
+NXDOMAIN is nothing but non-existent Internet or Intranet domain name.
+```
 域名记录不存在，即Rcode值为3（NXDOMAIN）的情况。
 这种情况下域名权威服务器及托管的主域名(zone)均正常，但是权威并不存在这条具体的域名记录，于是权威返回了`NXDOMAIN`。
 值的注意的是这个`NXDOMAIN`的报文中会包含一个`AUTHORITY SECTION`，内容为该主域名的SOA记录（对应zone中的SOA记录），这个应答结果会在递归服务器中被缓存，缓存时间周期为域名的SOA记录的TTL：
@@ -54,6 +57,16 @@ DNS-Rcode作为DNS应答报文中有效的字段，主要用来说明DNS应答�
 ## 小结
 ![](attachments/Pasted%20image%2020240104141446.png)
 
+# 其他
+## NODATA 和 NXDOMAIN 的区别
+`NODATA`意味着该域存在，但没有关于该域的信息与该域关联的指定类型（如A记录）。 如果域本身不存在，将会看到`NXDOMAIN`。
+`NXDOMAIN（代表Rcode=3）`是 `Rcode`响应码的一种；
+但是 `there isn’t an RCODE associated with NODATA.`, 即 `Nodata` 并不是`Rcode`响应码的一种；对于`Nodata`，意味着`rcode`为`noerror`但是`answer`个数为0。
+```bash
+dig represents NODATA by displaying NOERROR with an ANSWER of zero. So what does NOERROR with an ANSWER of 0 actually represent? It means one or more resource records exist for this domain but there isn’t a record matching the resource record _type_ (A, AAAA, MX, etc.).
+```
+
+
 # 解析故障排查技巧
 
 # 参考
@@ -63,4 +76,7 @@ https://zhuanlan.zhihu.com/p/40659713
 
 # 跟我学-域名解析故障排查技巧
 https://zhuanlan.zhihu.com/p/101378917
+
+# 管理DNS和DNS服务器--DNS问题故障排除
+https://developer.aliyun.com/article/887065?spm=a2c6h.27925324.detail.200.74b6622c3kpi5u
 ```

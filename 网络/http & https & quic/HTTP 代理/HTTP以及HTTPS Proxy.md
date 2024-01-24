@@ -105,6 +105,7 @@ client访问百度，client中不会进行DNS解析，先和代理服务器进�
 ![](attachments/Pasted%20image%2020240110142604.png)
 Client中先进行DNS解析，获取服务器的IP地址，然后进行TCP三次握手，发起HTTP请求，HTTP请求的路径是相对路径。
 
+
 ### 常见问题
 #### 代理无效问题
 - 应用程序不读取环境变量的问题
@@ -119,6 +120,24 @@ Client中先进行DNS解析，获取服务器的IP地址，然后进行TCP三次
 # export Http_Proxy=http://xx.xx.xx.xx:9707
 ```
 
+**范例**：
+```text
+(1) 访问特定网络地址，无法访问
+
+# wget http://www.google.com
+--2022-11-25 20:26:46--  https://www.google.com/
+Resolving www.google.com (www.google.com)... 104.244.46.63, 2001::480e:cf5f
+Connecting to www.google.com (www.google.com)|104.244.46.63|:443... ^C
+
+(2)配置网络代理
+# export https_proxy=http://xx.xx.xx.xx:9707
+
+重新执行：# wget http://www.google.com
+仍然无法访问，这是因为本次网络访问使用的是http协议，而设置的环境变量却是https_proxy。
+
+假设改用https来访问：# wget https://www.google.com
+则访问成功
+```
 ## 反向代理
 
 
