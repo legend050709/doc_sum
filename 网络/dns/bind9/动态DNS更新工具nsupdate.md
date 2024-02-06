@@ -1,12 +1,16 @@
 ```table-of-contents
 ```
 # 介绍
-可以向主DNS服务器提交更新记录的请求，它可以从区文件中添加或删除资源记录，而不需要手动进行编辑zone文件。
+ nsupdate是一个动态DNS更新工具，可以向主DNS服务器提交更新记录的请求，它可以从区文件中添加或删除资源记录，而不需要手动进行编辑zone文件。
 
-**必须的条件：指定的zone语句块或全局中添加：allow-update { any; }; 或 allow-update { IP范围; };**
-> 如果 "allow-update" 为 none，表示不允许动态更新。
+​ 使用nsupdate 不会更改区域数据库文件，而是产生了一个jnl的数据文件，不能使用文本编辑器打开，只能使用完全区域数据传送查看。
 
-# 语法
+注：jnl文件（journal文件）是BIND9**动态更新**的时候记录更新内容所生成的日志文件。
+
+
+
+# 使用
+## 语法
 ```bash
 语法：
     nsupdate [-dD] [-L level] [-l][-g | -o | -y keyname:secret | -k keyfile] [-v] [filename]
@@ -18,11 +22,16 @@
 filename:可以从终端或文件中读取命令.每个命令一行；一个空行或一个”send”命令,则会将先前输入的命令发送到DNS服务器上
 ```
 
+
+**必须的条件**：
+指定的zone语句块或全局中添加：allow-update { any; }; 或 allow-update { IP范围; };
+> 如果 "allow-update" 为 none，表示不允许动态更新。
+
 ```
 （1）指定密钥
 # nsupdate -k /etc/named/dns-key
 
-（2）更新命令
+（2）添加删除命令
 update delete|add {domain-name} [ttl] [class] [type [data...]]
 
 说明：
@@ -30,6 +39,22 @@ update delete|add {domain-name} [ttl] [class] [type [data...]]
 	ttl可以单独写一行，后面的行继承此值
 ```
 
+**更新一条记录**
+不支持直接更新，需要先执行删除，再新增。
+
+## 使用小结
+nsupdate使用小结：
+- 优点
+    - 不用手动变更SOA的serial序列号，自动滚动
+    - 不需要重启/重载BIND9服务/配置，生效快
+    - 可以通过配置acl实现远程管理
+
+- 缺点
+    - jnl文件无法使用文本文件的方式打开
+    - 只能依赖完全区域传送查看所有区域的记录
+    - 更新操作复杂，先删再增
+    - 远程管理有安全隐患，需要加强审计
+    - 动态域在rndc管理上多一步
 
 # 范例
 
@@ -76,13 +101,23 @@ www                     CNAME   6-WEB-1
 > update add hunk.tech 600 IN A 192.168.7.204 >添加A记录
 > update delete hunk.tech A 192.168.7.204     >删除A记录
 > send                  > 发送更新指令到DNS服务器
+> quit
 ```
 
-从文件读取指令
+**从文件读取指令**
 ```
 #nsupdate update_dns.txt
 文件中的指令与交互式是一样的，一行一条指令
 ```
+
+
+**查看区域数据库文件**:
+`/var/named`  产生了一个jnl的数据文件，不能使用文本编辑器打开。jnl文件（journal文件）是BIND9动态更新的时候记录更新内容所生成的日志文件。
+
+
+
+
+
 # 多个view的时候使用nsupdate更新记录
 ## 背景
 经常使用bind的时候是划分不同的view的，因为每个view的zone需要单独修改，所以人肉修改是比较麻烦的。这个时候可以使用nsupdate进行批量的操作。只要注意每个view使用正确的记录就行。
@@ -339,5 +374,9 @@ esac
 ```
 # 参考
 ```c
+# bind主从配置与基于TSIG加密的动态更新
 https://developer.aliyun.com/article/486620
+
+# 构建企业级DNS系统（六）DNS动态更新
+https://blog.csdn.net/u011288801/article/details/106870698
 ```

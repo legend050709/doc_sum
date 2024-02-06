@@ -461,7 +461,7 @@ TX errors 0 dropped 0 overruns 0 carrier 0 collisions 0
 # 丢包分析
 入队（入 ring buffer）丢包主要集中在PCIe异常“降速”方面。因为报文从网卡到系统是通过DMA经过PCIe总线来传输的，PCIe总线的吞吐将直接影响入队的速率。
 
-出队(出ring buffer)问题主要集中在==应用程序性能不高、程序设计不优和CPU错误降频==等方面。
+出队(出ring buffer)问题主要集中在==应用程序性能不高、程序设计不优和CPU错误降频、CPU被其他的进程抢占==等方面。
 
 ## 丢包统计
 ```c

@@ -92,5 +92,9 @@ IPv6 DNS 地址：2620:119:35::35 / 2620:119:53::53
 ```
 # 参考
 ```bash
+# 如何选择适合的公共 DNS？
+https://blog.skk.moe/post/which-public-dns-to-use/
 
+# 我有特别的 DNS 配置和使用技巧
+https://blog.skk.moe/post/i-have-my-unique-dns-setup/
 ```

@@ -395,11 +395,9 @@ https://bind9.readthedocs.io/en/latest/reference.html
 https://www.zytrax.com/books/dns/ch7/rpz.html
 
 
-
-
 # 腾讯云的DNS的文章大全
 https://cloud.tencent.com/developer/tag/10707
 
-
-
+# bind rpz使用注意事项
+https://blog.gnuers.org/?p=1062
 ```

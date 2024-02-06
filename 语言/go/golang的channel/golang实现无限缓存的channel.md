@@ -1,3 +1,5 @@
+```table-of-contents
+```
 # 背景
 Go语言的channel有两种类型，一种是无缓存的channel，一种是有缓存的buffer，这两种类型的channel大家都比较熟悉了，但是对于有缓存的channel,它的缓存长度在创建channel的时候就已经确定了，中间不能扩缩容，这导致在一些场景下使用有问题，或者说不太适合特定的场景。
 

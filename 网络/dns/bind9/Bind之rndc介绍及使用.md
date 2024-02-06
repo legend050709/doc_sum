@@ -343,20 +343,66 @@ delzone  zone  [class [view]]                   #删除一个zone
 
 
 
-## 检查rndc管理状态
+## `rndc status`检查rndc管理状态
 ```shell
 rndc status
 ```
-##  rndc 管理静态域
-在静态域修改区域数据库文件(zone文件)后（包含zone中的`serial number`），使用以下命令重新加载区域数据库配置。
-如下，修改了`whbblog.cn`对应的zone文件之后，使用下列方式进行加载。
-```shell
-[root@localhost ~]# rndc reload whbblog.cn
-zone reload up-to-date
-You have new mail in /var/spool/mail/root
+## rndc 管理域
+
+named 命令允许动态更新。一个区域可以设置成动态或静态。缺省值为静态。
+要使一个区域成为动态区域，必须将关键字 allow-update 添加到bind配置文件中的该区域的部分中。allow-update 关键字指定一个因特网地址匹配列表，该列表定义允许提交更新的主机。
+
+简单的理解，在zone配置中如果allow-update的值不是none，那么这个zone就是一个动态zone；反之，如果没有填写allow-update或者值为none，那么这个zone为静态static。
+
+静态修改，即直接修改 zone文件。
+动态修改，则是通过 nsupdate 修改，其实修改的是named中的内存，zone文件并没有修改。
+
+###  `rndc reload`管理静态域
+使用：
+```bash
+reload  重新载入配置文件和区文件  
+用法：  
+	rndc reload  
+  
+reload zone [class [view]]  
+重新载入指定的区文件
 ```
 
-## rndc 管理动态态域
+在静态域修改区域数据库文件(zone文件)后（包含zone中的`serial number`），使用以下命令重新加载区域数据库配置。
+
+```bash
+zone "od.com" IN {  
+	type master;  
+	file "od.com.zone";  
+	allow-update { none; };  
+};
+```
+静态域zone文件,增、删、改一条记录后；
+```bash
+# rndc reload od.com  
+zone reload up-to-date
+```
+
+
+### 管理动态态域
+**前提条件**：
+在区域配置文件中 添加 allow-update { acl; }; 表示根据acl指定策略进行动态更新。可填写ip地址。
+
+**原理**
+使用nsupdate等工具进行动态配置，不需要手动前滚serial number，自动通知辅DNS更新。
+
+
+
+```bash
+freeze [zone[class[view]]]   
+	冻结一个动态更新区的更新.如果没有指定的区，那么就冻结所有区的动态更新.
+	
+	这就允许对一个动态更新的区进行手工编辑.它也会导致日志文件中的变化被同步到主服务器,然后删除日志文件.在区被冻结时，所有的动态更新尝试都会拒绝.  
+  
+thaw [zone[class[view]]]  
+	解冻一个被冻结的动态更新区.
+```
+
 在动态域修改区域数据库文件后，使用以下命令冻结区域数据库文件配置。
 ```shell
 [root@localhost ~]# rndc  freeze host.com
@@ -391,6 +437,111 @@ You have new mail in /var/spool/mail/root
 The zone reload and thaw was successful.
 You have new mail in /var/spool/mail/root
 ```
+#### 范例
+```bash
+zone "host.com" IN {  
+	type master;  
+	file "host.com.zone";  
+	allow-update { 10.4.7.11; };  
+};
+```
+动态（nsupdate）增、删、改一条记录后。
+```bash
+#rndc reload host.com  
+rndc: 'reload' failed: dynamic zone
+```
+直接`reload`会报错，需要先`freeze`再`thaw`才行;
+```bash
+#rndc freeze host.com  
+#rndc thaw host.com  
+The zone reload and thaw was successful.
+```
+
+#### 使用规范
+1》使用 `nsupdate` 进行 动态更新。
+  （可选）使用 `rndc sync` 将内存中的信息保存到zone文件中。
+2》`rndc freeze` 冻结动态更新。
+3》手动更改 zone文件。
+4》 `rndc thaw`：解冻动态更新，并且 reload 配置。
+
+#### 其他
+
+#### 问题和解决
+**问题**
+今天想在不关闭bind的情况下更新一下zone文件，用了`rndc reload`命令也都返回reload成功但是利用dig命令检测发现解析并没有被更改。后来用了 `rndc reload xxx.top` 提示
+`rndc: reload failed: dynamic zone`。
+
+**解决**
+```bash
+先暂停动态区域的更新以便进行reload
+rndc freeze xxx.top
+
+进行reload
+rndc reload xxx.top
+
+启用动态区域的更新并重新加载区域文件
+rndc thaw xxx.top
+```
+
+## `rndc sync`将动态更新落盘到zone文件
+Bind9支持区域记录的动态更新，使用nsupdate命令可以动态更新区域内的记录。
+
+例如我们在test.com域中有如下内容：
+```bash
+$TTL 1D
+@       IN SOA  dns.test.com. admin.test.com. (
+                                        4       ; serial
+                                        1D      ; refresh
+                                        1H      ; retry
+                                        1W      ; expire
+                                        3H )    ; minimum
+        NS      dns
+        NS      dns2
+ms      NS      dns2
+tomcat  A       192.168.100.90
+dns2    A       192.168.100.60
+dns     A       192.168.100.50
+Linux   A       192.168.200.30
+www     A       192.168.100.20
+web.test.com.   A       192.168.100.10
+Nginx   CNAME   web.test.com.
+```
+
+我需要添加一条A记录进入该区域。可以使用nsupdate命令行工具。首先在主配置文件中允许某个主机动态更新区域内容。
+```bash
+zone "test.com" IN {
+        type master;
+        file "test.com.zones";
+        allow-transfer { key test.com-key; };
+        allow-update { 192.168.100.60; };    //配置allow-update项
+};
+```
+
+在客户端使用nsupdate命令进行更新。
+```bash
+[root@dns2 ~]# nsupdate
+> server 192.168.100.50
+> zone test.com.
+> update add LDAP.test.com. 86400 A 192.168.100.40
+> send
+```
+
+
+查看zone文件所在的目录变化：
+```bash
+[root@dns1 named]# ll
+······
+-rw-r--r--  1 named named  499 Jun 16 04:59 test.com.zones
+-rw-r--r--  1 named named  705 Jun 16 04:29 test.com.zones.jnl
+-rw-r--r--  1 named named  499 Jun 16 04:51 tmp-28cGJKIgsY
+······
+```
+
+直接查看原有的区域文件，发现内部并没有被改动，实际上的改动结果被储存在tmp开头的文件中，改动的信息被储存在`test.com.zones.jnl`文件（二进制文件不宜修改）中。一般情况下在15分钟内，Bind会将jnl文件转储到区域文件中。
+
+此时添加进入的DNS记录是能够正常提供服务的(即 named的内存中存在更改后的记录)，如果需要实时更新到区域文件中，需要使用`rndc sync`且需要注意区域文件的文件权限。
+
+注：执行完 `rndc sync`之后，区域日志文件（`test.ZONE_NAME.jnl` 文件）比如（`test.com.zones.jnl`文件）就没有必要要了，就可以删除了。`rndc sync clean`完成上诉一些列动作。
 
 ## 查询缓存
 ```bash
@@ -398,11 +549,17 @@ rndc dumpdb
 ```
 ## 清空DNS缓存
 ```bash
-rndc flush
+rndc
+	  flush 	Flushes all of the server's caches.
+	  flush [view]	Flushes the server's cache for a view.
+	  flushname name [view]
+			Flush the given name from the server's cache(s)
+	  flushtree name [view]
+			Flush all names under the given name from the server's cache(s)
 ```
+线上难免会遇到刷新缓存的需求，如果直接用 rndc flush 刷新全量缓存，在有客户端缓存的情况下，在每一次客户端缓存过期的时间都可能会产生极高的 QPS 。
 
-
-
+因此，尽量使用 flushname 或 flushtree 来刷新指定域名或 Zone。
 # 范例
 ## 查询DNS服务状态（可以取值做监控）
 ```bash

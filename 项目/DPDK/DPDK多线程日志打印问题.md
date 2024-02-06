@@ -1,3 +1,5 @@
+```table-of-contents
+```
 # 背景
 DPDK中提供了打印日志的接口，rte_log ，如果DPDK应用程序是多线程，多个线程同时调用 rte_log 进行日志打印，则性能相对来说会下降很多。
 

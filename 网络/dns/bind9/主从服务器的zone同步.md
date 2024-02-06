@@ -26,11 +26,20 @@ RFC 标准协议通过 MASTER-SLAVE 架构，NOTIFY + XFR 机制实现数据自�
 此时master会发送notify消息给slave。但要求区域数据文件中定义了slave的ns记录及其A记录，否则找不到slave，也就联系不上slave。
 
 ## 时机二：定时检查
+### 从服务器的定时检查
 辅域名服务器会定时向主域名服务器进行查询以便了解区域是否有变动。如有变动，则会执行一次区域传输。
 
 一旦启动区域传输，就会存在两种传输方式：
 1. 全量传输(AXFR)：即传输整个区域的消息，全量传输会传输整个区域的消息。
 2. 增量传输(IXFR)：增量传输就是传输一部分消息，增量传输使用的消息。
+
+### 主服务器的定时notify
+如果主DNS服务配置了`heartbeat-interval`为5；
+则 master每5分钟会给全部slave发送notify消息。并且是给每个view的每个zone发送一条notify消息。没有做打散处理。发送notify消息的时候，会影响master的性能。影响变更生效的速度。
+
+> 注：可以关闭 master的 定时全量更新通知。将 master 的`heartbeat-interval` 设置为0 即可。
+
+
 ### AXFR
 ![](attachments/Pasted%20image%2020231225111500.png)
 全区域传输（AXFR：Full Zone Transfer）：
@@ -83,6 +92,15 @@ RFC 标准协议通过 MASTER-SLAVE 架构，NOTIFY + XFR 机制实现数据自�
 ## 时机三：DNS NOTIFY
 但是使用轮询这种方式有一些弊端，因为从服务器会定期检查主服务器上内容是否更新，这是一种资源浪费，因为绝大多数情况下都是一次无效检查，所以为了改善这种情况，DNS 设计了 `DNS NOTIFY` 机制，`DNS NOTIFY` 允许修改区域内容后主服务器通知从服务器内容需要更新，应该启动区域传输。
 
+### 变更的同步过程
+主从权威的同步过程如下：
+（1）主节点 Zone 配置变更，向从节点发送 NOTIFY 通知
+（2）从节点返回 NOTIFY Respons，并向主节点发起 SOA 查询
+（3）主节点返回 SOA Respons
+（4）从节点对比 SOA Respons 中的序列号是否比自身序列号大，仅当 SOA Respons 序列号大于自身序列号时才发起 `Zone transfer request`，并利用 **TCP 53 端口**进行数据传输。
+（5）主节点收到 `Zone transfer request`，进行响应。
+
+因此 Zone 配置变更后必须增大序列号，否则会导致主从节点数据不一致。
 # zone文件更新
 ## 静态域维护
 前提条件：
@@ -862,6 +880,256 @@ view "default" {
 
 slave的配置注意项也是每个view要使用server定义master通信时使用的key，然后限制特定的key才能更新。另外需要注意的是slave和master的IP不要在任何的acl里。
 
+# DNS BIND主辅同步之TSIG加密
+## 背景
+服务器之间数据配置文件传输的安全性，比如从服务器从主服务器同步数据，防止数据配置文件传输过程中遭到篡改。
+## 介绍
+Transaction signatures(TSIG：事务签名)通常是一种确保DNS消息安全，并提供安全的服务器与服务器之间通讯的机制。
+
+TSIG可以保护以下类型的DNS服务器：Zone区域传送、Notify、动态更新、递归查询邮件。
+TSIG使用**共享秘密**和单向散列函数来验证DNS信息。TSIG 可确认 DNS 之信息是由某特定 DNS Server 所提供。通常TSIG 应用于域名服务器间的区带传输，确保数据不会被篡改或产生 dns spoofing。
+
+## 流程
+### 生成`TSIG`
+#### `dnsssec-kengen`工具
+使用bind提供的工具`dnsssec-kengen`生成共享密钥。
+```text
+dnssec-keygen  
+DNSSEC 密钥生成工具
+
+-a 选择加密算法
+    对于DNSSEC 值必须是 RSAMD5, RSASHA1(强制实现), DSA(推荐), NSEC3RSASHA1, NSEC3DSA, RSASHA256, RSASHA512, ECCGOST
+    对于TSIG/TKEY, 值必须是DH (Diffie Hellman), HMAC-MD5(强制实现),HMAC-SHA1, HMAC-SHA224, HMAC-SHA256, HMAC-SHA384, HMAC-SHA512
+
+-b 指定密钥中的位数。
+    密钥大小的选择取决于使用的算法。
+    RSAMD5 和 RSASHA1 密钥必须在 512 和 2048 位之间。
+    Diffie-Hellman 密钥必须在 128 和 4096 位之间。
+    DSA 密钥必须在 512 和 1024 位之间，并且必须是 64 的整数倍。
+    HMAC-MD5 密钥必须在 1 位和 512 位之间。
+
+-f  在 KEY/DNSKEY 记录的标志字段中设置指定的标志。唯一识别的标志是 KSK（Key Signing Key，密钥签名密钥）DNSKEY。
+
+-h 列出 dnssec-keygen 的选项和参数的简短摘要
+
+-n 指定密钥的所有者类型,可以选择ZONE或者HOST。
+    nametype 的值必须是 ZONE（对于 DNSSEC 区域密钥 (KEY/DNSKEY)）、HOST 或 ENTITY（对于与主机相关的密钥 (KEY)）、USER（对于与用户相关的密钥 (KEY)）或 OTHER (DNSKEY).
+    这些值不区分大小写。缺省值是 ZONE（用于生成 DNSKEY）
+
+-r 指定随机源，有助与生成速度。
+    如果操作系统不提供 /dev/random 或等效设备，则缺省的随机源是键盘输入.
+
+-K（大写） <directory>: 设置要写入的密钥文件的目录
+```
+#### 在主DNS服务器中生成密钥
+```bash
+#dnssec-keygen -a HMAC-SHA512 -b 512 -n HOST -K /root/dnskey/ -r /dev/urandom hunk-tech-key
+
+选项解读：
+    -a HMAC-SHA512  :采用HMAC-SHA512加密算法
+    -b 512          :生成的密钥长度为512位
+    -n HOST         :指定密钥的所有者类型为主机类型
+    -K /root/dnskey/:指定生成密钥的目录
+    -r /dev/urandom :指定生成密钥使用的随机数来源，否则将会让你在键盘上敲入随机字符，导致会非常慢。
+    hunk-tech-key   :密钥的名称
+```
+
+之后，会在指定的目录/root/dnskey/生成2个文件。
+```c
+Khunk-tech-key.+165+40008.key     # 公钥
+Khunk-tech-key.+165+40008.private # 私钥
+
+内容类似如下：
+#cat Khunk-tech-key.+165+40008.key 
+hunk-tech-key. IN KEY 512 3 165 MmQEQV+fSKe/uEKfxcpMa4avCFPTY3ipmcg+JqaPU2dV9yYx9rOdXesP aVnUyv6XarzJ3ml1H2gCgR0cDf3TGg==
+
+#cat Khunk-tech-key.+165+40008.private 
+Private-key-format: v1.3
+Algorithm: 165 (HMAC_SHA512)
+Key: MmQEQV+fSKe/uEKfxcpMa4avCFPTY3ipmcg+JqaPU2dV9yYx9rOdXesP aVnUyv6XarzJ3ml1H2gCgR0cDf3TGg==
+Bits: AAA=
+Created: 20180206083046
+Publish: 20180206083046
+Activate: 20180206083046
+
+```
+
+注：TSIG 只有一组密码，并无公开/私密金钥之分。如上，2个文件中的Key是相同的。
+
+
+#### 在主DNS服务器上创建密钥验证文件
+```bash
+#vim /etc/named/dns-key
+
+key "hunk-tech-key" {   > 这个双引号内填写的字符串可以是任意的。这个字符串主从必须要一致。这个例子使用dnssec-keygen生成时指定的密钥的名称
+        algorithm HMAC-SHA512;   > 这个加密算法填写的是dnssec-keygen生成时指定的加密算法
+        secret "MmQEQV+fSKe/uEKfxcpMa4avCFPTY3ipmcg+JqaPU2dV9yYx9rOdXesPaVnUyv6XarzJ3ml1H2gCgR0cDf3TGg==";  > 这里填写的生成密钥中K*.private文件中的key值。注意双引号和分号
+};
+```
+
+修改密钥验证文件所有者与权限
+```bash
+#chown root:named /etc/named/dns-key
+#chmod 640 /etc/named/dns-key
+```
+
+#### 修改主DNS服务器的主配置文件
+```bash
+# vim /etc/named.conf
+include "/etc/named/dns-key"; # 加载秘钥验证文件
+options {
+    allow-transfer { key hunk-tech-key; };       > 定义有key的主机才能同步。
+    notify yes;
+    ....
+}
+```
+
+或者 
+
+```bash
+# vim /etc/named.conf
+
+include "/etc/named/dns-key"; # 加载秘钥验证文件
+
+options {
+    .....
+    dnssec-enable yes;
+    dnssec-validation yes;
+    allow-update { localhost;192.168.7.253; };      > 定义仅有本机和从DNS才可以动态更新
+    allow-transfer { localhost;192.168.7.253; };    > 定义只允许本机和从DNS主机才能使用区域传送
+    notify yes;
+    .....
+}
+
+以下行不在全局定义的范围内，不要误写入options的{ }中
+server 192.168.7.253 { keys hunk-tech-key; };       > 定义与从dns服务器使用密钥通讯
+```
+
+
+#### 从DNS服务器创建密钥认证文件
+方法一：从主服务器导入密钥验证文件
+```bash
+为了确保传输的文件没有被破坏，请使用md5sum之类的哈希算法进行校验
+#md5sum /etc/named/dns-key > /etc/named/md5sum
+#scp /etc/named/* 192.168.7.253:/etc/named/
+```
+
+方法二：在从DNS服务器上面创建完全相同内容的密钥认证文件
+
+
+然后，修改密钥验证文件所有者与权限。
+```
+#chown root:named /etc/named/dns-key
+#chmod 640 /etc/named/dns-key
+```
+#### 修改从DNS服务器的主配置文件
+```bash
+# vim /etc/named.conf
+
+include "/etc/named/dns-key"; # 加载秘钥验证文件
+
+options {
+    .....
+    dnssec-enable yes;
+    dnssec-validation yes;
+    allow-update { none; };             > 不允许客户端动态更新
+    allow-transfer { localhost; };      > 定义只允许本机才能使用区域传送
+    ......
+}
+
+如果只想要在某个zone中使用密钥传送，按以下写法即可
+    zone "hunk.tech" {
+            type slave;
+            masters { 192.168.7.254 key hunk-tech-key; };
+            ...
+    }
+
+如果有多个zone中需要使用密钥传送，保持zone的设置不更改，只需要定义一个全局的server配置项即可
+    server 192.168.7.254 { keys hunk-tech-key; };
+```
+
+#### 在主DNS服务以及从服务器上生效配置
+分别在主服务器，从服务器上执行下面的命令。
+```bash
+#named-checkconf
+#rndc reload
+```
+
+
+#### 测试TSIG
+在从DNS服务器
+```
+#dig -t axfr hunk.tech -k /etc/named/dns-key @192.168.7.254    > -k 指定密钥
+```
+使用专用的动态更新工具来测试
+```
+#nsupdate -k /etc/named/dns-key 
+> server 192.168.7.254
+> zone hunk.tech
+> update add 9.hunk.tech 600 A 9.9.9.9
+> send
+> quit
+```
+
+在主DNS服务器日志中可以看到
+```
+client 192.168.7.254#42738: view net_192: signer "hunk-tech-key" approved
+client 192.168.7.254#42738: view net_192: updating zone 'hunk.tech/IN': adding an RR at '9.hunk.tech' A
+```
+
+在从DNS服务器日志中可以看到
+```
+transfer of 'hunk.tech/IN/net_192' from 192.168.7.254#53: connected using 192.168.7.253#34324
+zone hunk.tech/IN/net_192: transferred serial 61: TSIG 'hunk-tech-key'
+transfer of 'hunk.tech/IN/net_192' from 192.168.7.254#53: Transfer completed: 1 messages, 11 records, 428 bytes, 0.006 secs (71333 bytes/sec)
+```
+
+#### 配置zone同步key
+由于bind的主辅同步可以控制到具体的zone，所以TSIG可以对不同的zone，配置不同的TSIG，不过要通过view配置。
+
+如主服务器：
+```bash
+view "tisg"{
+    match-clients{
+        key "tisg";
+        192.168.36.0/24;
+    };
+    allow-transfer { key xxx; };
+    zone "."{
+        type hint;
+        file "named.root";
+    };
+    zone "test.com"{
+        type master;
+        also-notify{
+            192.168.36.189;
+        };
+        file "tisg/test.com.zone";
+    };
+};
+```
+
+如辅服务器：
+```bash
+view "tisg"{
+    match-clients{
+        key "tisg";
+        192.168.36.0/24;
+    };
+    allow-transfer { key xxx; };
+    zone "."{
+        type hint;
+        file "/var/named/named.root";
+    };
+    zone "test.com"{
+        type slave;
+        masters{
+            192.168.36.54;
+        };
+        file "tisg/test.com.zone";
+    };
+};
+```
 
 # 区域传输tune调优
 参考:  [zone transfer tune](https://kb.isc.org/docs/aa-00726)
@@ -919,5 +1187,6 @@ ixfr-from-differences yes;
 开启ixfr-from-differences 时会增加master的CPU、内存开销，所以需要根据实际的情况衡量是否需要打开。
 # 参考
 ```bash
-
+# # Tuning your BIND configuration effectively for zone transfers
+https://kb.isc.org/docs/aa-00726
 ```
