@@ -1,17 +1,26 @@
 ```table-of-contents
 ```
+# 是什么
+- 通俗的说，tcpdump是一个抓包工具，用于抓取互联网上传输的数据包。
+- 学术的说，tcpdump是一种嗅探器（sniffer），利用以太网的特性，通过将网卡适配器（NIC）置于混杂模式（promiscuous）来获取传输在网络中的信息包。
+要用tcpdump抓包，请记住，一定要切换到root账户下，因为只有root才有权限将网卡变更为“混杂模式”
+所谓混杂模式，也就是嗅探（Sniffering），就是把目的地址不是本机地址的网络报文也抓取下来。
+
+
 # 选项
 
 - `-n`： 表示不要解析域名，直接显示 ip。
 - `-nn`： 不要解析域名和端口
-- `-X`： 表示同时使用十六进制和 `ASCII` 字符串打印报文的全部数据。
+- `-X`：告诉tcpdump命令，需要把协议头和包内容都原原本本的显示出来（tcpdump会以16进制和ASCII的形式显示），这在进行协议分析时是绝对的利器。
 - `-XX`： 同 `-X`，但同时显示以太网头部。
 - `-S`： 显示绝对的序列号（sequence number），而不是相对编号。
+- `-s` 长度，可以只抓取每个报文的一定长度
+- `s0` : tcpdump 默认只会截取前 96 字节的内容，要想截取所有的报文内容，可以使用 -s number， number 就是你要截取的报文字节数，如果是 0 的话，表示截取报文全部内容。
 - `-i`： 选择要捕获的接口；`-i any` 监听所有的网卡
 - `-v, -vv, -vvv`：显示更多的详细信息
 - `-c number`:  截取 number 个报文，然后结束
 - `-A`： 表示使用 `ASCII` 字符串打印报文的全部数据，这样可以使读取更加简单，方便使用 `grep` 等工具解析输出内容。`-A` 和 `-X` 这两个参数不能一起使用。
-- `s0` : tcpdump 默认只会截取前 96 字节的内容，要想截取所有的报文内容，可以使用 -s number， number 就是你要截取的报文字节数，如果是 0 的话，表示截取报文全部内容。
+
 - `-p` : 不让网络接口进入混杂模式。
 >默认情况下使用 tcpdump 抓包时，会让网络接口进入混杂模式。一般计算机网卡都工作在非混杂模式下，此时网卡只接受来自网络端口的目的地址指向自己的数据。当网卡工作在混杂模式下时，网卡将来自接口的所有数据都捕获并交给相应的驱动程序。如果设备接入的交换机开启了混杂模式，使用 -p 选项可以有效地过滤噪声。
 
@@ -31,34 +40,21 @@ listening on br-lan, link-type EN10MB (Ethernet), capture size 262144 bytes
 5 packets captured
 ```
 
-- `-l`:  如果想实时将抓取到的数据通过管道传递给其他工具来处理，需要使用 `-l` 选项来开启行缓冲模式。
+- `-l`:  默认情况下是**全缓冲**的，`-l` 可以将tcpdump的输出变为“**行缓冲**”方式。
+如果想实时将抓取到的数据通过管道传递给其他工具来处理，需要使用 `-l` 选项来开启行缓冲模式。
 ![](attachments/Pasted%20image%2020231221120824.png)
 ```bash
 $ tcpdump -i eth0 -s0 -l port 80 | grep 'Server:'
 ```
+需求： “对于tcpdump输出的内容，提取每一行的第一个域，即”时间域”，并输出出来，为后续统计所用” ----> `# tcpdump -i ens33 -l |awk '{print $1}'` ----> 如果不加-l选项，那么只有全缓冲区满，才会输出一次，这样不仅会导致输出是间隔不顺畅的，而且当你ctrl-c时，很可能会断到一行的半截，损坏统计数据的完整性。
+
 
 
 # 过滤规则查看
 通过查看 `man pcap-filter` 可以看到 tcpdump的常用过滤规则。如下所示：
 ![](attachments/Pasted%20image%2020231023103324.png)
-# 常用方法
-## 抓取n个包
-## 抓取指定时间的包
-```c
-1》抓取30s的包
-timeout 30 tcpdump -nni ethx ...
 
-2》抓取报文后隔指定的时间保存一次
-tcpdump -nni eth3 -s0 -G 60 -Z root -w %Y_%m%d_%H%M_%S.pcap
--G选项 后面接时间 单位为秒 本例中的时间为60秒
--s0 表示数据包不进行截断。
--Z user
-```
-
-## pcap包的分割和合并
-主要是使用了Linux下的 wireshark  包中的 editcap 与 mergecap 工具。
-具体参考：Linux下的wireshark包
-
+# 过滤查询
 ## ipv4头相关过滤
 ### 基础知识
 ```ruby
@@ -187,12 +183,18 @@ TCP重传十分影响网络性能，往往通过抓包之后，wireshark里打�
 进而也可以对包内容以字符串形式进行查询。
 ![](attachments/Pasted%20image%2020231221115557.png)
 
-截取 http 请求的时候可以用 
+### 范例
+**对指定的包内容进行处理**：
+```bash
+tcpdump -r vip6_4666_2.pcap -nn ip -X | grep "0x0010:" | awk '{print $9}' | sort | uniq -c | sort -n
+```
+
+**截取 http 请求的时候可以用 **
 ```bash
 sudo tcpdump -nni ethx -SA port 80
 ```
 
-从 HTTP 请求头中提取 HTTP 用户代理：
+**从 HTTP 请求头中提取 HTTP 用户代理**：
 ```bash
 $ tcpdump -nn -A -s1500 -l | grep "User-Agent:"
 ```
@@ -201,7 +203,7 @@ $ tcpdump -nn -A -s1500 -l | grep "User-Agent:"
 $ tcpdump -nn -A -s1500 -l | egrep -i 'User-Agent:|Host:'
 ```
 
-提取 HTTP 请求的主机名和路径：
+**提取 HTTP 请求的主机名和路径**：
 ```bash
 $ tcpdump -s 0 -v -n -l | egrep -i "POST /|GET /|Host:"
 
@@ -217,18 +219,147 @@ tcpdump: listening on enp7s0, link-type EN10MB (Ethernet), capture size 262144 b
 ```
 
 ## 字段偏移过滤
-抓取 HTTP GET 流量：
+### 用法
+tcpdump 支持我们根据数据包的标志位进行过滤
+```bash
+proto [ expr:size ]
+```
+- `proto`：可以是熟知的协议之一（如ip，arp，tcp，udp，icmp，ipv6）
+- `expr`：可以是数值，也可以是一个表达式，表示与指定的协议头开始处的字节偏移量。
+- `size`：是可选的，表示从字节偏移量开始取的字节数量。
+
+```bash
+`tcp[n]`：表示 tcp 报文里 第 n 个字节
+`tcp[n:c]`：表示 tcp 报文里从第n个字节开始取 c 个字节，tcp[12:1] 表示从报文的第12个字节（因为有第0个字节，所以这里的12其实表示的是13）
+```
+tcpflags 可以理解为是一个别名常量，相当于 13，它代表着与指定的协议头开头相关的字节偏移量，也就是标志位，所以 `tcp[tcpflags]` 等价于 `tcp[13]`。
+
+tcp-fin, tcp-syn, tcp-rst, tcp-push, tcp-ack, tcp-urg 这些同样可以理解为别名常量，分别代表 1，2，4，8，16，32，64。
+
+
+下面以最常见的 syn包为例，演示一下如何用 tcpdump 抓取到 syn 包，而其他的类型的包也是同样的道理。
+- 第一种写法：使用数字表示偏移量
+```bash
+$ tcpdump -i eth0 "tcp[13] & 2 != 0"
+
+$ tcpdump -i eth0 'tcp[13] == 2 or tcp[13] == 16'
+```
+
+- 第二种写法：使用别名常量表示偏移量
+```bash
+$ tcpdump -i eth0 "tcp[tcpflags] & tcp-syn != 0"
+
+$ tcpdump -i eth0 'tcp[tcpflags] == tcp-syn or tcp[tcpflags] == tcp-ack'
+```
+
+- 第三种写法：使用混合写法
+```bash
+$ tcpdump -i eth0 "tcp[tcpflags] & 2 != 0" 
+
+or 
+
+$ tcpdump -i eth0 "tcp[13] & tcp-syn != 0"
+```
+### 范例
+**抓取 HTTP GET 流量**：
 ```bash
 $ tcpdump -s 0 -A -vv 'tcp[((tcp[12:1] & 0xf0) >> 2):4] = 0x47455420'
 ```
 
-可以抓取 HTTP POST 请求流量：
+**可以抓取 HTTP POST 请求流量**：
 ```bash
 $ tcpdump -s 0 -A -vv 'tcp[((tcp[12:1] & 0xf0) >> 2):4] = 0x504f5354'
 ```
+
+**使用偏移量的方法，抓取TLS 握手阶段的 Client Hello 报文**
+```bash
+tcpdump -w file.pcap 'dst port 443 && tcp[20]==22 && tcp[25]==1'
+```
+分析：
+```text
+dst port 443：这个最简单，就是抓取从客户端发过来的访问 HTTPS 的报文。
+
+tcp[20]=22：这是提取了 TCP 的第 21 个字节（因为初始序号是从 0 开始的），由于 TCP 头部占 20 字节，TLS 又是 TCP 的载荷，那么 TLS 的第 1 个字节就是 TCP 的第 21 个字节，也就是 TCP[20]，这个位置的值如果是 22（十进制），那么就表明这个是 TLS 握手报文。
+
+tcp[25]=1：同理，这是 TCP 头部的第 26 个字节，如果它等于 1，那么就表明这个是 Client Hello 类型的 TLS 握手报文。
+```
+
+用偏移量方法，写一个 tcpdump 抓取 TCP SYN 包的过滤表达式
+```bash
+tcpdump 'tcp[13]&2 != 0'
+```
+
+如果要指定只抓取 SYN 包而不抓取 SYN+ACK，可以用下面的表达式
+```bash
+tcpdump 'tcp[13]|2 = 2'
+```
+
+过滤出 TCP RST 报文（TCPDUMP 预定义）
+```bash
+tcpdump -w file.pcap 'tcp[tcpflags]&(tcp-rst) != 0'  
+# 偏移量的写法  
+tcpdump -w file.pcap 'tcp[13]&4 != 0'
+```
+
+## 过滤后转存
+有时候，我们想从抓包文件中过滤出想要的报文，并转存到另一个文件中。比如想从一个抓包文件中找到 TCP RST 报文，并把这些 RST 报文保存到新文件。那么就可以这么做：
+```bash
+tcpdump -r file.pcap 'tcp[tcpflags] & (tcp-rst) != 0' -w rst.pcap
+```
+
+# 其他方法
+## 抓取n个包
+## 抓取指定时间的包
+```c
+1》抓取30s的包
+timeout 30 tcpdump -nni ethx ...
+
+2》抓取报文后隔指定的时间保存一次
+tcpdump -nni eth3 -s0 -G 60 -Z root -w %Y_%m%d_%H%M_%S.pcap
+-G选项 后面接时间 单位为秒 本例中的时间为60秒
+-s0 表示数据包不进行截断。
+-Z user
+```
+
+## pcap包的分割和合并
+主要是使用了Linux下的 wireshark  包中的 editcap 与 mergecap 工具。
+具体参考：Linux下的wireshark包
+
+## 指定抓包长度
+我们给tcpdump 加上 -s 参数，指定抓取的每个报文的最大长度，就节省抓包文件的大小。
+-s 这个长度参数，它的使用场景其实就包括了延长抓包时间，因为减少了抓包的大小。
+
+一般来说，帧头是 14 字节，IP 头是 20 字节，TCP 头是 20~40 字节。如果你明确地知道这次抓包的重点是传输层，那么理论上，对于每一个报文，你只要抓取到传输层头部即可，也就是前 14+20+40 字节（即前 74 字节）：
+```bash
+tcpdump -s 74 -w file.pcap
+```
+
+# tcptrace
+## 背景
+有时候我们并不方便用 Wireshark 打开抓包文件做分析，比如抓包的机器不允许向外传文件，也就是可能只能在这台机器上做分析。
+我们可以用 tcpdump -r 的方式，打开原始抓包文件看看：
+```bash
+$ tcpdump -r test.pcap | head -10
+reading from file test.pcap, link-type EN10MB (Ethernet)
+03:55:10.769412 IP victorebpf.51952 > 180.101.49.12.https: Flags [S], seq 3448
+03:55:10.779061 IP 180.101.49.12.https > victorebpf.51952: Flags [S.], seq 156
+03:55:10.779111 IP victorebpf.51952 > 180.101.49.12.https: Flags [.], ack 1, w
+03:55:10.784134 IP victorebpf.51952 > 180.101.49.12.https: Flags [P.], seq 1:5
+03:55:10.784297 IP 180.101.49.12.https > victorebpf.51952: Flags [.], ack 518,
+03:55:10.795094 IP 180.101.49.12.https > victorebpf.51952: Flags [P.], seq 1:1
+03:55:10.795118 IP victorebpf.51952 > 180.101.49.12.https: Flags [.], ack 1502
+03:55:10.795327 IP 180.101.49.12.https > victorebpf.51952: Flags [P.], seq 150
+03:55:10.795356 IP victorebpf.51952 > 180.101.49.12.https: Flags [.], ack 3881
+03:55:10.802868 IP 180.101.49.12.https > victorebpf.51952: Flags [P.], seq 388
+```
+报文都是按时间线原样展示的，缺乏逻辑关系，是不是难以组织起有效的分析？比如，要搞清楚里面有几条 TCP 连接都不太容易。这时候怎么办呢？
+
 
 # 参考
 ```c
 # TCP 实战抓包分析
 https://xiaolincoding.com/network/3_tcp/tcp_tcpdump.html#%E6%98%BE%E5%BD%A2-%E4%B8%8D%E5%8F%AF%E8%A7%81-%E7%9A%84%E7%BD%91%E7%BB%9C%E5%8C%85
+
+# 全网最全 tcpdump 抓包指南
+https://iswbm.com/70.html
 ```

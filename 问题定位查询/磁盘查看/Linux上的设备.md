@@ -1,3 +1,5 @@
+```table-of-contents
+```
 # Linux上的设备
 ## 概述
 Linux 操作系统中，通过设备控制器（device controller）来管理各种设备（device），其关系如下图所示：

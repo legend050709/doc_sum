@@ -1,3 +1,5 @@
+```table-of-contents
+```
 # 定义
 exec是个bash builtin内置命令.
 exec命令来自英文单词execute的缩写，其功能是用于调用并执行指定的命令，  或者进行文件的重定向。

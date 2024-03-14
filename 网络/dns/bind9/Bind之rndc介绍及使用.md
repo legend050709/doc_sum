@@ -154,8 +154,11 @@ COMMAND:
 	    trace LEVEL:    指定使用的级别
     notrace：           将调试级别设置为 0
     flush：             清空DNS服务器的所有缓存记录
-    freeze              关闭动态更新
-    thaw                启用动态更新
+    freeze              关闭动态更新zone（主要是nsupdate动态更新）
+    thaw                启用动态更新zone（主要是nsupdate动态更新）
+
+比如：
+	更新了配置`view`下的`zone`引导以及库文件配置的时候，不允许其他设备通过`nsupdate`远程动态更新某个`zone`。
 ```
 
 # 生成rndc的key

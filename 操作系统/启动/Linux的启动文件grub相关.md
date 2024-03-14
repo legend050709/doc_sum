@@ -6,6 +6,51 @@
 ```
 grub2-mkconfig -o /boot/grub2/grub.cfg
 ```
+# grubby命令
+## 介绍
+grubby是一个命令行工具，用于管理Linux系统的引导选项，可以用来添加、删除、编辑和列出内核引导参数。
+![](attachments/Pasted%20image%2020240314181435.png)
+
+## 常见的grubby命令
+(1) 列出当前系统上已安装的内核：
+```bash
+grubby --info=ALL
+
+列出指定内核的详细信息:
+grubby --info=/boot/vmlinuz-5.10.0-327.el7.x86_64
+
+or
+
+grubby --info=0 // index=0的内核的详细信息
+
+```
+
+(2) 列出当前系统默认启动的内核
+```bash
+grubby --default-kernel
+```
+
+(3) 修改默认启动内核
+```bash
+grubby --set-default=/boot/vmlinuz-5.10.0-327.el7.x86_64
+
+or
+
+grubby --set-default=1 // 使用index来指定内核
+```
+
+(4) 添加内核引导参数
+```bash
+grubby --update-kernel=/boot/vmlinuz-5.10.0-327.el7.x86_64 --args="nomodeset"
+
+设置内核引导参数:
+grubby --update-kernel=/boot/vmlinuz-5.10.0-327.el7.x86_64 --args="console=tty0 console=ttyS0,115200"
+```
+
+(5) 删除内核引导参数
+```bash
+grubby --update-kernel=/boot/vmlinuz-5.10.0-327.el7.x86_64 --remove-args="nomodeset"
+```
 
 # 选择启动内核
 如果`grub.conf`中存在多个内核，期望选择一个指定的内核版本进行启动。
@@ -58,6 +103,7 @@ grub2-editenv list
 
 **/etc/default/grub** 档内另一个有用的选项是：`GRUB_SAVEDEFAULT=true`，
 连同 **GRUB_DEFAULT=saved**，它确保现时选择的开机项目会被设置下次开机采用。
+
 
 # 参考
 ```c

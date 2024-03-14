@@ -1,3 +1,5 @@
+```table-of-contents
+```
 # switch的语法
 ```c
 switch (表达式)  

@@ -22,6 +22,36 @@ TCP   69        45        24
 INET      74        47        27
 FRAG      0         0         0
 ```
+
+## 查看udp相关的统计
+查看方式：
+```bash
+watch -n1 "cat /proc/net/snmp | grep 'Udp:'"
+
+or
+
+netstat -su
+```
+
+范例如下所示：
+```bash
+# netstat -su
+IcmpMsg:
+    OutType3: 14743
+Udp:
+    8183832 packets received
+    461031 packets to unknown port received.
+    0 packet receive errors
+    12277156 packets sent
+    0 receive buffer errors
+    0 send buffer errors
+UdpLite:
+IpExt:
+    InOctets: 3764696119
+    OutOctets: 15595727446
+    InNoECTPkts: 31851170
+    InECT0Pkts: 3
+```
 # /proc/net/netstat文件
 ## 可读显示脚本
 在查看centos机器的网络状态时，尝尝要看看计数器文件/proc/net/netstat，但是直接cat，如下显示. 很难读取。

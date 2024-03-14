@@ -52,6 +52,9 @@ DPDK 应用程序中增加包处理的 trace 统计，并且可以设置阈值�
 
 # 参考
 ```c
+# DPDK丢包那些事（+++++）
+https://www.cnblogs.com/t-bar/p/17630652.html
+
 # DPDK疑难杂症之网卡Imiss/ierror/i-nombuf问题
 https://blog.csdn.net/legend050709/article/details/123655712
 
