@@ -65,12 +65,12 @@ echo "export GIT_SSH=/home/sam/ssh-git.sh" >> /home/sam/.bashrc
 ```
 
 ## 贝公钥到github
-cat /home/sam/.ssh/id_rsa_myself.pub
+cat `/home/sam/.ssh/id_rsa_myself.pub`
 
-将相关内容拷贝到 自己的gibhub 账号的 的 ssh keys中
+将相关内容拷贝到 自己的gibhub 账号的 的 `ssh keys`中
 
 ## 下载测试
-在 本地的 sam 用户下，git clone 自己账号下的 project
+在 本地的 sam 用户下，`git clone` 自己账号下的 `project`
 
 # 使用场景
 ```c

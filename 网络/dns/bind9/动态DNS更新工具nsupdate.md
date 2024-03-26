@@ -3,11 +3,27 @@
 # 介绍
  nsupdate是一个动态DNS更新工具，可以向主DNS服务器提交更新记录的请求，它可以从区文件中添加或删除资源记录，而不需要手动进行编辑zone文件。
 
-​ 使用nsupdate 不会更改区域数据库文件，而是产生了一个jnl的数据文件，不能使用文本编辑器打开，只能使用完全区域数据传送查看。
+​ 使用`nsupdate` 不会更改区域数据库文件，而是产生了一个`jnl`的数据文件，不能使用文本编辑器打开，只能使用完全区域数据传送查看。
+此时添加进入的DNS记录是能够正常提供服务的(即 `named`的内存中存在更改后的记录)，如果需要实时更新到区域文件中，需要使用`rndc sync`且需要注意区域文件的文件权限。**一般情况下在15分钟内，Bind会将`jnl`文件转储到区域文件中**。
+
 
 注：jnl文件（journal文件）是BIND9**动态更新**的时候记录更新内容所生成的日志文件。
 
+# update消息
+使用 `TCP 53`端口，进行 DNS的`update`更新，如下所示：
 
+## 范例
+```bash
+说明：
+10.108.164.23 是 dns服务器；
+10.110.166.146 是 执行 nsupdate的机器；
+```
+**dns更新请求**
+![](attachments/Pasted%20image%2020240318204321.png)
+
+
+**dns更新响应**
+![](attachments/Pasted%20image%2020240318204442.png)
 
 # 使用
 ## 语法
@@ -112,10 +128,7 @@ www                     CNAME   6-WEB-1
 
 
 **查看区域数据库文件**:
-`/var/named`  产生了一个jnl的数据文件，不能使用文本编辑器打开。jnl文件（journal文件）是BIND9动态更新的时候记录更新内容所生成的日志文件。
-
-
-
+`/var/named`  产生了一个`jnl`的数据文件，不能使用文本编辑器打开。jnl文件（journal文件）是BIND9动态更新的时候记录更新内容所生成的日志文件。
 
 
 # 多个view的时候使用nsupdate更新记录
@@ -123,7 +136,7 @@ www                     CNAME   6-WEB-1
 经常使用bind的时候是划分不同的view的，因为每个view的zone需要单独修改，所以人肉修改是比较麻烦的。这个时候可以使用nsupdate进行批量的操作。只要注意每个view使用正确的记录就行。
 
 ## 方法
-使用nsupdate需要给每个view都创建一个key，每个view指定允许对应的这个key能更新。  
+使用`nsupdate`需要给每个`view`都创建一个key，每个view指定允许对应的这个key能更新。  
 
 **views.key文件**：
 ```bash
@@ -190,9 +203,9 @@ options {
    };
 # log query
       querylog yes;
-#define version
+# define version
       version "GNUer's dns 2.0";
-## transfer config
+# transfer config
       notify explicit;
       tcp-clients 2000;
       transfers-out 100;

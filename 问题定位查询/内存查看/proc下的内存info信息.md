@@ -7,6 +7,7 @@
 可以查看每个节点（node），不同区域（zone）的每个`order`大小的块的可用数量。
 如下所示：
 ![](attachments/Pasted%20image%2020240314145642.png)
+
 ## 输出说明
 在`/proc/buddyinfo`中每一行都代表了一个内存块的信息，包含空闲内存块的数量、大小。
 每行的每一列表示**指定大小的内存块的个数**。分别是2的0次方(即1)个页面的个数，2的1次方(即2)个页面的个数，2的2次方(即4)个页面的个数。
@@ -233,8 +234,8 @@ Linux系统管理员经常需要监测cpu,内存,磁盘,网络等系统信息。
 `Collectl` **是一个轻量级的性能监控工具，可监控包括`CPU`、磁盘、带宽、内存、网络、`NFS`、进程等等信息**。与大多数其他监控工具不同，**`collectl`**不关注有限数量的系统指标，相反，它可以收集许多不同类型的系统资源的信息，例如 cpu、磁盘、内存、网络、套接字、`tcp`、`inode`、`infiniband` 、集群、内存、`nfs`、进程、二次曲线、平板和 `buddyinfo`。
 ![](attachments/Pasted%20image%2020240314143644.png)
 
-注：`collectl` 有些类似于 `busybox`。都是将多个工具集成到一个可执行文件中，`collectl` 添加各个参数，就类似于之前的 某个工具的作用。
-如下所示：
+注：`collectl` 有些类似于 `busybox`。都是将多个工具集成到一个可执行文件中，`collectl` 添加各个参数，就类似于之前的 某个工具的作用。如下所示：
+
 ![](attachments/Pasted%20image%2020240314144452.png)
 
 ### 收集功能
@@ -294,7 +295,7 @@ waiting for 1 second sample...
 
 **将collectl**作为**top**实用程序非常容易，只需在终端中运行以下命令，您将在**top**工具中看到类似的输出：
 ```text
-collectl --top：
+collectl --top
 ```
 ![](attachments/Pasted%20image%2020240314144634.png)
 

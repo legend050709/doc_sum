@@ -868,7 +868,8 @@ Issue Ctrl-C to stop monitoring
 2 drops at sk_stream_kill_queues+50 (0xffffffff81687860)
 ```
 ## perf
- perf 监视 kfree_skb 事件。
+`perf` 监视 `kfree_skb` 事件。
+
 ```c
 # perf record -g -a -e skb:kfree_skb
 ^C[ perf record: Woken up 1 times to write data ]
@@ -898,7 +899,7 @@ containerd 93829 [031] 951470.340306: skb:kfree_skb: skbaddr=0xffff8827bfcec500 
                   130ebe __nscd_open_socket (/usr/lib64/libc-2.17.so)
 ```
 ## tcpdrop
-tcpdrop，它显示了源包和目标包的详细信息，以及 TCP 会话状态(来自内核)、TCP 标志(来自包 TCP 报头)和导致这次丢包的内核堆栈跟踪。
+`tcpdrop`，它显示了源包和目标包的详细信息，以及 TCP 会话状态(来自内核)、TCP 标志(来自包 TCP 报头)和导致这次丢包的内核堆栈跟踪。
 ```c
 TIME     PID    IP SADDR:SPORT          > DADDR:DPORT          STATE (FLAGS)
 05:46:07 82093  4  10.74.40.245:50010   > 10.74.40.245:58484   ESTABLISHED (ACK)

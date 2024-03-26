@@ -78,7 +78,7 @@ DNS系统默认使用明文UDP协议通信，所以用户的查询内容很容�
 我们日常都使用运营商的递归服务器，它们跟用户的机器地理距离都很近，就不会产生大问题。但如果中国的用户使用了美国的 DNS over HTTPS 服务，那解析出来的可能是美国的IP，会严重影响用户访问。
 
 ## 实验
-先将LDNS指定google的8.8.8.8。
+先将`LDNS`指定google的8.8.8.8。
 ```bash
 $ dig -t A www.alibaba.com @8.8.8.8
  
@@ -154,7 +154,7 @@ ECS 简单说就是把用户的IP信息暴露给权威DNS服务器。但为了�
 这样绕过了运营商的LocalDNS，用户解析域名的请求通过Http协议直接透传到了腾讯的HttpDNS服务器IP上，用户在客户端的域名解析请求将不会遭受到运营商解析转发，DNS污染，劫持，出口多NAT等等困扰
 
 ## ECS使用
-在`bind` `9.11`中需要开启ECS需要在编译的时候指定`Geoip`:
+在`bind-9.11`中需要开启ECS需要在编译的时候指定`Geoip`:
 ```bash
 yum install -y  GeoIP  
 ./configure --with-geoip=--with-geoip=/usr/share/GeoIP/

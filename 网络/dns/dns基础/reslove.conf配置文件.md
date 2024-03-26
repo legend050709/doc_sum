@@ -686,7 +686,7 @@ nameserver 114.114.114.114
 在维护的主机数量较多的时候，系统中 DNS 的配置我们应该做到统一化，随意修改或更新会造成管理混乱。比如统一只靠人为干预的方式来修改 `/etc/resolv.conf` ，并将其他可能会更新该文件的服务或配置禁用掉。因此我们需要找到可能会更新 `/etc/resolv.conf` 的来源：
 
 - 用户：这个不必多说了，有权限的用户都可以配置该文件
-- 服务或程序(比如 ：NetworkManager or 网卡配置文件中的 DNS配置, 如 dhclient-script 脚本)
+- 服务或程序(比如 ：`NetworkManager` or 网卡配置文件中的 DNS配置, 如 `dhclient-script` 脚本)
 
 ## 范例
 ```c

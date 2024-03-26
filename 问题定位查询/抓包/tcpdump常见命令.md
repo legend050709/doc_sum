@@ -308,6 +308,41 @@ tcpdump -r file.pcap 'tcp[tcpflags] & (tcp-rst) != 0' -w rst.pcap
 ```
 
 # 其他方法
+## 保存包到文件的同时显示当前抓到的包
+
+```
+(1) 笨方法一：
+tcpdump 过滤条件 -w  aaa.out
+tcpdump -r  aaa.out -nn
+
+(2) 笨方法二：
+
+tcpdump 过滤条件 -l | tee arp.pcap
+注：此中保存的 arp.pcap 是文本文件，而不是二进制文件。
+
+```
+
+合理的方法：
+```bash
+tcpdump 过滤条件 -U -w - | tee arp.pcap | tcpdump -nn -r -
+
+注：此时保存的 arp.pcap 是二进制文件，而不是文本文件。
+后续可以通过：tcpdump -r arp.pcap -nn 读取的。
+如果是文本文件，则只能 cat arp.pcap 读取。
+
+比如：
+tcpdump -nni eth03 host not 192.20.29.1 and host not 192.20.29.2 and net 192.20.29 -v -U -w - | tee arp2.pcap | tcpdump -nn -r -
+```
+
+说明：
+```bash
+-U 文件及时写入，而不是缓存一些后再写;  
+-w 把抓到的内容写到文件中，其中后面跟的文件是一个"-", 表示标准输入/输出。
+
+然后用 tee 把标准输出保存成文件，然后继续用 tcpdump -r 把标准输入解析显示出来。
+```
+![](attachments/Pasted%20image%2020240322140656.png)
+
 ## 抓取n个包
 ## 抓取指定时间的包
 ```c
@@ -332,6 +367,11 @@ tcpdump -nni eth3 -s0 -G 60 -Z root -w %Y_%m%d_%H%M_%S.pcap
 一般来说，帧头是 14 字节，IP 头是 20 字节，TCP 头是 20~40 字节。如果你明确地知道这次抓包的重点是传输层，那么理论上，对于每一个报文，你只要抓取到传输层头部即可，也就是前 14+20+40 字节（即前 74 字节）：
 ```bash
 tcpdump -s 74 -w file.pcap
+```
+
+## 显示tcp的相对以及绝对序列号
+```
+`-S`： 显示绝对的序列号（sequence number），而不是相对编号。
 ```
 
 # tcptrace
