@@ -23,7 +23,20 @@ strace -T -tt -f CMD
 strace -T -tt -fp PID
 ```
 # 范例
+## 场景一
+**问题**
+在进行bind9的监控过程中，发现监控出现了**断点**的情况。那么断点是bind9程序有问题呢，还是 bind9的监控有问题，还是falcon有问题。
 
+
+**查询**
+如下：查询是否是falcon本身的问题，还是bind9的监控执行的问题。如果falcon本身没有问题，那么应该是每隔30s执行一下 execve，execve中调用监控脚本。
+如果间隔时间超过了30s，那么就应该是 falcon自身的问题。
+
+```bash
+strace -tt -T -s 1000 -e execve -fp `pidof falcon-agent` 2>&1 |grep 30_bind9_zones_maintaince.py
+
+注：falcon-agent 进程一直是不退出的。
+```
 # 其他
 大多数进程基本都会使用基础c库，而不是系统调用，如Linux上的glibc，Windows上的msvc，所以还有一个工具ltrace，可以用来追踪库调用，如下：
 ```c

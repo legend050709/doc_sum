@@ -11,13 +11,16 @@
 
 
 # netstats相关
-
 ## netstat命令查看各个状态的连接个数
 ```c
 # netstat -n | grep 10.21.255.98 | awk '/^tcp/ {++S[$NF]} END {for(a in S) print a, S[a]}'
 FIN_WAIT2 6
 SYN_SENT 26
 TIME_WAIT 48909
+
+or
+
+netstat -an | awk '/^tcp/ {++y[$NF]} END {for(w in y) print w, y[w]}'
 ```
 
 另外使用ss命令也是可以的。
@@ -34,6 +37,12 @@ UDP   5         2         3
 TCP   69        45        24
 INET      74        47        27
 FRAG      0         0         0
+```
+
+## netstat 查看连接数最多的client-ip
+```bash
+netstat -nat|grep "tcp"|awk ' {print$5}'|awk -F : '{print$1}'|sort|uniq -c|sort -rn
+
 ```
 
 ## 查看udp相关的统计
@@ -246,10 +255,12 @@ for((i = 1; ; i++)); do \
     fi; \
 done
 ```
+# nstat 命令
+参考：nstat 工具命令。
 
-# snmp相关
-
-## /proc/net/snmp的可读输出
+# 其他
+## snmp相关
+### /proc/net/snmp的可读输出
 ```bash
 cat /proc/net/snmp |  awk '(f==0) {name=$1; i=2; while ( i<=NF) {n[i] = $i; i++ }; f=1; next} (f==1){ i=2; while ( i<=NF){ printf "%s%s = %d\n", name, n[i], $i; i++}; f=0} '
 

@@ -116,7 +116,7 @@ drwxr-xr-x 26 xinlin xinlin 4.0K 7月   7 11:06 ..
 - 对比
 bash提供的exec命令，就像直接执行exec系统调用，没有用fork创建新进程，也没有新的PID，当前的shell进程就被替换了。
 
-#### exec与system系统调用的区别
+### exec与system系统调用的区别
 exec是直接用新的进程去代替原来的程序运行，运行完毕之后不回到原先的程序中去。
 system是调用shell执行你的命令，system=fork+exec+waitpid,执行完毕之后，回到原先的程序中去。继续执行下面的部分。
 
@@ -127,7 +127,7 @@ system是调用shell执行你的命令，system=fork+exec+waitpid,执行完毕�
 
 exec后面不跟command，而是设定一个**整个shell**都有效的输入输出重定向。这种用法，exec命令就不会销毁当前的shell进程，只是将所有的输出，重定向到文件。
 
-注：一定记住exec是内置命令，如果在当前的bash或者脚本下执行了 exec > FILE, 由于是内置命令，对当前进程有效。***并且当前bash/脚本的子进程会继承其fd，所以当前进程的子进程也会将标准输出重定向到 FILE 中。***
+注：一定记住**exec是内置命令**，如果在当前的bash或者脚本下执行了 exec > FILE, 由于是内置命令，对当前进程有效。***并且当前bash/脚本的子进程会继承其fd，所以当前进程的子进程也会将标准输出重定向到 FILE 中。***
 
 
 
@@ -323,4 +323,32 @@ lsof    35519 root    1w  FIFO   0,13      0t0 1345369953 pipe
 lsof    35519 root    2u   CHR  136,5      0t0          8 /dev/pts/5
 ```
 
+
+# 总结
+## 脚本调试
+**背景**
+比如：脚本被某个程序调用，不好直接更改程序加`-x` 来调试。
+那么可以更改脚本，在脚本中添加`set -x`, 然后标准输出重定向到指定的文件。
+
+ 注意： **`set -x`的输出是标准异常输出**。即：`fd=2`的输出。
+
+
+
+```bash
+比如：添加如下的内容
+
+set -x
+# 重定向stdout
+exec 1>/tmp/testout
+#exec不会启动新的shell，而是会将stdout文件描述符重定向到文件。脚本中发给stdout的所有输出会重定向到testout。 1是stdout的文件描述符
+
+
+# 重定向stderr
+exec 2>/tmp/error
+
+
+exec 3>output 
+#exec命令将文件描述符3重定向到另一个文件。 
+# exec 3>>output # 追加
+```
 

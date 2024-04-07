@@ -174,9 +174,34 @@ tcpdump -i eth1 'ip[2:2] > 600'
 tcpdump -nni ethx ip6
 ```
 ## 四层头过滤
-### tcp重传
-- wireshark 过滤查看
-TCP重传十分影响网络性能，往往通过抓包之后，wireshark里打开pcap文件，然后过滤框里输入过滤条件tcp.analysis.retransmission，就能过滤出所有重传的数据包，然后可以通过Statistics里的Summary查看占比.
+### tcp重传过滤
+**wireshark 过滤查看**
+TCP重传十分影响网络性能，往往通过抓包之后，wireshark里打开pcap文件，然后过滤框里输入过滤条件`tcp.analysis.retransmission`，就能过滤出所有重传的数据包，然后可以通过Statistics里的Summary查看占比.
+
+
+**其他方法**
+通过 wireshark 进行分析重传，如果pcap文件很大，那么就会导致 使用 wireshark 异常的慢。可以通过其他的方式来找到重传的数据包，并且一目了然。
+```bash
+比如：查找 server对外发出的fin-ack重传的包；
+
+# 先将所有输出到 text 文件中
+tcpdump -r vs_103.102.202.153_80_p1.pcap -nn > aa.out
+
+
+# 对text文件进行操作，对指定的输出念排序，比如基于 server发出的 fin 包进行 ip:port 对进行排序。
+cat aa.out | grep -v 103.102.202.153 | egrep  "Flags \[F\.\]" | grep "\.80 >" | sort -k3 -k4 > bb.out
+
+cat bb.out | awk '{print $3 " >  " $5}' | sort | uniq -c > dd.out
+
+从 dd.out 中 ，可以轻易的得到 重传的信息。
+
+awk 某一列元素出现的个数：
+cat 11.out | awk '{ count[$5]++} END{for(i in count) if(count[i]>=3)print i " " count[i]}'
+
+or
+
+cat logfile | awk '{print $3}' | uniq -c
+```
 
 ## 包内容进行过滤
 通过 `-A` 选项，可以以 ASCII 码的形式，展示包内容。或者 `-XX` 也可以展示ASCII的形式展示包内容。
@@ -358,7 +383,7 @@ tcpdump -nni eth3 -s0 -G 60 -Z root -w %Y_%m%d_%H%M_%S.pcap
 
 ## pcap包的分割和合并
 主要是使用了Linux下的 wireshark  包中的 editcap 与 mergecap 工具。
-具体参考：Linux下的wireshark包
+具体参考：**Linux下的wireshark工具包**
 
 ## 指定抓包长度
 我们给tcpdump 加上 -s 参数，指定抓取的每个报文的最大长度，就节省抓包文件的大小。
@@ -372,6 +397,23 @@ tcpdump -s 74 -w file.pcap
 ## 显示tcp的相对以及绝对序列号
 ```
 `-S`： 显示绝对的序列号（sequence number），而不是相对编号。
+```
+
+## 查询一段时间来源最多的IP地址
+**背景**
+比如：dns服务器，某一段时间压力比较大，但是又没有打开日志，想知道哪些client的服务器造成了dns查询的压力。
+> 注：由于dns的查询主要是一问一答的2个包。所以，比如容易知道dns查询的压力。
+> 如果是TCP流量，则最好是基于TCP的SYN包进行过滤，然后基于SIP的个数进行排序。
+
+
+**解决**
+```bash
+tcpdump -r xxxxx.pcap -nnn -t | cut -f 1,2,3,4 -d '.' | sort | uniq -c | sort -nr | head -n 20
+
+
+说明：
+-t: 表示不输出时间。
+cut -f 1,2,3,4 -d '.' : 以 `.` 为分隔符，打印出每行的前四列。即 IP 地址。
 ```
 
 # tcptrace

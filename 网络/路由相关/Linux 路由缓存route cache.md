@@ -171,12 +171,12 @@ sysctl -w net.ipv4.ip_early_demux=0
 
 - 当 skb 为 TCP 报文并且开启了 tcp_early_demux 选项
 >则调用 tcp_v4_early_demux 函数，根据 skb 的源地址、目的地址等信息从 ESTABLISHED 连接列表中找到对应的 Socket，把 Socket 中缓存的 sk_rx_dst（struct dst_entry）设置到 skb->dst 中。还会将 Socket 的 struct sock 指针设置到 skb->sk，这样 TCP 层就不用重复查连接列表了；
-- 当 skb 为 UDP 报文并且开启了 udp_early_demux 选项
+- 当 skb 为 UDP 报文并且开启了 **udp_early_demux** 选项
 >则调用 udp_v4_early_demux 函数，拿 skb 的 UDP 头信息在 UDP 「解复用表」中寻找 Socket，如果有，把 Socket 中缓存的 dst_entry 设置到 skb->dst；
 
-如果没开启 ip_early_demux 或者开启了上步中没有完成对 skb->dst 的设置，那么就需要调用 ip_route_input_noref 函数去「路由子系统」查询来获得 skb 的 dst_entry，这个过程比较复杂。
+如果没开启 **ip_early_demux** 或者开启了上步中没有完成对 skb->dst 的设置，那么就需要调用 ip_route_input_noref 函数去「路由子系统」查询来获得 skb 的 dst_entry，这个过程比较复杂。
 
-Early Demux（早期解复用）和查询 IP Route System（路由子系统）目的都是为了设置 skb->dst，如果 skb 是发给本机器，那么 Early Demux 和查询 IP Route System 获得的 dst_entry 会是同一个函数 ip_local_deliver；如果不是本机器，那么会转发出去。
+**Early Demux（早期解复用）**  和查询 IP Route System（路由子系统）目的都是为了设置 skb->dst，如果 skb 是发给本机器，那么 Early Demux 和查询 IP Route System 获得的 dst_entry 会是同一个函数 ip_local_deliver；如果不是本机器，那么会转发出去。
 
 
 ## 总结

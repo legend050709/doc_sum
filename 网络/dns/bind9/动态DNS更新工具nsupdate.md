@@ -10,7 +10,9 @@
 注：jnl文件（journal文件）是BIND9**动态更新**的时候记录更新内容所生成的日志文件。
 
 # update消息
-使用 `TCP 53`端口，进行 DNS的`update`更新，如下所示：
+使用 `TCP 53`或者 `udp 53`端口，默认使用`udp 53`，如果使用了`-v`，才使用`tcp 53`，进行 DNS的`update`更新。
+
+
 
 ## 范例
 ```bash
@@ -26,18 +28,18 @@
 ![](attachments/Pasted%20image%2020240318204442.png)
 
 # 使用
+![](attachments/Pasted%20image%2020240329181642.png)
 ## 语法
 ```bash
 语法：
-    nsupdate [-dD] [-L level] [-l][-g | -o | -y keyname:secret | -k keyfile] [-v] [filename]
-
+   nsupdate [-d] [-D] [-i] [-L level] [[-g] | [-o] | [-l] | [-y [hmac:]keyname:secret] | [-k keyfile]] [-t timeout] [-u udptimeout] [-r udpretries] [-R randomdev] [-v] [-T] [-P] [-V] [filename]
 -d 调试模式。
 -k 从keyfile文件中读取密钥信息。
 -y keyname是密钥的名称,secret是以base64编码的密钥。
 -v 使用TCP协议进行nsupdate.默认是使用UDP协议。
 filename:可以从终端或文件中读取命令.每个命令一行；一个空行或一个”send”命令,则会将先前输入的命令发送到DNS服务器上
 ```
-
+![](attachments/Pasted%20image%2020240329181936.png)
 
 **必须的条件**：
 指定的zone语句块或全局中添加：allow-update { any; }; 或 allow-update { IP范围; };

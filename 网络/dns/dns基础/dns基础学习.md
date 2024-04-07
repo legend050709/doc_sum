@@ -3,6 +3,7 @@
 # DNS介绍
 ![](attachments/Pasted%20image%2020240104113047.png)
 DNS 的全称是 `Domain Name Systems`，DNS是一个分层级 （hierarchical ），分布式（decentralized）的网络数据库，完成主机名称和IP地址之间的相互映射。DNS 协议运行在 UDP 协议上，使用 53 端口。
+DNS配置中，几个重要的概念：**View、Zone、记录(Record)**；
 
 与 HTTP、FTP 和 SMTP 一样，DNS 协议也是一种应用层的协议，DNS 采用 client/server 模式，DNS client 发出查询请求，DNS server 响应请求，并通过 UDP 协议来传输 DNS 报文。
 ![](attachments/Pasted%20image%2020240104121432.png)
