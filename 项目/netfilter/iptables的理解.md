@@ -430,9 +430,31 @@ iptables -I INPUT -p tcp --dport 22 -m connlimit --connlimit-above 20 --connlimi
 iptables -I INPUT -p tcp --dport 22 -m connlimit --connlimit-above 10 --connlimit-mask 27 -j REJECT
 ```
 
+## comment模块
+### 介绍
+```bash
+man iptables-extensions
+```
+![](attachments/Pasted%20image%2020240408122607.png)
+
+
+
+## u32模块
+### 介绍
+```bash
+man iptables-extensions
+```
+![](attachments/Pasted%20image%2020240408121754.png)
+
+从tcp/udp的头或者载荷中最多提取4B的数据，查看是否是指定值。
+
+
 ## ipset扩展模块
 ### 介绍
-
+```bash
+man iptables-extensions
+```
+![](attachments/Pasted%20image%2020240408121141.png)
 
 ### 使用
 ```bash
@@ -481,7 +503,27 @@ iptables -A INPUT -m set --match-set test1 src,src -j DROP
 其他情况同test一样
 ```
 
-## state模块
+
+## statistic 模块
+### 介绍
+```bash
+# man iptables-extensions
+```
+![](attachments/Pasted%20image%2020240408121029.png)
+## conntrack 模块
+### 介绍
+```bash
+# iptables -m conntrack -h
+```
+![](attachments/Pasted%20image%2020240408120149.png)
+
+```bash
+# man iptables-extensions
+```
+![](attachments/Pasted%20image%2020240408120315.png)
+
+
+## state 模块
 ### 背景
 当我们通过http的url访问某个网站的网页时，客户端向服务端的80端口发起请求，服务端再通过80端口响应我们的请求，于是，作为客户端，我们似乎应该理所应当的放行80端口，以便服务端回应我们的报文可以进入客户端主机，于是，我们在客户端放行了80端口。
 
@@ -519,7 +561,9 @@ state match options:
  [!] --state [INVALID|ESTABLISHED|NEW|RELATED|UNTRACKED][,...]
 				State(s) to match
 ```
+![](attachments/Pasted%20image%2020240408120531.png)
 
+各种状态的理解：
 ![](attachments/Pasted%20image%2020240403165021.png)
 
 **NEW**：
@@ -644,6 +688,12 @@ net.nf_conntrack_max = 262144
 ## 常见动作
 ## REJECT 动作
 ## LOG 动作
+### 介绍
+```bash
+man iptables-extensions
+```
+![](attachments/Pasted%20image%2020240408122804.png)
+
 ## SNAT 动作
 ## DNAT 动作
 ## MASQUERADE 动作

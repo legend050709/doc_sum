@@ -72,13 +72,24 @@ inode 节点的总数，在硬盘格式化时就给定，一般是每 1KB 或每
 
 ## 问题
 ### inode不足的查看以及解决
-- 不足的查看
+#### 不足的查看
 使用``"df -h"``命令发现磁盘使用率没有占满，但是无法写入文件，提示``"no space left on device"``!。这个应该就是inode不足导致的。
 
-通过 df -iT 来查看每个磁盘下的inode数量以及使用情况。
-- 解决方法
+通过 `df -iT` 来查看每个磁盘下的inode数量以及使用情况。
+#### 解决方法一:删除多余文件
+(0) df查看具体的哪个磁盘占用inode多
+```bash
+df -iT 先查看磁盘的inode
 
-(1) 删除大小为0的文件
+查找到磁盘挂载目录之后，查看该目录下的各个子目录的文件的数量。
+比如：查看 根目录下的各个子目录的文件的数量。
+for i in /*; do echo $i; find $i |wc -l; done
+
+查看某个目录所在的磁盘(比如：查看/etc 所在的磁盘)：
+df /etc
+```
+
+(1) **删除大小为0的文件**
 查找文件大小为 0 的空文件，可以使用如下命令查找：
 ```c
 find PATH -name "*" -type f -size 0c
@@ -87,6 +98,9 @@ find PATH -name "*" -type f -size 0c
 查找并删除大小为0的文件
 find /home -type f -size 0 -exec rm {} \;
 
+查找大小在某个范围内的文件使用-size参数，-size +n表示大于n单位的范围，-size –n表示小于n单位的范围。
+find . -type f -mtime -1 -size +100k -size-400k
+（查找大于100k且小于400k的文件）
 
 注意：
 使用 `-size` 参数时，不要用 `-size 1k`，这个表示占用空间为 1KB，而不是文件大小为 1KB，应该使用 `-size 1024c` 才表示文件大小为 1KB。
@@ -94,7 +108,7 @@ find /home -type f -size 0 -exec rm {} \;
 ```
 ![](attachments/Pasted%20image%2020230919105708.png)
 
-（2）删除无用的临时文件 或者 很久之前的待删除的文件
+（2）**删除无用的临时文件 或者 很久之前的待删除的文件**
 ```c
 查找某个目录下一个月或两个月之前的文件，然后删除
 # find . -type f -mtime +30 |wc -l
@@ -123,7 +137,18 @@ b）大量的小文件分布在大量的目录下，这时候上面的命令可�
 # find */ ! -type l | cut -d / -f 1 | uniq -c
 直到找出具体的目录。
 ```
-（3）查找文件个数多的文件夹
+
+（3）查看已经删除没有释放的文件
+
+当磁盘空间被占满之后，删除了某些日志却发现空间并没有释放，或者释放的空间没有删掉的日志大，原因是删掉的文件正好有服务在调用，而此时删掉的文件是不会释放空间的。
+查看已经删除没有释放的文件
+```bash
+lsof | grep delete
+```
+
+确认了是哪个服务在占用之后重启相应服务就可以解决了。
+
+（4）**查找文件个数多的文件夹**
 这里为什么要循环/var/*？这是根据个人经验吧！
 如下所示，查看/var目录下的各个子目录的文件数量。
 ```text
@@ -145,10 +170,59 @@ for i in /var/*; do echo $i; find $i |wc -l; done
 ```
 ![](attachments/Pasted%20image%2020231018103713.png)
 
-如上所示，循环查找/var目录下的各个子目录的文件夹的数量，直到查找到某个子目录。
-将子目录下文件个数最多的目录下的文件给删除。
-```c
-find . -type f | xargs rm -f
+一般情况都是crond导致的。
+问题成因：crond在执行脚本时会将脚本输出信息以邮件的形式发送给系统用户，所以必然要调用sendmail，而sendmail又会调用postdrop发送邮件，但是如果系统的postfix服务没有正常运行，那么邮件就会发送不成功，导致持续写入日志到日志文件，造成sendmail、postdrop、crond进程就无法正常退出，形成大量的僵尸进程
+
+
+**处理**：
+```bash
+(1) 杀进程
+ps -ef | egrep "sendmail|postdrop" | grep -v grep |xargs kill 
+或者
+killall postdrop
+
+​ （2）删除占用inode的文件
+find /var/spool/postfix/maildrop/ -type f |xargs rm -rf
+
+（3）修改crond
+为防以后postfix挂了再出现类似问题，可以进行如下配置，将crond的邮件通知关闭：
+将/etc/crontab和/etc/cron.d/0hourly里的MAILTO=root修改为MAILTO=""
+
+```
+
+（5）**查找某目录下inode最多的子目录**
+```bash
+find /data -xdev -printf '%h\n' | sort | uniq -c | sort -k 1 -n
+## /data 目录根据需求进行替换
+
+%h: 表示子目录名称；
+\n: 换行；
+```
+
+![](attachments/Pasted%20image%2020240409170450.png)
+
+注：该命令和上诉的 `for i in /var/*; do echo $i; find $i |wc -l; done ` 类似。
+
+#### 增大inode总数
+如果不允许清理磁盘中的文件，或者清理后inode使用率仍然较高，则需要通过如下步骤，增加inode节点数量。
+
+注：**inode的调整需要重新格式化磁盘，请确保数据已经得到有效备份后，再进行以下操作。**
+
+```bash
+(1) 卸载系统文件
+umount /home
+
+(2) 重新建立文件系统，指定inode节点数
+mkfs.ext3 /dev/xvdb -N 1638400
+
+
+(3) 修改fstab文件
+
+
+(4) 查看修改后的inode节点数
+dumpe2fs -h /dev/xvdb | grep node
+or
+df -iT
 ```
 
 # du命令

@@ -5,6 +5,11 @@ nf_conntrack模块在kernel 2.6.15（2006-01-03 发布） 被引入，支持IPv4
 
 **连接状态跟踪可以供其他模块使用，最常见的两个使用场景是 iptables 的 nat 表的 state 模块**。
 
+# netfilter中的链接理解
+对于TCP/IP协议栈，我们认为UDP是不存在链接的，是基于包进行传输的，也没有确认机制、重传机制。那么可能就存在一个误区，即 UDP协议是无法进行 conntrack。
+
+但是在 netfilter 中的 conntrack 的 conn 是 不感知协议的。一个链接(connection)可以简单的通过四元组(`SIP:SPORT:DIP:DPORT`)来进行标识。因此，在 conntrack 中，udp 也是有链接的。
+
 
 # 配置和查看
 ## 内核相关参数

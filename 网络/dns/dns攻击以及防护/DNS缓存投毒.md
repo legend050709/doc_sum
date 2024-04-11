@@ -55,6 +55,37 @@ DNS缓存投毒（DNS cache poisoning），又称DNS缓存污染（DNS cache pol
 DNS目前最常用的实施方式，是未加密的明文传输的方式。DNSSEC是一种较好的对DNS进行身份验证的方法，DNS服务器对DNS解析器的应答，采用DNSSEC的签名方式。然后DNS解析器使用签名来验证DNS响应，确保记录未被篡改。此外，它还提供从TLD到域权威区域的信任链，确保整个DNS解析过程是安全的。
 
 尽管有这些明显的好处，但DNSSEC的采用速度很慢。主要问题是DNSSEC设置很复杂，需要升级设备和系统、以及相应的服务，才能处理新协议。此外，由于DNS缓存投毒等攻击形式并没有得到相应的重视。DNSSEC也没有被提高到较高的优先级上进行实施。
+
+# bind9集群的缓存投毒处理
+## 背景
+bind9一般是一个集群，通过anycast IP的形式，对外提供服务。
+转发外网的请求，然后在bind9 服务器中缓存外网域名的记录。如果记录缓存存在问题，则需要进行清理。
+
+## 分析
+**(1)查找哪个服务器的缓存有毒**
+```bash
+(1) 方法一：
+client进行dig查看。查看集群中所有服务器的缓存记录。
+dig +norec <ip address of nameserver> <name> <type>
+
+
+(2) 方法二：
+打印各个服务器的缓存记录。查看是否有毒；
+rndc dumpdb -all
+```
+
+## 解决
+```bash
+rndc flushname name [view]
+清理某个特定的域的缓存。
+
+rndc flushtree name [view]
+清理 特定域，以及其下面的子域的缓存。
+
+rndc flush
+清理所有的缓存
+```
+
 # 参考
 ```c
 # 《DNS攻击防范科普系列4》--遭遇DNS缓存投毒该怎么办？

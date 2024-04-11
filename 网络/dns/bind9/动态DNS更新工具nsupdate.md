@@ -12,20 +12,19 @@
 # update消息
 使用 `TCP 53`或者 `udp 53`端口，默认使用`udp 53`，如果使用了`-v`，才使用`tcp 53`，进行 DNS的`update`更新。
 
+## 报文解析
 
-
-## 范例
 ```bash
 说明：
-10.108.164.23 是 dns服务器；
+10.108.164.23 是 dns的 master 服务器；
 10.110.166.146 是 执行 nsupdate的机器；
 ```
 **dns更新请求**
-![](attachments/Pasted%20image%2020240318204321.png)
+![](attachments/Pasted%20image%2020240411140957.png)
 
 
 **dns更新响应**
-![](attachments/Pasted%20image%2020240318204442.png)
+![](attachments/Pasted%20image%2020240411141048.png)
 
 # 使用
 ![](attachments/Pasted%20image%2020240329181642.png)

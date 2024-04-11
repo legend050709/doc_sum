@@ -55,7 +55,9 @@ fewf
 
 # 参考
 ```bash
+# 推荐的监控项
 https://kb.isc.org/v1/docs/en/monitoring-recommendations-for-bind-9
+https://kb.isc.org/docs/monitoring-recommendations-for-bind-9
 
 # youtube:  bind 9 statistics monitor and log analysis
 https://www.youtube.com/watch?v=7Uu6XvY68SM
