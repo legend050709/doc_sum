@@ -16,6 +16,12 @@ Perf全名是`Performance`，是在Linux内建的性能分析工具。perf通过
 # 安装
 
 # 使用
+![](attachments/Pasted%20image%2020240415104949.png)
+![](attachments/Pasted%20image%2020240415104851.png)
+
+## perf stat
+
+## perf record
 perf 的使用方法也很丰富，目前只要会用 `perf record` 和 `perf report` 就能够进行大部分的性能分析了。
 ```bash
 perf record -F 99 -C 1 --call-graph dwarf -- sleep 30
@@ -31,7 +37,7 @@ perf report  -i FILE
 ```
 ![](attachments/image.png)
 
-## perf record
+
 ### 范例
 ```bash
 root@master:~# sudo perf record -F 99 -p 25633 -g -- sleep 30
@@ -48,12 +54,16 @@ root@master:~# sudo perf record -F 99 -p 25633 -g -- sleep 30
 ```
 这个命令会产生一个大的数据文件，取决与你采集的进程与CPU的配置，如果一台服务器有16个 CPU，每秒抽样99次，持续30秒，就得到 47,520 (99*30*16)个调用栈，长达几十万甚至上百万行。
 
+## perf report
+
 ## perf top
 ```bash
 - 进程级：perf top -p <pid>
 - 线程级：perf top -t <tid>
 线程tid可以通过pidstat -t -p <pid>获取。
 ```
+
+
 
 # 参考
 ```bash

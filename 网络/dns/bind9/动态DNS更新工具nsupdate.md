@@ -1,13 +1,43 @@
 ```table-of-contents
 ```
+
 # 介绍
  nsupdate是一个动态DNS更新工具，可以向主DNS服务器提交更新记录的请求，它可以从区文件中添加或删除资源记录，而不需要手动进行编辑zone文件。
 
 ​ 使用`nsupdate` 不会更改区域数据库文件，而是产生了一个`jnl`的数据文件，不能使用文本编辑器打开，只能使用完全区域数据传送查看。
+
 此时添加进入的DNS记录是能够正常提供服务的(即 `named`的内存中存在更改后的记录)，如果需要实时更新到区域文件中，需要使用`rndc sync`且需要注意区域文件的文件权限。**一般情况下在15分钟内，Bind会将`jnl`文件转储到区域文件中**。
 
 
 注：jnl文件（journal文件）是BIND9**动态更新**的时候记录更新内容所生成的日志文件。
+
+# 动态更新和更改zone文件reload的方式对比
+
+更新 named 内存中的zone的配置，存在两种方式：
+1. 编辑zone 文件，然后reload 配置到name的内存中。
+2. nsupdate动态方式，直接和named进行通信，写入到内存中。
+
+注：以上两种方式，不可以同时进行。
+
+
+```bash
+If you have enabled dynamic update for a zone using the "**allow-update**" option or by using "**update-policy**", you are not supposed to edit the zone file by hand, and the server will not attempt to reload it.
+
+If you need to manually edit the contents of a dynamic zone, you can run the "**rndc freeze**" command to cause the zone to be frozen and available in a disk file that can be edited in the usual manner.
+
+After the edits are done, you can run the "**rndc thaw**" command to allow the dynamic updates to continue, after reading the changes you made.
+```
+
+可以理解为：
+如果配置了 **allow-update** 和 **update-policy**，就应该使用动态更新的方式进行zone的变更，而不是通过手工更改zone文件 + `rndc reload`  的方式。
+但是如果有**allow-update** 和 **update-policy**配置，还是想要 手工更改zone文件 +  `rndc reload` 的方式，那么可以 通过 `freeze` 来冻结 动态更新，然后 更改 zone 文件 +   `rndc reload`， 最后 `thaw` 继续回到 动态更新的方式来。
+
+
+```bash
+freeze              关闭动态更新zone（主要是nsupdate动态更新）
+thaw                启用动态更新zone（主要是nsupdate动态更新）
+```
+
 
 # update消息
 使用 `TCP 53`或者 `udp 53`端口，默认使用`udp 53`，如果使用了`-v`，才使用`tcp 53`，进行 DNS的`update`更新。
@@ -386,6 +416,13 @@ esac
 ```bash
 ./nsupdate.sh test2 mod CNAME:A  ax3.test.org. www.baidu.com.:10.20.1.3
 ```
+
+# 其他
+## named的并发动态更新限制
+
+![](attachments/Pasted%20image%2020240417105922.png)
+
+
 # 参考
 ```c
 # bind主从配置与基于TSIG加密的动态更新

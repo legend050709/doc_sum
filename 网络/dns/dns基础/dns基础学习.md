@@ -145,7 +145,9 @@ zone "sz.hunk.tech" IN {
         allow-update { none; };
 };
 ```
+
 zone区域文件`named.sz.hunk.tech`内容如下：
+
 ```bash
 $ORIGIN .
 $TTL 600    ; 10 minutes
@@ -716,7 +718,7 @@ RR 会有不同的类型，下面是不同类型的 RR 汇总表。
 
 
 
-## SOA记录
+## SOA类型
 ### 定义
 SOA( Start of Authority)，起始授权机构记录：用来表示被标记成在众多NS记录中哪一台是主服务器。SOA必须是区域数据库文件第一条记录，并且一个zone文件只有一个SOA记录。
 
@@ -813,7 +815,7 @@ postmaster@place.dom.，是一个邮箱地址。那么为什么负责人这个�
 nameserver.place.dom.              7200   IN      SOA     ns1.he.net. postmaster.place.dom. 1 3600 600 68400 3600
 ```
 
-## NS记录
+## NS类型
 NS(Name Server)，域名服务器：用于确定哪些服务器（注意可能不是单个服务器）为一个局域网传递DNS信息以及确定域名由哪个服务器进行解析。
 即：NS记录表明谁对某个区域有解释权，即哪些是权威DNS。
 
@@ -843,7 +845,7 @@ longshuai.com.    IN  NS  dnsserver2.longshuai.com.
 
 
 
-## A记录
+## A类型
 A记录：address，存储的是域内主机名所对应的ip地址。
 格式如下：
 ```json
@@ -855,14 +857,14 @@ dnsserver.longshuai.com.    IN  A   172.16.10.15
 客户端之所以能够解析到主机名对应的ip地址，就是因为dns服务器中的有A记录存储了主机名和ip的对应关系。  
 AAAA记录存储的是主机名和ipv6地址的对应关系。
 
-## PTR记录
+## PTR类型
 PTR记录：pointer，和A记录相反，存储的是ip地址对应的主机名，该记录只存在于反向解析的区域数据文件中(并非一定)。格式如下：
 ```bash
 16.10.16.172.in-addr.arpa.  IN  PTR  www.longshuai.com.
 ```
 表示解析`172.16.10.16`地址时得到主机名`www.longshuai.com.`
 
-## Cname记录
+## Cname类型
 canonical name，表示规范名的意思，其所代表的记录常称为别名记录。
 之所以如此称呼，就是因为为规范名起了一个别名。
 什么是规范名？可以简单认为是fqdn。
@@ -1022,7 +1024,7 @@ ALIAS 记录与 CNAME 一样，也将一个主机名映射到另一个主机名�
 用的是301重定向技术;效果为浏览器地址栏输入`http://a.com`回车，打开网站内容是目标地址`http://www.dnspod.cn`的网站内容，且地址栏显示目标地址`http://www.dnspod.cn`。
 
 
-## MX记录
+## MX类型
 MX记录：mail exchanger，邮件交换记录。负责转发或处理该域名内的邮件。和邮件服务器有关，且话题较大，所以不多做叙述，如有深入的必要，请查看《dns & bind》中”Chapter 5. DNS and Electronic Mail”。
 
 ```json
@@ -1031,7 +1033,7 @@ MX记录：mail exchanger，邮件交换记录。负责转发或处理该域名�
 @ 600 IN MX 10 mail
 @ 600 IN MX 20 smtp
 ```
-## TXT记录
+## TXT类型
 TXT（Text）记录：TXT记录是一种DNS记录类型，它允许域名的所有者在域名系统中存储文本信息。被用来标记存储在DNS中的不同类型的信息。
 
 ### 作用
@@ -1071,8 +1073,21 @@ DKIM（DomainKeys Identified Mail） 是另一种电子邮件验证技术，它�
 
 **检测TXT记录**
 ![](attachments/Pasted%20image%2020240120130145.png)
-## SRV记录
+## SRV类型
 SRV (Service)记录是从 RFC2052 中对 SRV资源进行了定义。SRV 被用来记录服务器提供什么样的服务。
+
+
+## any类型
+将任意的类型，多个类型(比如：soa类型，NS类型等)都进行返回。默认情况下，any类型的查询使用的是TCP协议进行查询。
+
+比如：查询某个zone的类型。
+```bash
+dig internal -t any @127.0.0.1
+
+如上所示，返回 域名为 internal 的任意类型的记录。比如SOA类型，NS类型。
+对于其下的A记录，如 test1.internal 1.1.1.1  则不会返回。
+```
+
 
 ## 其他
 ### SOA记录与NS记录的区别

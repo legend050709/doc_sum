@@ -345,7 +345,6 @@ delzone  zone  [class [view]]                   #删除一个zone
 ```
 
 
-
 ## `rndc status`检查rndc管理状态
 ```shell
 rndc status
@@ -546,6 +545,58 @@ zone "test.com" IN {
 
 注：执行完 `rndc sync`之后，区域日志文件（`test.ZONE_NAME.jnl` 文件）比如（`test.com.zones.jnl`文件）就没有必要要了，就可以删除了。`rndc sync clean`完成上诉一些列动作。
 
+## rndc reload 和 reconfig 对比
+
+![](attachments/Pasted%20image%2020240416163936.png)
+
+rndc reload:  更改zone的配置时操作。如果期望 对dns的查询影响更小，可以在rndc reload的时候 指定 zone 以及 view。
+
+rndc reconfig:  添加 zone 或者 删除 zone时操作。
+
+## rndc stats 查看统计
+
+### 介绍
+```bash
+BIND has two mechanisms for publishing usage statistics; the static 'named.stats' file and the statistics channel, which can be read over the network as XML or JSON-formatted data, provided over HTTP.
+
+```
+
+### `named.stats` file方式
+```bash
+(1)配置：
+statistics-file "/var/named/named.stats";
+
+zone-statistics yes;  # 使能 zone的 统计；可以全局options中，也是在具体的zone中。
+
+zone "example.org" in {
+	type primary;
+	file "primary/example.org";
+	zone-statistics yes;
+};
+
+
+
+(2)获取：
+rndc stats
+```
+
+缺陷：
+![](attachments/Pasted%20image%2020240416170106.png)
+
+
+### HTTP statistics channel方式
+```bash
+(1) 配置
+statistics-channels { inet 127.0.0.1 port 8080 ; };
+
+(2) 获取
+
+```
+
+优点：
+
+![](attachments/Pasted%20image%2020240416170401.png)
+
 ## 查询缓存
 ```bash
 rndc dumpdb
@@ -588,6 +639,32 @@ query logging is OFF
 recursive clients: 0/0/1000
 tcp clients: 0/100
 server is up and running
+```
+
+
+**recursive clients** 说明：
+```bash
+recursive clients: 0/0/1000；formatting as  recursive clients: C/S/H , explain about C/S/H as following :
+
+C : My understand it’s the number of concurrent recursive-resolution requests (requests currently being performed), even if the same source address is associated with multiple requests.
+
+S : I call this number a “soft limit” and its seem possible the max requests that BIND can serve requests without cancelling the oldest queries. This value is approach the next hard limit number (H – 3rd number).
+
+H : I call this number a “hard limit“. Typically it should never hit this value, unless the queries are coming in faster than the cancellations can be performed. When the hard limit is reached, I think BIND just ignores any further queries.
+```
+超过之后的错误日志：
+```bash
+no more recursive clients: quota reached
+```
+
+
+**tcp clients**的说明：
+```bash
+tcp clients: 0/100; formatting as tcp clients: T/M, explain about T/M as following :
+
+T : I think it means the clients TCP connection is currently established to the named process.
+
+M : The maximum clients TCP connections that established to named process.
 ```
 
 ## 管理静态域(allow-update { none; };)

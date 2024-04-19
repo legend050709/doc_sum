@@ -59,12 +59,27 @@ NXDOMAIN is nothing but non-existent Internet or Intranet domain name.
 
 # 其他
 ## NODATA 和 NXDOMAIN 的区别
-`NODATA`意味着该域存在，但没有关于该域的信息与该域关联的指定类型（如A记录）。 如果域本身不存在，将会看到`NXDOMAIN`。
-`NXDOMAIN（代表Rcode=3）`是 `Rcode`响应码的一种；
-但是 `there isn’t an RCODE associated with NODATA.`, 即 `Nodata` 并不是`Rcode`响应码的一种；对于`Nodata`，意味着`rcode`为`noerror`但是`answer`个数为0。
+
+### NODATA 的理解
+
+ `there isn’t an RCODE associated with NODATA.`。
+即 **`Nodata` 并不是`Rcode`响应码的一种；对于`Nodata`，意味着`rcode`为`noerror`但是`answer`个数为0**。
+也就是在，zone file 文件中，这个 资源记录存在，但是 资源的类型和查询类型不匹配。
+
 ```bash
-dig represents NODATA by displaying NOERROR with an ANSWER of zero. So what does NOERROR with an ANSWER of 0 actually represent? It means one or more resource records exist for this domain but there isn’t a record matching the resource record _type_ (A, AAAA, MX, etc.).
+dig represents NODATA by displaying NOERROR with an ANSWER of zero. 
+
+So what does NOERROR with an ANSWER of 0 actually represent? 
+
+It means one or more resource records exist for this domain but there isn’t a record matching the resource record type (A, AAAA, MX, etc.).
 ```
+
+### NODATA 和 NXDOMAIN的区别
+![](attachments/Pasted%20image%2020240416173306.png)
+
+`NODATA`意味着该域存在，但没有关于该域的信息与该域关联的指定类型（如A记录）。
+如果域本身不存在，将会看到`NXDOMAIN`。
+`NXDOMAIN（代表Rcode=3）`是 `Rcode`响应码的一种；
 
 
 # 解析故障排查技巧

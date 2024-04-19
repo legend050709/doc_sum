@@ -62,7 +62,7 @@ master的named重启后，master会发送notify消息给slave。但要求区域�
 
 #### 从服务器的定时检查
 
-master 服务器会定时(SOA中的 refresh time)向主域名服务器进行查询（SOA请求）以便了解区域是否有变动。如有变动，则会执行一次区域传输（XFER消息）。
+master 服务器会定时(SOA中的 refresh time)向主域名服务器进行查询（SOA请求）以便了解区域是否有变动(serial number 是否增加)。如有增加，则会执行一次区域传输请求（XFER消息）。
 
 一旦启动区域传输，就会存在两种传输方式：
 1. 全量传输(AXFR)：即传输整个区域的消息，全量传输会传输整个区域（zone）的消息。
@@ -1856,6 +1856,7 @@ slave通过 bird 发布 anycast ip，这样多个slave就可以提供dns的集�
 
 # 测试
 
+## nsupdate批量更改多个view下 的zone
 ```bash
 # cat gen_nsupdate_multi_ops_cmd.sh
 #!/bin/bash
@@ -1893,6 +1894,7 @@ sh gen_nsupdate_multi_ops_cmd.sh > nsupdate_multi_ops_cmd.out
 ```
 
 
+## 查看zone同步的生效时间
 执行nsupdate的同时，同时查看配置变更是否在各个slave中生效。
 ```bash
 date +%T.%N; nsupdate -v < nsupdate_multi_ops_cmd.out & while true;do echo $(date +%T.%N) $(for i in {2..9};do dig -b 10.44.79.146 t1999.dhb.test11.domain @192.21.45.$i +short;done);done
@@ -1919,6 +1921,18 @@ master 是本机，即 server 127.0.0.1
 如上所示，最开始slave中的A记录是 1.2.3.1； 后来多个slave都生效为 1.2.3.6。
 开始时间为 16:15:03.02658, 所有slave都同步成功的时间为：16:15:04.25815。
 
+## dig查询指定view下的zone记录
+
+view中的match_clients字段用于基于clinet的信息选择view。
+可在match_clients可以设置为 TSIG，ACL名称（client的sip，或 ECS网段）。
+
+一般情况下，想要测试某个View，要么选择特定网段（匹配Client-ip）的测试机器，或者选择 ECS方式（需要bind9编译的时候就支持ECS），或者在任意一个测试机器上，dig测试时指定TSIG。
+
+相比较之下，通过指定TSIG的方式，匹配到指定的view更加通用。如下所示：
+
+```bash
+dig @1.1.1.1 t1999.dhb.test11.internal -y hmac-sha256:bjfs_idc_key:"xxxxxxxxxx" +short
+```
 
 # 参考
 ```bash

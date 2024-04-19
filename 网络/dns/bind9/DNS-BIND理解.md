@@ -926,18 +926,76 @@ C 语言的注释风格，分别是`/* xxx */` 以及 `//`。 如下所示：
 主机向本地域名服务器的查询一般都是采用递归查询。
 
 #### 配置参数
-![](attachments/Pasted%20image%2020240114222708.png)
-- **recursion**
-如果是yes，并且一个DNS询问要求递归，那么服务器将会做所有能够回答查询请求的工作。如果recursion是off的，并且服务器不知道答案，它将会返回一个推荐（referral）响应。默认值是yes。
+
+- **recursion**：默认值是yes。
+
+![](attachments/Pasted%20image%2020240416182654.png)
+
+如果是yes，并且一个client的 DNS询问要求递归，那么服务器将会做所有能够回答查询请求的工作。如果recursion是off的，并且服务器不知道答案，它将会返回一个推荐（referral）响应。
 注意把recursion设为no，不会阻止用户从服务器的缓存中得到数据，它仅仅阻止新数据作为查询的结果被缓存。服务器的内部操作还是可以影响本地的缓存内容，如NOTIFY地址查询。
 
 - **allow-recursion**
+
+![](attachments/Pasted%20image%2020240416182859.png)
+
 设定哪台`Client`主机可以进行递归查询。如果没有设定，缺省是允许所有主机进行递归查询。
 注意禁止一台主机的递归查询，并不能阻止这台主机查询已经存在于服务器缓存中的数据。
 权威服务器`不应允许`递归查询，防止服务器被用于`DNS放大分布式拒绝服务攻击`，并更好地保护其免受缓存中毒攻击。
 
-- **recursive-clients**
+- **recursive-clients**：默认值1000.
+
+![](attachments/Pasted%20image%2020240416183606.png)
+
+
 服务器同时为用户执行的递归查询的最大数量。默认值1000，因为每个递归用户使用许多内存，一般为20KB，主机上的recursive-clients选项值必须根据实际内存大小调整。
+
+recursive-clients 为待处理的递归客户端定义“硬配额”限制；当挂起的客户端数量超过此数量时，将不接受新的传入请求，并且对于每个传入请求，都会删除先前的挂起请求。
+
+还设置了“软配额”。当超出这一较低配额时，传入请求将被接受，但对于每个请求，都会删除待处理的请求。如果 recursive-clients 大于 1000，则软配额设置为 recursive-clients 减去 100；否则它被设置为 90% 的递归客户端。
+
+- **resolver-query-timeout**
+
+![](attachments/Pasted%20image%2020240416183113.png)
+
+指定 dns 解析器进行递归查询的超时时间。
+
+- **max-clients-per-query** 和 **clients-per-query**
+ 
+![](attachments/Pasted%20image%2020240416191518.png)
+
+注：max-clients-per-query 和 clients-per-query 限制的是对于特定的外网域名(同样的name，同样的type的查询) 的递归查询的并发请求个数，而 recursive-clients 针对的 任意外网域名的的并发请求个数。
+
+
+- **fetches-per-zone**
+
+![](attachments/Pasted%20image%2020240416193137.png)
+
+max-clients-per-query 指示的是对于外网的某个特定的递归查询（多个并发查询有相同的请求name和type）的并发请求限制。
+如果对外网的多个并发请求不同，但是属于一个zone或者其下的子zone，那么 max-clients-per-query 将无法进行限制。
+即 对于特定域名以及类型的多个并发查询，被归拢为一个 fetch，只迭代发送一个递归请求给外网dns服务器。隶属于同一个zone及其下的子zone的不同类型以及域名的查询，属于不同的fetch，fetch的个数受限于 fetches-per-zone。
+
+超过阈值之后的动作：
+1> 直接丢弃。（默认动作）
+2> 给client 回复 SERVFAIL。
+
+- **fetches-per-server**
+
+![](attachments/Pasted%20image%2020240417105557.png)
+
+单个外网服务器(即：reslove 服务器的转发服务器) 可以接收的并发的 fetch 的最大数量。
+
+ 对于特定域名以及类型的多个并发查询，被归拢为一个 fetch，只迭代发送一个递归请求给外网dns服务器。如果 reslover 服务器 并发的转发多个外网请求给 外网的权威dns服务器，那么限制转发给外网服务器的 fetch的数量。
+
+注：fetches-per-server 是动态调整的， 需要和 fetch-quota-params 配合使用。
+如下所示：
+```none
+fetches-per-server 200 fail;
+fetch-quota-params 100 0.1 0.3 0.7;
+```
+
+
+
+参考：https://bind9.readthedocs.io/en/v9.18.25/reference.html
 
 #### 配置格式
 ```bash
@@ -963,7 +1021,12 @@ recursive-clients 25;
 1. 保证该非递归服务器不出现在客户机的`/etc/resolv.conf` 的 `server`中；
 2. 保证该非递归服务器不被其他 name server 当成转发器 （forwarder）；
 
-注：内网中的`Client`的 `/etc/resolv.conf` 的 `server` 为内网DNS服务器的地址；内网 DNS 服务器可以解析内网的域名、主机名等，同时也可以转发外网的域名查询。此时内网的DNS服务器可以开启递归查询，这样对于外网的域名查询，得到响应后，也可以进行缓存。否则，不开启递归查询，那么对于外网的域名查询，在内网DNS服务器上没有缓存。正常情况下，内网DNS服务器配置的转发器为知名的DNS服务器，比如`8.8.8.8`，对于`8.8.8.8`外网DNS服务器上，正常情况下也是开启了递归查询。因为外网DNS服务器也需要递归查询，才可以缓存记录，以及减轻访问其的Client的压力。
+注：内网中的`Client`的 `/etc/resolv.conf` 的 `server` 为内网DNS服务器的地址；内网 DNS 服务器可以解析内网的域名、主机名等，同时也可以转发外网的域名查询。
+
+此时内网的DNS服务器可以开启递归查询，这样对于外网的域名查询，得到响应后，也可以进行缓存。
+否则，不开启递归查询，那么收到client对于外网的域名查询，本地不存在记录，则给client返回 一个推荐（referral）响应， client 后续进行迭代查询。
+
+正常情况下，内网DNS服务器配置的转发器为知名的DNS服务器，比如`8.8.8.8`，对于`8.8.8.8`外网DNS服务器上，正常情况下也是开启了递归查询。因为外网DNS服务器也需要递归查询，才可以缓存记录，以及减轻访问其的Client的压力。
 
 
 ### allow-query
@@ -1603,6 +1666,51 @@ domain.com. ns.domain.com. admin.domain.com. (
              604800 )   ; Negative Cache TTL
 ```
 
+
+注： **可以在zone文件中多次定义 $ORIGIN  的值(类似于一个zone下的子zone，但其zone引导配置中不存在这些子zone，引导配置中都是这个zone。)**。
+如下所示：
+
+zone 引导配置如下所示：
+```bash
+zone "testdns.internal" {
+	type master;
+	file "bjfs/db.testdns.internal"
+}
+```
+
+zone 配置文件(`bjfs/db.testdns.internal`)如下所示：
+```bash
+$ORIGIN .
+@ IN SOA master-dns-test-1.testdns.internal. admin.domain. (
+                  3     ; Serial
+             604800     ; Refresh
+              86400     ; Retry
+            2419200     ; Expire
+             604800 )
+    NS  master-dns-test-1.testdns.internal.
+    NS  slave1-dns-test-1.testdns.internal.
+    NS  slave2-dns-test-1.testdns.internal.
+
+master-dns-test-1  A  1.1.1.2
+slave1-dns-test-1  A  1.1.1.3
+slave2-dns-test-1  A  1.1.1.4
+
+$ORIGIN test2.testdns.internal
+t1 A  2.2.2.4
+t2 A  2.2.2.5
+t3 A  2.2.2.6
+
+$ORIGIN test3.testdns.internal
+t1 A  3.2.2.4
+t2 A  3.2.2.5
+t3 A  3.2.2.6
+
+$ORIGIN test4.testdns.internal
+t1 A  4.2.2.4
+t2 A  4.2.2.5
+t3 A  4.2.2.6
+```
+
 ##### fqdn自动补齐
 在区域数据文件中，没有使用点号”.”结尾的，在实际使用的时候都会自动补上域名(即`$ORIGIN`)，使其变为fqdn。
 例如区域”longshuai.com.”，以下是完全格式的资源记录：
@@ -1643,6 +1751,8 @@ www1      IN  CNAME  www
 ```
 ##### TTL
 TTL：定义区域中数据文件里面的各项记录的默认TTL值，单位为秒；
+> 对于  Negative RR 即 Nxdomain 记录的 TTL 则是权威服务器的SOA 的 minimum 作为超时时间。
+
 RR都会被保存在DNS的解析服务器的cache上，有一个失效的时间，TTL就是控制这个失效时间的一个参数。
 在区域数据文件中，`$TTL`的定义表示其后的记录都以此TTL为准，直到遇到下一个`$TTL`。也就是说，两个`$TTL`之间的所有记录都以前面的`$TTL`为准。不过大多数时候，一个区域数据文件中只会在第一行定义一个`$TTL`值，表示该文件中所有记录都使用该缓存周期值。
 
@@ -1652,11 +1762,68 @@ RR都会被保存在DNS的解析服务器的cache上，有一个失效的时间�
 
 ##### SOA记录
 SOA：SOA记录，@代表相应的域名，每个区域数据文件只能有一个SOA，其中参数如下：
+
+![](attachments/Pasted%20image%2020240416123049.png)
+
 - serial：表示配置文件的修改版本，格式为年月日加上修改的次数；
 - refresh：设定辅助dns和主dns进行同步的间隔时间；
+```bash
+slave服务器间隔一段时间查询master中的zone的serial number是否发生增加。
+目前master每次进行zone的更新之后，都会给slave发送对应的 notify通知slave存在zone更新。
+
+This is time(in seconds) when the slave DNS server will refresh from the master. This value represents how often a secondary will poll the primary server to see if the serial number for the zone has increased (so it knows to request a new copy of the data for the zone).
+
+```
 - retry：如果辅助dns进行更新失败后，间隔多久进行重试；
+```bash
+slave服务器连接不上master服务器（即master没有响应），间隔多久进行再次尝试请求SOA，单位为秒；
+
+取值：retry通常小于 refresh。
+
+Now assume that a slave tried to contact the master server and failed to contact it because it was down. The Retry value (time in seconds) will tell it when to get back. This value is not very important and can be a fraction of the refresh value.
+```
 - expiry：设定辅助dns与主dns同步失败后，多长时间后清除对应的记录；
-- minimum：默认最小的TTL值，如果在前面没有设置TTL，则以此值为准。
+```bash
+当slave服务器连接不上master时，slave可以在多长时间内认为其zone是有效的，并且供用户进行查询。单位为秒；超时之后，还是无法连接，slave将删除这份zone。
+
+取值：expire 必须大于 REFRESH_和 RETRY 的和。
+
+This is the time (in seconds) that a slave server will keep a cached zone file as valid, if it can’t contact the primary server. If this value were set to say 2 weeks ( in seconds), what it means is that a slave would still be able to give out domain information from its cached zone file for 2 weeks, without anyone knowing the difference. The recommended value is between 2 to 4 weeks.
+```
+- minimum ：
+使用的场景如下所示：
+```
+- 定义了当该域无记录时，缓存的时长，即 Nodomain 记录的缓存时间。（区别于有记录时缓存的时长 `TTL`）
+Signed 32 bit value in seconds. RFC 2308 redefined this value to be the negative caching time - the time a NAME ERROR = NXDOMAIN record is cached.
+
+- 默认的 TTL 值。（zone file中 无 TTL 变量时使用该值作为dns响应中的RR记录的TTL值）
+
+```
+
+**zone file中的TTL 和 minimum区别**
+```bash
+$ORIGIN .
+$TTL 86400  ; 1 day
+internal    IN SOA  master-aaa-kdns-test-k-41.internal. admin.internal. (
+        1712866142 ; serial
+        10800      ; refresh (3 hours)
+        900        ; retry (15 minutes)
+        604800     ; expire (1 week)
+        86400      ; minimum (1 day)
+        )
+      NS  master-aaa-kdns-test-k-41.internal.
+      NS  slave-aaa-kdns-test-k42.internal.
+      NS  slave-aaa-kdns-test-k43.internal.
+      NS  slave-aaa-kdns-test-k-40.internal.
+slave-aaa-kdns-test-k-40 A  10.108.164.22
+slave-aaa-kdns-test-k42 A 10.108.164.24
+slave-aaa-kdns-test-k43 A 10.108.164.25
+sms-api     A 10.20.253.166
+      A 10.20.254.105
+```
+
+![](attachments/Pasted%20image%2020240416121939.png)
+
 
 - **注意**：
 >在所有的配置中，`ns.domain.com != ns.domain.com.` ，必须注意在 zone file 中的配置文件的最后 `.` 必须不能省略；
@@ -2145,7 +2312,12 @@ view <string> <optional_class> {
 ```
 
 **`match_clients`和`matach-destinations`**：
-根据用户的源地址("address_match_list")匹配视图定义的"match_clients"和用户的目的地址("address_match_list")匹配视图定义的"matach-destinations"。如果没有被指定，match-clients和match-destinations默认匹配所有地址。
+match_clients 可以设置为 TSIG，ACL名称（client的sip，或 ECS网段）。
+一般情况下，想要测试某个View，要么选择特定的Client-ip的测试机器，或者选择 ECS方式（需要bind9编译的时候就支持ECS），或者在任意一个测试机器上，dig测试时指定TSIG。相比较之下，指定TSIG的方式更加通用。如下所示：
+```bash
+dig @1.1.1.1 t1999.dhb.test11.internal -y hmac-sha256:bjfs_idc_key:"xxxxxxxxxx" +short
+```
+
 
 **`match-recursive-only`**
 一个视图也可以做为match-recursive-only来指定，意思是来自匹配用户的递归请求将会匹配该视图。

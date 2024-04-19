@@ -525,7 +525,7 @@ Wants=sshd-keygen.service
 [Service]
 Type=notify
 EnvironmentFile=/etc/sysconfig/sshd
-ExecStart=/usr/sbin/sshd -D $OPTIONS
+ExecStart=/usr/sbin/sshd -D $OPTIONS  # OPTIONS 来自 EnvironmentFile字段指定的环境变量文件。
 ExecReload=/bin/kill -HUP $MAINPID
 KillMode=process
 Restart=on-failure

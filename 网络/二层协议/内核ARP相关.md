@@ -100,7 +100,7 @@ arping -A -I eth0 172.16.42.161
 如下所示：/proc/sys/net/ipv4/neigh/default 目录下的各个配置。
 ![](attachments/Pasted%20image%2020231027174848.png)
 
-## arp_ignore
+## arp_ignore：收到arp请求是否响应
 ### 介绍
 Linux [内核文档](https://www.baidu.com/link?url=2x1snmPs3FowXF4IgsntmrWh6TbFiojKKvF3lTRYe8K5oci44n83yIJvXRGJz-0V0rXxUhmqkaeWUBT7C_7AE7u-Vq2YlwBb-PkUhodVa5C&wd=&eqid=a1e7ed7e0000f7730000000359a423c3) 中的描述：
 ![](attachments/Pasted%20image%2020231106163909.png)
@@ -131,7 +131,7 @@ arp_ignore 参数的作用是控制系统在收到外部的 ARP 请求时，是�
 ```c
 net.ipv4.conf.all.arp_ignore = 1
 ```
-## arp_annoce
+## arp_annoce： 发送arp请求sip的选择
 ### 介绍
 `arp_announce` 参数是定义 Linux 主机发送 ARP 请求数据包时如何选择数据包中使用的发送方 IP 地址（即 Sender IP address）。
 
@@ -170,6 +170,20 @@ arp_announce 参数常用的取值有 0，1，2：
 net.ipv4.conf.all.arp_announce = 2
 ```
 ## arp_filter
+arp_filter 和 arp_ignore 类似， 更多的使用 arp_ignore。
+
+### arp_filter 和 arp_ignore 区别
+arp_ignore=1开销小，可实现各网卡响应各自ip的arp请求。 arp_filter=1开销大一些（查路由表），且只解决重复arp响应问题，难以实现各网卡响应各自ip的arp请求。
+
+`arp_filter=1`含义：sip的路由出口为本网卡才进一步处理。`arp_filter=1`主要用来防攻击，比如可过滤sip不规范的arp报文，如跨网段的arp报文。arp_filter是源地址校验，是rp_filter的arp版本的补充。 
+`arp_ignore=1`含义：dip为本网卡ip才响应。
+
+
+## arp_notify
+ARP 通知链操作
+- 0：不做任何操作    
+- 1：当设备up/down或硬件地址(mac地址)改变时自动产生一个 ARP 请求
+
 ## 配置arp
 # 查看
 ## ip neigh查看arp表项
@@ -189,7 +203,8 @@ ARP 协议很简单，通过缓存机制和 Gratuitous ARP 能够提供便利和
 
 # 参考
 ```c
-# [Linux内核参数之arp_ignore和arp_announce](https://www.cnblogs.com/lipengxiang2009/p/7451050.html)
+# [Linux内核参数之arp_ignore和arp_announce]
+https://www.cnblogs.com/lipengxiang2009/p/7451050.html
 
 https://syxdevcode.github.io/2021/03/01/Linux%E4%B8%8B%E7%BD%91%E7%BB%9C%E4%B8%A2%E5%8C%85%E6%95%85%E9%9A%9C%E5%AE%9A%E4%BD%8D/
 【查看arp相关部分】
