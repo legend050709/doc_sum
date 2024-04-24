@@ -71,6 +71,36 @@ rndc
 ```bash
 # rndc reload
 ```
+
+# 多view共享递归缓存 
+默认情况下，每个view都有自己独有的递归缓存。可以使用`attach-cache` 选项在多个view之间共享递归缓存。
+```bash
+attach-cache cache_name;
+```
+
+## 限制条件
+多个view共享递归缓存，需要多个view有相同的缓存策略。
+
+具体的相同配置如下所示：
+```bash
+- check-names
+- cleaning-interval
+- zero-no-soa-ttl
+- max-cache-size
+- max-cache-ttl
+- max-ncache-ttl
+- max-stale-ttl (from BIND 9.12)
+- dnssec-validation (note that this is only effective with trust anchors and/or DLV configured)
+- dnssec-accept-expired
+```
+
+如果多个view之间配置了共享递归缓存（`attach-cache`）; 但是他们存在不同的缓存策略，那么named将启动失败。如下所示：
+```bash
+03-Dec-2012 12:15:47.231 views internal-only and external can't share the cache due to configuration parameter mismatch
+03-Dec-2012 12:15:47.231 loading configuration: failure
+03-Dec-2012 12:15:47.231 exiting (due to fatal error)
+```
+
 # 参考
 ```bash# bind9的配置文件中的配置解释 
 https://chengqian90.com/DNS/DNS%E6%9C%8D%E5%8A%A1%E5%99%A8%E4%B9%8BBIND9.html
@@ -78,4 +108,7 @@ https://chengqian90.com/DNS/DNS%E6%9C%8D%E5%8A%A1%E5%99%A8%E4%B9%8BBIND9.html
 # BIND配置文件详解（二）（++++++++++++）
 https://developer.aliyun.com/article/471229
 
+
+# How do I configure multiple views to share the same recursive cache?
+https://kb.isc.org/docs/aa-00835
 ```

@@ -18,10 +18,20 @@ strace -T -tt -f -s 10000 -p 87 |& tee strace.log
 ```c
 strace -T -tt -f CMD
 ```
+
 ## 多线程追踪
 ```
 strace -T -tt -fp PID
+
 ```
+
+## 追踪所有信息
+```bash
+strace -T -tt -e trace=all -fp PID
+```
+
+
+
 # 范例
 ## 场景一
 **问题**
@@ -37,6 +47,10 @@ strace -tt -T -s 1000 -e execve -fp `pidof falcon-agent` 2>&1 |grep 30_bind9_zon
 
 注：falcon-agent 进程一直是不退出的。
 ```
+
+## 谁杀了我的进程
+
+
 # 其他
 大多数进程基本都会使用基础c库，而不是系统调用，如Linux上的glibc，Windows上的msvc，所以还有一个工具ltrace，可以用来追踪库调用，如下：
 ```c
@@ -45,5 +59,6 @@ ltrace -T -tt -f -s 10000 -p 87 -o ltrace.log
 基本用法和strace一样，一般来说，使用strace就够了。
 # 参考
 ```c
-
+# 我的进程去哪儿了，谁杀了我的进程
+https://www.cnblogs.com/xybaby/p/8098229.html
 ```

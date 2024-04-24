@@ -289,12 +289,19 @@ iproute-4.11.0-25.el7_7.2.x86_64
 ### 安装kernel-doc
 ```c
 yum install kernel-doc -y
+
+apt install linux-doc 
+
+注：有的系统上没有 kernel-doc ，而是 linux-doc。 
 ```
+
+
+
 ### 查看kernel-doc软件包的文件安装位置
 安装好kernel-doc软件包后，可以使用下面的命令查看它将文档安装在哪里了。
 ```c
 可以简单通过来查看：（可能存在多个安装路径）
- rpm -ql kernel-doc | head
+rpm -ql kernel-doc | head
 rpm -ql kernel-doc | tail 
 
 或者 
@@ -324,7 +331,12 @@ find / -type d -name "kernel-doc*"
 
 
 [sysctl 相关的 kernel-doc 查看](https://www.kernel.org/doc/Documentation/sysctl/)；如下所示
+```bash
+https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt
+```
 ![](attachments/Pasted%20image%2020231102113542.png)
+
+
 
 # kernel-doc 说明
 ## 背景

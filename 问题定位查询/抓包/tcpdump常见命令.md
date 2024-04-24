@@ -48,9 +48,25 @@ $ tcpdump -i eth0 -s0 -l port 80 | grep 'Server:'
 ```
 需求： “对于tcpdump输出的内容，提取每一行的第一个域，即”时间域”，并输出出来，为后续统计所用” ----> `# tcpdump -i ens33 -l |awk '{print $1}'` ----> 如果不加-l选项，那么只有全缓冲区满，才会输出一次，这样不仅会导致输出是间隔不顺畅的，而且当你ctrl-c时，很可能会断到一行的半截，损坏统计数据的完整性。
 
+- `-P`：指定要抓取的包的方向。是流入还是流出的包。可以给定的值为"in"、"out"和"inout"，默认为"inout"。
 
+![](attachments/Pasted%20image%2020240429143830.png)
 
-# 过滤规则查看
+# 过滤器
+网络报文是很多的，很多时候我们在主机上抓包，会抓到很多我们并不关心的无用包，然后要从这些包里面去找我们需要的信息，无疑是一件费时费力的事情，tcpdump 提供了灵活的语法可以精确获取我们关心的数据，这些语法说得专业点就是过滤器。
+
+## 分类
+过滤器简单可分为三类：协议（proto）、传输方向（dir）和类型（type）。
+
+一般的 **表达式格式** 为：
+
+![](attachments/Pasted%20image%2020240429144211.png)
+
+- 关于 proto：可选有 ip, arp, rarp, tcp, udp, icmp, ether 等，默认是所有协议的包
+- 关于 dir：可选有 src, dst, src or dst, src and dst，默认为 src or dst
+- 关于 type：可选有 host, net, port, portrange（端口范围，比如 21-42），默认为 host
+
+## 过滤规则查看
 通过查看 `man pcap-filter` 可以看到 tcpdump的常用过滤规则。如下所示：
 ![](attachments/Pasted%20image%2020231023103324.png)
 
@@ -243,6 +259,11 @@ tcpdump: listening on enp7s0, link-type EN10MB (Ethernet), capture size 262144 b
     Host: dev.example.com
 ```
 
+### wireshark 包内容过滤
+比如，自定义的四层之上的协议。
+`tcp.payload contains "request header"` 来直接从 payload 里面过滤请求。
+
+
 ## 字段偏移过滤
 ### 用法
 tcpdump 支持我们根据数据包的标志位进行过滤
@@ -333,6 +354,22 @@ tcpdump -r file.pcap 'tcp[tcpflags] & (tcp-rst) != 0' -w rst.pcap
 ```
 
 # 其他方法
+## 任意口抓包
+```bash
+tcpdump -nni any xxxx
+```
+
+![](attachments/Pasted%20image%2020240429200503.png)
+
+如上所示：正常情况下，抓包是不会显示In/out的。只有抓包口为 any，并且 `-e ` 打印mac时，会 显示 in、out 标识。
+
+> 注： 可以通过 `-Q in/out/inout`的方向过滤。
+```bash
+比如：只抓取 eth02 发出去的包。
+
+tcpdump -nni eth02 -Q out
+```
+
 ## 保存包到文件的同时显示当前抓到的包
 
 ```
@@ -392,6 +429,13 @@ tcpdump -nni eth3 -s0 -G 60 -Z root -w %Y_%m%d_%H%M_%S.pcap
 一般来说，帧头是 14 字节，IP 头是 20 字节，TCP 头是 20~40 字节。如果你明确地知道这次抓包的重点是传输层，那么理论上，对于每一个报文，你只要抓取到传输层头部即可，也就是前 14+20+40 字节（即前 74 字节）：
 ```bash
 tcpdump -s 74 -w file.pcap
+```
+
+```bash
+如果包长很大，那么可能存在截断 。
+-s0:  即不限制抓包长度
+
+$ tcpdump -i eth0 -s0 -l port 80 | grep 'Server:'
 ```
 
 ## 显示tcp的相对以及绝对序列号

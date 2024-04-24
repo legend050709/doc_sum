@@ -265,6 +265,137 @@ ns.zhxfei.com. 86400 IN A 172.16.130.129
 应答如下所示：
 ![](attachments/Pasted%20image%2020240108162406.png)
 
+# udp palload size
+## client通告的  udp payload size 
+
+### 含义
+
+udp payload size 指的是 dns 数据的大小，即udp载荷的大小。
+
+### 作用
+client向dns服务器**通告**自身可以接受的最大的**udp响应**报文的大小。
+允许DNS请求方通知DNS服务器让其返回大包。
+即 ： dns请求中 携带  udp payload size 来告知 服务器 自身支持收取 多大的 udp 包。
+
+
+
+
+如果 dns响应包的 大小 <  client 中的 udp payload size，那么 服务器响应时应用层直接用 udp 进行返回。
+> 注：经过服务器的协议栈的IP层，则可能会对UDP包进行分片，比如超过了1500。
+
+如果 dns响应包的 大小 >   client 中的 udp payload size, 则 服务器响应 时，设置截断标记。接下来 则 client 使用 TCP进行DNS请求。
+
+
+```bash
++bufsize=B
+    Set the UDP message buffer size advertised using EDNS0 to B bytes. The maximum and minimum sizes of this buffer are 65535 and 0 respectively. Values outside this range are rounded up or down
+           appropriately. Values other than zero will cause a EDNS query to be sent.
+```
+
+
+
+### 使用
+
+![](attachments/Pasted%20image%2020240604151011.png)
+
+dig 的 默认值 dns 的option中的  "udp payload size"为 4096. (即： dig 不设置 bufsize，则默认为 4096)
+如果想要设置，则通过 `+bufsize=B` 来进行设置。
+
+
+
+```bash
+dig @10.108.164.21 t30rr.dhb.internal -y hmac-sha256:xxxx:zzzzz   +bufsize=987
+```
+
+
+## server 中配置的 udp payload size
+
+在named中允许通过下面的配置，进行配置，可以响应的最大的 dns 数据（udp payload size）的大小。
+
+```bash
+    edns-udp-size 512;
+    max-udp-size 1512;
+```
+
+### 说明
+
+#### edns-udp-size
+
+![](attachments/Pasted%20image%2020240604161856.png)
+
+**含义**
+
+这设置最大通告的 EDNS UDP 缓冲区大小（以字节为单位），以控制从权威服务器接收的响应递归查询的数据包的大小。有效值为512到4096；超出此范围的值将自动调整为该范围内最接近的值。默认值为 1232。
+
+注：dig 设置的 bufsize 没有 4096的限制。可以达到65535。
+
+应该是 递归dns服务器向 远端的 dns服务器通告自身可以接收的 udp payload size 大小。
+> 注：类似于 client 的dig 中的 bufsize. 
+
+
+**为什么设置edns-udp-size**
+
+将 edns-udp-size 设置为非默认值的通常原因是让 dns响应 通过阻止分段数据包的防火墙，或阻止大于 512 字节的 UDP DNS 数据包的防火墙。
+> 比如：edns-udp-size 设置的比较大，那么不会发生截断，在ip层进行了udp的分片。那么防火墙可能给丢弃了。
+> 或者：edns-udp-size 设置的比较大，响应的 udp数据包 大于 512，被防火墙给丢弃了。
+
+
+
+**建议值**
+
+如果觉得 edns-udp-size 设置的偏小，可以将其设置为 1432。
+
+
+
+#### max-udp-size
+
+![](attachments/Pasted%20image%2020240604162937.png)
+
+![](attachments/Pasted%20image%2020240604163216.png)
+
+如果将 `max-udp-size` 设置的过小，就是意味着鼓励 client 后续使用 tcp 进行dns请求。
+
+
+
+### nocookie-udp-size
+
+![](attachments/Pasted%20image%2020240604163432.png)
+
+暂时忽略该选项。
+
+
+#### 区别
+
+edns-udp-size： 用于 **迭代dns服务器** 向外发送 dns请求时的最大的**通告 udp 载荷大小**。
+
+`max-udp-size`：用于设置 named 响应时 可以发送的 最大的 udp载荷大小。
+
+
+### 使用
+client 如果直接请求 dns 权威服务器，则 实际上是否发生截断，是基于 
+udp响应的 udp载荷大小 和  min{client 通告的 payload size,  named的 max-udp-size} 进行比较。
+如果前者大，则发生截断，后续client使用 tcp进行请求；
+如果后者大，那么不发送截断，named直接发送udp响应「有可能经过协议栈的IP层，会发生IP分片」。
+
+
+
+## 范例
+
+![](attachments/Pasted%20image%2020240604160018.png)
+
+如上所示；
+红色框内 `UDPsize=1200` 以及  `UDPsize=1000` 是 client 通告的 udp payload size；
+绿色框内的 `OPT UDPsize=1232` 是 named 服务器 支持的 最大的 udp payload size。
+
+```bash
+OPT UDPsize 就是对应  named 中的 edns-udp-size 配置。
+```
+
+`1185` 是实际响应的 dns 数据的大小（即 udp payload size = ip_total_len - 20B ip头 -  8B udp 头）。
+
+
+
+
 # DNS支持健康检查
 # DNS路由策略（负载均衡策略）
 ## round-robin 轮询

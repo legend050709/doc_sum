@@ -359,7 +359,7 @@ named 命令允许动态更新。一个区域可以设置成动态或静态。�
 静态修改，即直接修改 zone文件。
 动态修改，则是通过 nsupdate 修改，其实修改的是named中的内存，zone文件并没有修改。
 
-###  `rndc reload`管理静态域
+###  `rndc reload`静态管理域
 使用：
 ```bash
 reload  重新载入配置文件和区文件  
@@ -370,7 +370,9 @@ reload zone [class [view]]
 重新载入指定的区文件
 ```
 
-在静态域修改区域数据库文件(zone文件)后（包含zone中的`serial number`），使用以下命令重新加载区域数据库配置。
+在静态域修改区域数据库文件(zone文件)后（包含zone中的`serial number`），使用`rndc reload  `命令重新加载区域数据库配置。
+
+范例如下：
 
 ```bash
 zone "od.com" IN {  
@@ -385,8 +387,12 @@ zone "od.com" IN {
 zone reload up-to-date
 ```
 
+#### 使用场景
+一般情况下，通过静态更改zone文件的方式来更改zone数据，然后通过`rndc reload`来进行同步。
+上面的操作，一般都是在master上进行操作，slave上的zone信息通过master和slave 之间的 zone 传输同步。 
+不过也可以禁止master和slave之间的 zone的动态传输，而是 在slave上更改zone文件，然后reload的方式。
 
-### 管理动态态域
+### nsupdate动态管理域
 **前提条件**：
 在区域配置文件中 添加 allow-update { acl; }; 表示根据acl指定策略进行动态更新。可填写ip地址。
 
@@ -466,8 +472,6 @@ The zone reload and thaw was successful.
 3》手动更改 zone文件。
 4》 `rndc thaw`：解冻动态更新，并且 reload 配置。
 
-#### 其他
-
 #### 问题和解决
 **问题**
 今天想在不关闭bind的情况下更新一下zone文件，用了`rndc reload`命令也都返回reload成功但是利用dig命令检测发现解析并没有被更改。后来用了 `rndc reload xxx.top` 提示
@@ -485,8 +489,9 @@ rndc reload xxx.top
 rndc thaw xxx.top
 ```
 
-## `rndc sync`将动态更新落盘到zone文件
-Bind9支持区域记录的动态更新，使用nsupdate命令可以动态更新区域内的记录。
+## `rndc sync`
+### 将动态更新落盘到zone文件
+Bind9支持区域记录的动态更新，使用nsupdate命令可以在named运行时，动态更新区域内的记录，此时更新的是named的内存中的记录，磁盘中的zone文件并没有更新。
 
 例如我们在test.com域中有如下内容：
 ```bash
@@ -545,7 +550,31 @@ zone "test.com" IN {
 
 注：执行完 `rndc sync`之后，区域日志文件（`test.ZONE_NAME.jnl` 文件）比如（`test.com.zones.jnl`文件）就没有必要要了，就可以删除了。`rndc sync clean`完成上诉一些列动作。
 
-## rndc reload 和 reconfig 对比
+### 使用场景
+使用  `rndc sync` 是为了将内存中的 zone 数据快速落盘到 zone 文件中。
+正常情况下，也就master中需要查看这个 zone 文件（默认text格式）。
+slave中的 zone 文件，一般情况下，是 raw 格式，无法直接查看，需要使用工具（`named-compilezone` ）来进行查看。在master和slave之间的zone传输同步时，也会更新slave的 zone 文件；另外，对于slave的zone文件，一般也是不查看的，所以不需要在slave上执行 `rndc sync` 。
+
+综上：**`rndc reload` 以及 `rndc sync` 一般情况下，就是在master 设备上操作，不会 在 slave上进行操作**。
+
+## rndc reconfig
+### rdnc reconfig可能flush cache的情况
+named运行过程中，通过 `rndc reconfig`来更改配置，正常情况下，是期望该操作不影响递归缓存。但是在某些场景下，更改的配置会影响 缓存的记录，此时执行 `rndc reconfig`会清空缓存。
+
+如更改如下的缓存配置，然后执行`rndc reconfig`会清空缓存。
+```bash
+- check-names
+- zero-no-soa-ttl
+- max-cache-size
+- max-cache-ttl
+- max-ncache-ttl
+- dnssec-validation
+- dnssec-accept-expired
+```
+
+![](attachments/Pasted%20image%2020240422172230.png)
+
+### rndc reload 和 reconfig 对比
 
 ![](attachments/Pasted%20image%2020240416163936.png)
 
@@ -614,7 +643,10 @@ rndc
 线上难免会遇到刷新缓存的需求，如果直接用 rndc flush 刷新全量缓存，在有客户端缓存的情况下，在每一次客户端缓存过期的时间都可能会产生极高的 QPS 。
 
 因此，尽量使用 flushname 或 flushtree 来刷新指定域名或 Zone。
+
+
 # 范例
+
 ## 查询DNS服务状态（可以取值做监控）
 ```bash
 # rndc 和 named 服务在一个机器上

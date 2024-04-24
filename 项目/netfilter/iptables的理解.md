@@ -1,6 +1,37 @@
 ```table-of-contents
 ```
 # iptable概念
+## 整体概述
+
+![](attachments/Pasted%20image%2020231010102334.png)
+
+![](attachments/Pasted%20image%2020240506141658.png)
+
+![](attachments/Pasted%20image%2020240506104305.png)
+
+![](attachments/Pasted%20image%2020240506104520.png)
+
+## 表
+## 链
+### PRE_ROUTING
+#### 代码位置
+
+
+```c
+int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, struct net_device *orig_dev)
+{
+    ...
+    return NF_HOOK(NFPROTO_IPV4, NF_INET_PRE_ROUTING, skb, dev, NULL,
+               ip_rcv_finish);
+    ...
+}
+```
+
+### LOCAL_IN
+### FORWARD
+### LOCAL_OUT
+### POST_ROUTING
+
 # iptable规则查询
 # iptables规则管理
 # iptables匹配条件
@@ -710,5 +741,8 @@ man iptables-extensions
 # iptables常用套路
 # 参考
 ```bash
+# linux Netfilter在网络层的实现详细分析（iptables）
+https://zhuanlan.zhihu.com/p/694494005
+
 
 ```

@@ -272,10 +272,32 @@ time dig +time=5 +tries=1 @10.0.0.10 cdnxxx.com
 ```
 
 
-## 反解查询
+## `dig -x`反解查询
 ```bash
 dig -x IP
+
+注：不要写为： dig -t PTR IP 这种形式。
 ```
+
+## dig -x IP 和  dig -t PTR IP的区别
+
+dig -x IP 实际发出的请求 为 逆序的IP + in-addr.arpa。
+比如：`-x 172.16.0.159` 实际发出的请求name为：`159.0.16.172.in-addr.arpa.`。
+但是 -t  PTR IP 发出的请求就是 IP。
+比如：`-t PTR 172.16.0.159` 发出的 请求的 name 就是 `172.16.0.159`。
+ 
+![](attachments/Pasted%20image%2020240511163202.png)
+
+
+实际查询的日志如下所示：
+
+![](attachments/Pasted%20image%2020240511163734.png)
+
+查看具体的 zone 文件，如下所示：
+
+![](attachments/Pasted%20image%2020240511163906.png)
+
+
 ## `+tcp`使用TCP协议进行查询
 默认情况下dig将采用udp协议进行查询，除非是 AXFR 或 IXFR 请求，才使用 TCP 连接。如果要采用tcp方式进行查询，可以加上 `+tcp`参数。
 

@@ -3,7 +3,40 @@
 # 收包流程
 
 ## 整体流程
+
 ![](attachments/Pasted%20image%2020230805164733.png)
+
+![](attachments/Pasted%20image%2020240513155251.png)
+
+```bash
+1. Packets arrive at the NIC
+2. NIC will verify `MAC` (if not on promiscuous mode) and `FCS` and decide to drop or to continue
+3. NIC will [DMA packets at RAM](https://en.wikipedia.org/wiki/Direct_memory_access), in a region previously prepared (mapped) by the driver
+4. NIC will enqueue references to the packets at receive [ring buffer](https://en.wikipedia.org/wiki/Circular_buffer) queue `rx` until `rx-usecs` timeout or `rx-frames`
+5. NIC will raise a `hard IRQ`
+6. CPU will run the `IRQ handler` that runs the driver's code
+7. Driver will `schedule a NAPI`, clear the `hard IRQ` and return
+8. Driver raise a `soft IRQ (NET_RX_SOFTIRQ)`
+9. NAPI will poll data from the receive ring buffer until `netdev_budget_usecs` timeout or `netdev_budget` and `dev_weight` packets
+10. Linux will also allocate memory to `sk_buff`
+11. Linux fills the metadata: protocol, interface, setmacheader, removes ethernet
+12. Linux will pass the skb to the kernel stack (`netif_receive_skb`)
+13. It will set the network header, clone `skb` to taps (i.e. tcpdump) and pass it to tc ingress
+14. Packets are handled to a qdisc sized `netdev_max_backlog` with its algorithm defined by `default_qdisc`
+15. It calls `ip_rcv` and packets are handed to IP
+16. It calls netfilter (`PREROUTING`)
+17. It looks at the routing table, if forwarding or local
+18. If it's local it calls netfilter (`LOCAL_IN`)
+19. It calls the L4 protocol (for instance `tcp_v4_rcv`)
+20. It finds the right socket
+21. It goes to the tcp finite state machine
+22. Enqueue the packet to the receive buffer and sized as `tcp_rmem` rules
+    1. If `tcp_moderate_rcvbuf` is enabled kernel will auto-tune the receive buffer
+23. Kernel will signalize that there is data available to apps (epoll or any polling system)
+24. Application wakes up and reads the data
+```
+
+
 1.⽹卡收到⽹线上的packet，⾸先检查packet的CRC校验，保证完整性，然后将packet头去掉，得到frame。（⽹卡会检查MAC包内的⽬的MAC地址是否和本⽹卡的MAC地址⼀样，不⼀样则会丢弃。） 
 2.⽹卡将frame拷贝到预分配的ring buffer缓冲。 
 3.⽹卡驱动程序通知内核处理，经过TCP/IP协议栈层层解码处理。 
@@ -19,8 +52,11 @@
 5. 应用程序通过read()从socket buffer读取数据。
 
 ## 具体流程
+
 ![](attachments/Pasted%20image%2020230805213734.png)
+
 ![](attachments/Pasted%20image%2020230805171011.png)
+
 ![](attachments/Pasted%20image%2020230806152104.png)
 
 

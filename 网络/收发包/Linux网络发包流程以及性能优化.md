@@ -1,9 +1,40 @@
+```table-of-contents
+```
 # 发包流程
+
+![](attachments/Pasted%20image%2020240513155409.png)
+
+```bash
+1. Application sends message (`sendmsg` or other)
+2. TCP send message allocates skb_buff
+3. It enqueues skb to the socket write buffer of `tcp_wmem` size
+4. Builds the TCP header (src and dst port, checksum)
+5. Calls L3 handler (in this case `ipv4` on `tcp_write_xmit` and `tcp_transmit_skb`)
+6. L3 (`ip_queue_xmit`) does its work: build ip header and call netfilter (`LOCAL_OUT`)
+7. Calls output route action
+8. Calls netfilter (`POST_ROUTING`)
+9. Fragment the packet (`ip_output`)
+10. Calls L2 send function (`dev_queue_xmit`)
+11. Feeds the output (QDisc) queue of `txqueuelen` length with its algorithm `default_qdisc`
+12. The driver code enqueue the packets at the `ring buffer tx`
+13. The driver will do a `soft IRQ (NET_TX_SOFTIRQ)` after `tx-usecs` timeout or `tx-frames`
+14. Re-enable hard IRQ to NIC
+15. Driver will map all the packets (to be sent) to some DMA'ed region
+16. NIC fetches the packets (via DMA) from RAM to transmit
+17. After the transmission NIC will raise a `hard IRQ` to signal its completion
+18. The driver will handle this IRQ (turn it off)
+19. And schedule (`soft IRQ`) the NAPI poll system
+20. NAPI will handle the receive packets signaling and free the RAM
+```
+
 1.应用程序的数据包，在TCP层增加TCP报文头，形成可传输的数据包。 
 2.在IP层增加IP报头，形成IP报文。 
 3.经过数据网卡驱动程序将IP包再添加14字节的MAC头，构成frame（暂⽆CRC），frame（暂⽆CRC）中含有发送端和接收端的MAC地址。 
 4.驱动程序将frame（暂⽆CRC）拷贝到网卡的缓冲区，由网卡处理。 
 5.⽹卡为frame（暂⽆CRC）添加头部同步信息和CRC校验，将其封装为可以发送的packet，然后再发送到网线上，这样说就完成了一个IP报文的发送了，所有连接到这个网线上的网卡都可以看到该packet。
+
+
+
 
 # socket层
 # 协议层

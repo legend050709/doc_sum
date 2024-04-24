@@ -92,13 +92,16 @@ bind-9.11.4-16.P2.el7_8.3.x86_64
 ```
 
 ### 对配置文件进行语法检查
+
 **named-checkconf工具：检查主配置文件**
+
 ```bash
 named-checkconf [主配置文件]       //检查主配置文件的语法错误
 named-checkconf -z [主配置文件]    //加载主配置文件中对应的区域数据库文件
 ```
 
 **named-checkzone工具：检查区域数据库文件**
+
 ```bash
 named-checkzone  <域名>  [区域数据库文件]
 例：
@@ -106,9 +109,11 @@ named-checkzone  yuji.com  yuji.com.zone
 ```
 
 **named-compilezone**：对区域数据文件进行编译，并输出编译后的结果。
+
 ```
 named-compilezone  -o  OUTFILE  <域名>  [区域数据库文件]
 ```
+
 比如：
 ```bash
 [root@xuexi named]# named-compilezone  -o  -  longshuai.com  /var/named/db.longshuai.com   
@@ -341,7 +346,7 @@ B.版本更新后，只要reload，会立即发生同步
 ### 从服务器上的zone文件查看
 
 辅助DNS辅助器生成的区域文件，Centos 6 可以使用`cat`等文本工具查看；
-Centos 7 已经使用data格式存放，需要使用这个命令配合参数查看:
+Centos 7 已经使用 raw 格式存放，需要使用这个命令配合参数查看:
 ```bash
 # 输出到标准输出
 named-compilezone -f raw -o -  zone_name  zone文件
@@ -1035,7 +1040,7 @@ recursive-clients 25;
 
 如果是zone中的配置，`allow-query` 中定义的任何主机都可以查询此 zone。
 
-### allow-notify
+### also-notify
 **作用域**：
 全局option的配置，以及 zone中的配置。一般配置在**主dns服务器**。
 

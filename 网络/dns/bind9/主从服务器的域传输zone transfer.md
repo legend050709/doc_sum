@@ -1,7 +1,123 @@
 ```table-of-contents
 ```
+# 前言
+## zone文件基础
+zone 文件用来存储zone的资源记录。在master上，zone文件一般是外部创建，为了维护的方便和灵活性，一般使用text格式。
 
-# 定义
+**master的zone的维护**
+zone的记录维护：可以通过nsupdate动态更新内存中的zone数据，然后回写到zone文件中；也可以通过更改zone文件，然后reload方式写入到内存中。
+
+
+**slave的zone的维护**
+slave中的zone数据一般来自于master的zone传输同步，然后将这些zone数据以zone文件的形式保存到磁盘中，这样slave重启时，就可以从磁盘中读取zone配置，而不是从master中接收配置。
+
+> 注：其实slave也可以通过nsupdate进行动态更新，或者通过更改zone文件，然后reload的方式进行，不过一般不这样使用。
+
+## zone文件格式
+
+![](attachments/Pasted%20image%2020240422190128.png)
+
+
+zone文件的格式：
+- text 格式
+- raw 格式
+- map 格式
+
+### text 格式
+默认情况下， master 中的 zone 文件格式是 text 格式。
+
+#### 优缺点 
+**优点**
+人类可读，读取方便。
+
+**缺点**
+每次存储（写文件）都需要编码（encode）；每次加载（读文件）都需要解码（decode）。
+如果 zone 文件中的记录非常多（比如：上百万条）将会花费大量的时间进行编码和解码。
+
+### raw 格式
+raw format, 又称之为 "wire format"，也是 master 到 slave之间传递 的 zone的格式。
+默认情况下， slave 中的 zone 文件格式是  raw 格式。
+
+#### 优缺点
+**缺点**
+人类不可取。
+需要特别的工具（ `named-compilezone` ）来读取文件内容。
+```bash
+# 输出到标准输出
+named-compilezone -f raw -o -  zone_name  zone文件
+
+# 输出到指定文件(/tmp/zone.out)
+named-compilezone -f raw -o -  zone_name  zone文件
+
+比如：
+# named-compilezone  -o  /tmp/aa.out  longshuai.com  /var/named/db.longshuai.com  
+```
+
+### map格式
+
+BIND 9.10 及更高版本支持zone文件的map格式。这种格式编解码速度更快。它可以在主服务器或辅助服务器上使用，但在主服务器上使用文本格式是最简单的。
+
+#### 介绍
+当BIND运行时，它会将区域信息保留在计算机的内存中。解码区域文件意味着从磁盘读取文件，找到相关信息，并将这些信息存储在内存中。
+
+如果使用一种称为内存映射（memory mapping）的技术，**将区域信息数据（zone data）按其在内存中的相同格式写回磁盘，那么在使用时就不需要对其进行解码**。
+BIND可以直接链接到这个文件，就像它在内存中一样，操作系统会很快确保文件被加载到内存中。
+
+####  配置
+```bash
+masterfile-format map;
+
+比如：
+zone third.example.com {
+         type secondary;
+         file "sec/third.example.com";
+         masterfile-format map;
+         primaries {192.168.1.100;};
+    };
+```
+
+#### 优缺点
+（1）优点
+映射格式（map format）比原始格式(raw format)快得多，因为区域文件在使用前不需要进行处理，文件中的区域数据直接可用。
+
+它到底有多快取决于主机操作系统的许多细节和硬件性能。
+访问映射格式的区域文件的速度依赖于硬盘速度、磁盘缓存的大小和速度、操作系统内存管理算法、硬件内存总线速度以及计算机主板上的其他活动。ISC已经观察到映射格式相对于原始格式的速度提升了50倍，但也观察到远低于这个速度提升的情况。
+
+（2）缺点
+映射格式不适用于不同系统之间或不同版本的BIND之间。
+
+**映射格式的区域文件与其创建时的计算机、操作系统和BIND版本紧密相关**。
+- 你不应该尝试在一个计算机上创建映射格式的区域文件然后在另一个计算机上使用。
+- 如果你正在升级BIND或升级支持BIND的操作系统，你应该删除所有映射格式的区域文件，并在BIND启动后通过区域传输让它们重新创建。
+
+
+#### zone文件是否使用map格式
+
+![](attachments/Pasted%20image%2020240422222950.png)
+
+**在slave上使用map格式的zone文件**：
+
+在slave上使用map格式的zone文件风险比较小。slave的内存中的zone信息是通过zone 传输获取的，然后通过named 写入到zone文件，最后可能在重启时再从 zone 文件中读取。
+
+在正常运行中，通常不需要人工检查存储在slave上的区域zone文件，但如果确实需要检查，可以使用`named-compilezone`程序对map格式的区域文件进行编码和解码。
+> 注意：如果升级了BIND、操作系统或更换了服务器硬件，你应该删除区域文件，并让它们作为BIND正常主次同步的一部分重新创建。
+
+**在master上使用map格式的zone文件**：
+
+你可以在master上使用映射格式，这将使named的启动或重启更快（map格式主要用于文件读取的解析）。
+但是，如果这样做，你必须有办法在BIND之外创建和编辑这些map格式的zone文件。
+你可以创建一个空的映射格式区域文件，然后通过动态更新来管理它，或者使用转换工具在文本和映射格式之间进行转换。
+软件工具`named-compilezone`可以在映射格式(map format)和文本格式(text format)之间进行转换。
+
+在master上使用map格式的zone文件否过于麻烦，你需要自己权衡。如果你选择这样做，必须确保使用与你的BIND(`named`)版本配套的`named-compilezone`版本，它们必须完全匹配。
+
+### 小结
+
+可以在master上面使用 text 格式的 zone文件，在slave中使用 map格式的zone文件；map格式的zone文件的读取速度比 raw格式以及text格式更快。
+
+另外，注意 slave的 named 版本升级时候 删除旧的map格式zone文件，创建新的 map格式 zone文件（通过zone 传输）。
+
+# zone传输的定义
 所谓区域传输(zone transfer)，就是**内存中的域名记录**发生了变更，辅助域名服务器与主域名服务器通信，并同步 RR 资源的过程。这样做的目的是为了保证多台服务器保证内容同步。
 
 **如何定义变更**
@@ -10,15 +126,29 @@
 # 特性
 
 ## TCP协议进行zone transfer
+
 **区域传输使用 TCP 而不是 UDP**
 
 如果使用UDP，限制传输数据 512B以内（DNS的UDP响应就是限制在512B以内）。由于数据同步传送的数据量比一个 DNS 请求和响应报文的数据量要多得多，因此使用TCP。
+
 ![](attachments/Pasted%20image%2020240104133505.png)
 
 因此：
 **UDP 用于 client 和 server 的查询和响应**；
+```bash
+man dig
+       +tcp, +notcp
+        This option indicates whether to use TCP when querying name servers.  The default behavior is to use UDP unless a type any or ixfr=N query is requested, in which case the default is TCP. AXFR queries always use TCP.
+
+如上所示：并不是所有的dns请求都是 使用 udp；
+如果 dig 查询的type = any 或者  ixfr=N or  AXFR 的查询，是使用 TCP的。
+```
+
 **TCP 用于主从 server 之间的Zone传送**。
 > 注： notify的请求响应，soa的请求响应还是UDP；只是 zone transfer 消息（XFER 消息）是通过tcp的。
+
+
+
 
 ## master自动同步变更给slave
 RFC 标准协议通过 MASTER-SLAVE 架构，**NOTIFY请求响应（UDP） + SOA请求响应（UDP） + XFR请求响应（TCP）** 机制实现数据自动同步，用户只需要在主服务器上更改域名，更改信息便可自动同步到从服务器 。
@@ -121,11 +251,42 @@ rdnc
 因此，其实监控到了`master`和`slave`的`zone`的配置不一致，其实也可以其他的服务器，甚至`slave`自身，给`slave`发送一条`notify`消息，这样也可以触发`slave`服务器对向master发送 SOA请求获取 serial number 。
 
 ### 哪些服务器可以给slave发送notify消息
-1. zone 的  NS记录中的服务器
-2. allow-notify 配置的服务器
-3. primary list 中的服务器。
+
+1. zone 的  NS记录中的服务器：
+2. allow-notify 配置的服务器：一般在从服务器中配置该项。
+3. primary list 中的服务器：一般在从服务器中的 zone的 masters中设置。
 ```bash
 A notify is deemed **valid** if the sender is one of the servers in the NS RRset for the zone, has been explicitly allowed using an "allow-notify" clause, or is from an address listed in the primary servers clause.
+```
+
+### 从服务器上的zone文件查看
+
+辅助DNS辅助器生成的区域文件，Centos 6 可以使用`cat`等文本工具查看；
+Centos 7 已经使用 raw 格式存放，需要使用这个命令配合参数查看:
+**named-compilezone**：对区域数据文件进行编译，并输出编译后的结果。
+```bash
+# 输出到标准输出
+named-compilezone -f raw -o -  zone_name  zone文件
+
+# 输出到指定文件(/tmp/zone.out)
+named-compilezone -f raw -o -  zone_name  zone文件
+```
+
+范例如下所示：
+```bash
+# named-compilezone  -o  /tmp/aa.out  longshuai.com  /var/named/db.longshuai.com   
+zone longshuai.com/IN: loaded serial 1
+dump zone to /tmp/aa.out...done
+OK
+
+# cat /tmp/aa.out
+longshuai.com.            21600 IN SOA    dnsserver.longshuai.com. xyz.longshuai.com. 1 10800 3600 604800 3600  
+longshuai.com.            21600 IN NS     dnsserver.longshuai.com.  
+dnsserver.longshuai.com.  21600 IN A      172.16.10.15  
+ftp.longshuai.com.        21600 IN A      172.16.10.17  
+mydb.longshuai.com.       21600 IN A      172.16.10.18  
+www.longshuai.com.        21600 IN A      172.16.10.16  
+www1.longshuai.com.       21600 IN CNAME  www.longshuai.com.  
 ```
 
 ### 其他问题
@@ -623,7 +784,7 @@ BIND 有适当的机制来简化域传输，并限定系统传输的负载量。
 在设定时间下没有任何进展的发出的域传输将会被终止。默认为 60 分钟(1 小时)。
 
 **serial-query-rate**
-辅域名服务器将会定时查询主域名服务器，来确定域的串号是否改变。每个查询将会占用一些辅域名服务器网络带宽。为限制占用的带宽，BIND9 可以限制每个查询发送的频率。serial-query-rate 的值是一个整数，就是每秒能发送的最大查询数。默认值为20。
+辅域名服务器将会定时查询主域名服务器，来确定域的串号(serial number)是否改变。每个查询将会占用一些辅域名服务器网络带宽。为限制占用的带宽，BIND9 可以限制每个查询发送的频率。serial-query-rate 的值是一个整数，就是每秒能发送的最大查询数。默认值为20。
 
 **transfer-format**
 域传输可以用两种不同格式，one-answer 和 many-answer。
@@ -635,6 +796,7 @@ one-answer 在每个资源记录传输中使用一个DNS 消息。
 many-answer 则将尽可能多的资源记录集中在一个消息中。many-answer 是更加有效的，但只有相对比较新的辅域名服务器才支持它，如 BIND9、BIND8.x 和打了补丁的 BIND4.9.5。默认的设置为 many-answer。使用 server 语句中的相关选项，可以替代全局选项中的 transfer-format 设置。
 
 **transfers-in**
+slave上配置，收到的 zone-transfer (xfer-in) 的 并发数的最大值。
 可以同时运行的进入的域传输的最大值。默认值为 10。增加 transfers-in 的值，可以加速辅域的收敛速度，但也可能增加本地系统的负载。
 
 **transfers-out**
@@ -664,6 +826,7 @@ notify-source 确定使用哪些本地的源地址和可选的 UDP 端口，用�
 ## options中周期性任务间隔
 
 ### Dialup
+
 ![](attachments/Pasted%20image%2020240410120403.png)
 
 > 注：默认值为no，后续该配置将会被移除。
@@ -693,7 +856,9 @@ dialup选项也可以定义在view和zone语句中，这样就会代替了全局
 
 
 ### notify
+
 ![](attachments/Pasted%20image%2020240410121440.png)
+
 默认值为yes。Notify 选项也可能设定在 zone 语句中，这样它就替代了 options 中的 notify 语句。
 
 **如果是 yes（默认）**
@@ -734,7 +899,8 @@ zone "fx.movie.edu" {
 };
 ```
 默认从服务器只接受来自其主DNS服务器的notify信息，非主DNS服务器的信息都会忽略，
-但是可以使用allow-notify字句定义可以接受其他从服务器的notify信息。例如a是b和c的主，如果在c上定义`allow-notify { b_IP; };`，那么它也会接受b的notify信息。
+但是可以使用`allow-notify`字句定义可以接受其他从服务器的notify信息。例如a是b和c的主，如果在c上定义`allow-notify { b_IP; };`，那么它也会接受b的notify信息。
+
 
 # 主从同步范例
 **环境准备：**
@@ -893,7 +1059,7 @@ zone "10.168.192.in-addr.arpa" IN {
 
 在主DNS测试辅DNS是否可以解析。如果可以解析则说明主辅配同步完成：
 ```shell
-[root@dns1 ~]# dig dns.host.com @192.168.10.223 +short
+[root@dns1 ~]# dig dns.host.com @192.168.10.223 +short +timeout=1
 192.168.10.222
 ```
 
@@ -1589,7 +1755,7 @@ DNS系统中，在大家的直观印象下bind主备的同步都是“实时”�
 
 **对于slave而言**：  
 1. transfers-per-ns限制了从单个master同步的并发，默认也是10,需要调大。  
-2. transfers-in 限制了同时从master（可能有多个）同步的总数，默认是10,需要调大。  
+2. transfers-in ：slave上配置，收到的 zone-transfer (xfer-in) 的 并发数的最大值。限制了同时从master（可能有多个）同步的总数，默认是10,需要调大。  
 3. serial-query-rate 在slave中会限制slave向mastetr做SOA查询的频率。默认是20,需要调大。
 
 对于单个同步的case，可以从master域名更新、master触发notify，slave收到notify，slave开始同步，slave完成同步几个关键的时间点，查看时间到底消耗到哪里。
@@ -1631,7 +1797,7 @@ transfer-format
 ![](attachments/Pasted%20image%2020240408163744.png)
 
 **含义**
-可以同时运行的发出的传输的最大值。超过限定的域传输请求将会被拒绝。默认值为 10 。
+master上设置，可以同时运行的发出的传输的最大值。超过限定的来自slave的域传输请求将会被拒绝。默认值为 10 。
 
 **建议**
 
@@ -1643,6 +1809,8 @@ transfer-format
 
 **含义**
 本机收到的TCP连接的个数的最大值，默认值为100. 包含基于TCP的dns请求，以及 zone 传输。
+- master 收到 slave的 tcp的 ixfr的 tcp 请求；
+- slave 收到 client 的 基于tcp的 dns请求；
 
 **查看**
 rndc status 可以查看 tcp连接的个数。
@@ -1698,9 +1866,21 @@ environment's requirements.
 
 **serial-query-rate**：控制slave发起soa refresh查询的速率。默认值20. 比如，slave重启，则也会给master 发送大量的 soa请求。
 
-**notify-rate** （标准notify通知）：：zone发生变更时，master发送notify的频率。默认值20.
+**notify-rate** （标准notify通知）：zone发生变更时，master发送notify的频率。默认值20.
+```bash
+This specifies the rate at which NOTIFY requests are sent during normal zone maintenance operations. (NOTIFY requests due to initial zone loading
+are subject to a separate rate limit; see below.) The default is 20
+per second. The lowest possible rate is one per second; when set to
+zero, it is silently raised to one.
+```
 
 **startup-notify-rate**（启动notify通知） ：named重启或者reload时，发起notify的速率。默认值20。
+```bash
+This is the rate at which NOTIFY requests are sent when the name server
+is first starting up, or when zones have been newly added to the
+name server. The default is 20 per second. The lowest possible rate is
+one per second; when set to zero, it is silently raised to one.
+```
 
 注：标准notify通知的优先级高于启动notify通知。
 
@@ -1897,7 +2077,8 @@ sh gen_nsupdate_multi_ops_cmd.sh > nsupdate_multi_ops_cmd.out
 ## 查看zone同步的生效时间
 执行nsupdate的同时，同时查看配置变更是否在各个slave中生效。
 ```bash
-date +%T.%N; nsupdate -v < nsupdate_multi_ops_cmd.out & while true;do echo $(date +%T.%N) $(for i in {2..9};do dig -b 10.44.79.146 t1999.dhb.test11.domain @192.21.45.$i +short;done);done
+date +%T.%N; nsupdate -v < nsupdate_multi_ops_cmd.out & while true;do echo $(date +%T.%N) $(for i in {2..9};do dig -b 10.44.79.146 t1999.dhb.test11.domain @192.21.45.$i +short +timeout=1;done);done
+
 ```
 
 ```bash
@@ -1912,6 +2093,20 @@ master 是本机，即 server 127.0.0.1
 （3）nsupdate -v < nsupdate_multi_ops_cmd.out &  
 & 表示后台运行。这样 nsupdate的更新和 对于slave的dig查询可以同时进行。
 
+```
+
+改进测试：
+```bash
+所有slave生效之后自动停止，此中是3台slave：
+
+batch_nsupdate_cmd_3.3.3.5.out： 多个view下的某个zone的多个记录进行更改，将记录更改为 3.3.3.5；
+t1999.dhb.test11.internal 为 zone中更改的最后一个记录;
+bjfs_idc：是最后一个更改的 view。
+如果最后一个view中，该zone的最后一个记录生效了，那么其他所有view的zone的所有记录都生效了。
+
+date +%T.%N; nsupdate -v < batch_nsupdate_cmd_3.3.3.5.out &  while true;do cnt=0; echo ""; echo -n "$(date +%T.%N) "; for i in 2 4 5;do rep=`dig t1999.dhb.test11.internal -y hmac-sha256:bjfs_idc:"xxxxx" @10.108.164.2${i} +timeout=1 +short`; if [[ "${rep}" == "3.3.3.5" ]]; then cnt=$((cnt+1));fi; echo -n "${rep} "; done; if [[ $cnt -eq 3 ]]; then break; fi; done
+
+date +%T.%N; nsupdate -v < batch_nsupdate_cmd_2.2.4.5.out &  while true;do cnt=0; echo ""; echo -n "$(date +%T.%N) "; for i in 2 4 5;do rep=`dig t1999.dhb.test11.internal -y hmac-sha256:bjfs_idc:"xxxxx" @10.108.164.2${i} +timeout=1 +short`; if [[ "${rep}" == "2.2.4.5" ]]; then cnt=$((cnt+1));fi; echo -n "${rep} "; done; if [[ $cnt -eq 3 ]]; then break; fi; done
 ```
 
 

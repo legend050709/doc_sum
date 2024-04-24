@@ -7,7 +7,8 @@
 
 ## keep-alive的设置
 ### 系统的Keepalive参数
-如果程序中的sock使能了`SO_KEEPALIVE`，但是没有设置具体的 参数，则使用系统默认的参数。如果程序中没有设置，那么就无法使用 TCP 保活机制。
+**如果程序中的sock使能了`SO_KEEPALIVE`，但是没有设置具体的 参数，则使用系统默认的参数。如果程序中没有设置，那么就无法使用 TCP 保活机制**。
+
 ```bash
 net.ipv4.tcp_keepalive_time=7200
 net.ipv4.tcp_keepalive_intvl=75  

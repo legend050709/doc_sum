@@ -114,24 +114,32 @@ arp_ignore 参数的作用是控制系统在收到外部的 ARP 请求时，是�
 - 4~7：保留，未使用。
 - 8：不回应所有的 ARP 请求
 
->注：`/etc/sysctl.conf` 中包含 all 和 eth/lo（具体网卡）的 arp_ignore 参数，取其中较大的值生效。
+### 注意
+`/etc/sysctl.conf` 中包含 all 和 eth/lo（具体网卡）的 arp_ignore 参数，取其中较大的值生效。
+
+> 注：ipv6 不使用ARP，而是使用 ND 协议，不需要设置 arp_ignore 相关的参数。
+
 ### 示例
 ![](attachments/Pasted%20image%2020231106164315.png)
 当 arp_ignore 参数配置为 0 时，eth0 网卡上收到目的IP为环回网卡IP的 ARP 请求，但是 eth0 也会返回 ARP 响应，并且把自己的 MAC 地址告诉对端。
 
 ![](attachments/Pasted%20image%2020231106164557.png)
 当 arp_ignore 参数配置为 1 时，eth0 网卡上收到目的IP为环回网卡IP的 ARP 请求，发现请求的IP不是自己网卡（eth0)上的IP，就不会返回 ARP 响应。
-### DR 模式下的应用
-因为 DR 模式下，每个真实服务器节点都要在**环回网卡**上绑定虚拟服务IP。
-如果客户端对于虚拟服务IP的 ARP 请求广播到了各个真实服务器节点，如果 arp_ignore 参数配置为 0，则各个真实服务器节点都会响应该 ARP 请求，此时客户端就无法正确获取 LVS 节点上正确的虚拟服务IP所在网卡的 MAC 地址。
 
-假如某个真实服务器节点 A 的网卡 eth1 响应了该 ARP 请求，客户端把 A 节点的 eth1 网卡的 MAC 地址误认为是 LVS 节点的虚拟服务IP所在网卡的 MAC ，从而将业务请求消息直接发到了 A 节点的 eth1 网卡。这时候虽然因为 A 节点在环回网卡上也绑定了虚拟服务IP，所以 A 节点也能正常处理请求，业务暂时不会受到影响。但时此时由于客户端请求没有发到 LVS 的虚拟服务IP上，所以 LVS 的负载均衡能力没有生效。造成的后果就是，A节点一直在单节点运行，业务量过大时可能会出现性能瓶颈。
+### DR 模式下的应用
+
+因为 DR 模式下，每个真实服务器节点都要在**环回网卡**上绑定VIP。
+如果客户端对于VIP的 ARP 请求广播到了各个真实服务器节点，如果 arp_ignore 参数配置为 0，则各个真实服务器节点都会响应该 ARP 请求，此时客户端就无法正确获取 LVS 节点上正确的虚拟服务IP所在网卡的 MAC 地址。
+
+假如某个真实服务器节点 A 的网卡 eth1 响应了该 ARP 请求，客户端把 A 节点的 eth1 网卡的 MAC 地址误认为是 LVS 节点的虚拟服务IP所在网卡的 MAC ，从而将业务请求消息直接发到了 A 节点的 eth1 网卡。这时候虽然因为 A 节点在环回网卡上也绑定了VIP，所以 A 节点也能正常处理请求，业务暂时不会受到影响。但时此时由于客户端请求没有发到 LVS 的VIP上，所以 LVS 的负载均衡能力没有生效。造成的后果就是，A节点一直在单节点运行，业务量过大时可能会出现性能瓶颈。
 所以要求 arp_ignore 参数要求配置为1。
 配置 `/etc/sysctl.conf` ，然后使用 `sysctl -p` 刷新到内存即可立即生效：
 ```c
 net.ipv4.conf.all.arp_ignore = 1
 ```
-## arp_annoce： 发送arp请求sip的选择
+
+
+## arp_announce： 发送arp请求sip的选择
 ### 介绍
 `arp_announce` 参数是定义 Linux 主机发送 ARP 请求数据包时如何选择数据包中使用的发送方 IP 地址（即 Sender IP address）。
 
@@ -149,13 +157,20 @@ arp_announce 参数常用的取值有 0，1，2：
 - 1：尽量避免使用不和目的地址同网段的本地地址作为发送 ARP 请求的源IP地址。
 - 2：忽略IP数据包的源IP地址，选择该发送网卡上最合适的本地地址作为 ARP 请求的源IP地址（一个网口可能会配置多个IP地址）。
 
->注：`/etc/sysctl.conf` 中包含 all 和 eth/lo（具体网卡）的 arp_announce 参数，取其中较大的值生效。
+### 注意
+
+`/etc/sysctl.conf` 中包含 all 和 eth/lo（具体网卡）的 arp_announce 参数，取其中较大的值生效。
+
+> 注：ipv6 不使用ARP，而是使用 ND 协议，不需要设置 arp_ignore 相关的参数。
+
 ### 示例
 ![](attachments/Pasted%20image%2020231106164902.png)
+
 当 arp_announce 参数配置为 0 时，系统要发送的IP包源地址为 eth1 的地址，IP包目的地址根据路由表查询判断需要从 eth0 网卡发出，这时会先从 eth0 网卡发起一个 ARP 请求，用于获取目的IP地址的 MAC 地址。该 ARP 请求的源MAC 自然是 eth0 网卡的 MAC 地址，但是源 IP 地址会选择 eth1 网卡的地址。
 
 
 ![](attachments/Pasted%20image%2020231106164910.png)
+
 当 arp_announce 参数配置为 2 时，eth0 网卡发起arp请求时，源IP地址会选择 eth0 网卡自身的IP地址。
 
 ### DR 模式下的应用
@@ -183,6 +198,10 @@ arp_ignore=1开销小，可实现各网卡响应各自ip的arp请求。 arp_filt
 ARP 通知链操作
 - 0：不做任何操作    
 - 1：当设备up/down或硬件地址(mac地址)改变时自动产生一个 ARP 请求
+
+## arp_accept
+
+## proxy_arp
 
 ## 配置arp
 # 查看

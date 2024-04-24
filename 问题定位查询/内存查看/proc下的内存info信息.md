@@ -1,6 +1,10 @@
 ```table-of-contents
 ```
 # meminfo
+
+
+
+
 # buddyinfo
 ## 介绍
 `/proc/buddyinfo` 文件可以**查看Linux机器上可用的内存块（多个连续的pagesize）的个数**。

@@ -44,14 +44,14 @@ statistics-channels {
 ### 常见指标
 ![](attachments/Pasted%20image%2020240124142507.png)
 
-### 递归服务器的监控指标
+### 递归服务器(dns解析器)的监控指标
 ![](attachments/Pasted%20image%2020240124140735.png)
 
 ### 权威服务器的监控指标
 ![](attachments/Pasted%20image%2020240124141904.png)
 
 # 问题定位
-fewf
+
 
 # 参考
 ```bash
