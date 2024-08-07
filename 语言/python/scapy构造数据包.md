@@ -799,6 +799,45 @@ if __name__ == '__main__':
 
 ```
 
+## 使用scapy构造任意载荷的udp包
+```python
+#!/usr/bin/python3
+
+from scapy.all import *
+import socket
+import struct
+import random
+
+dst_ip="118.121.194.195"
+dst_port=4666
+src_ip_prefix="1.1.2."
+src_ip_start=1
+
+
+def build_udp_pkt():
+    src_ip_postfix = random.randint(2, 250)
+    src_ip = src_ip_prefix + str(src_ip_start + src_ip_postfix)
+    ip_hdr = IP(src=src_ip, dst=dst_ip)
+    
+    for i in range(65535):
+        udp_hdr = UDP(sport=i, dport=dst_port)
+        udp_payload = struct.pack("2H", i, i)
+        pkt = ip_hdr/udp_hdr/udp_payload
+        send(pkt)
+
+def main():
+    build_udp_pkt()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+```text
+"2H": H 即 short，2B，2H即2个short；共4个字节；
+
+```
+
 
 # 参考
 ```c

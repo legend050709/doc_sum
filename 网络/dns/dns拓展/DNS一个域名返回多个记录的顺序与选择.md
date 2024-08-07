@@ -253,6 +253,9 @@ nameserver 8.8.8.8
 
 
 ### gai.conf
+
+![](attachments/Pasted%20image%2020240611150500.png)
+
 调用 `getaddrinfo` 可能会返回多个结果。根据 rfc3484 / rfc6724 的要求（相关排序机制也可以通过 `/etc/gai.conf` 配置控制），**DNS 解析返回的结果应当是固定顺序的，而非 round-robin**，那么当 DNS server 返回 round-robin的结果时，就会因为解析器的排序而不生效，导致新旧版本 library 之间行为不一。
 
 最新的规范的前提都是 使用IPv6 进行DNS请求，然而 IPv6 到目前位置支持的并不理想，并且考虑基于兼容性的考虑：**当返回结果中仅有 IPv4 时，不适用最长匹配相关的规则，也就不会调整结果的相对顺序（稳定排序）**。

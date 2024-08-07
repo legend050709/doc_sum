@@ -89,7 +89,7 @@ nf_conntrack          105702  6 xt_CT,nf_nat,nf_nat_ipv4,xt_conntrack,nf_nat_mas
 
 注：lsmod最右边的输出为 对应的模块被引用的次数。一般只有值为0，模块才可以被卸载。
 如上所示：
-### 问题
+### 引用模块无法卸载问题
 尝试移除这些模块:
 ```bash
 [root@localhost product]# modprobe -r  nf_conntrack_netbios_ns nf_conntrack_ipv4 xt_conntrack
@@ -104,6 +104,7 @@ nf_conntrack          105702  6 xt_CT,nf_nat,nf_nat_ipv4,xt_conntrack,nf_nat_mas
 rmmod: ERROR: Module nf_conntrack is in use by: xt_CT nf_nat nf_nat_ipv4 xt_conntrack nf_nat_masquerade_ipv4 nf_conntrack_ipv4
 
 ```
+
 模块被其它模块所使用，而且其它模块又被另外的模块所使用，不容易删除，而且删很多的模块还是一个计较危险的操作。
 
 ## 禁用连接跟踪
@@ -136,7 +137,9 @@ iptables有5个链:PREROUTING，INPUT，FORWARD，OUTPUT，POSTROUTING，4个表
 
 **raw表介绍**
 RAW表只使用在PREROUTING链和OUTPUT链上，如下所示：
+
 ![](attachments/Pasted%20image%2020240405163240.png)
+
 因为RAW表优先级最高，从而可以对收到的数据包在连接跟踪前进行处理。一但用户使用了RAW表，在某个链上，RAW表处理完后，将跳过NAT表和 ip_conntrack处理，即不再做地址转换和数据包的链接跟踪处理了。
 
 

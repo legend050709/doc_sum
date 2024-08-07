@@ -197,7 +197,7 @@ arp_ignore=1开销小，可实现各网卡响应各自ip的arp请求。 arp_filt
 ## arp_notify
 ARP 通知链操作
 - 0：不做任何操作    
-- 1：当设备up/down或硬件地址(mac地址)改变时自动产生一个 ARP 请求
+- 1：当设备up/down或硬件地址(mac地址)改变时自动产生一个 ARP 请求。
 
 ## arp_accept
 
@@ -206,6 +206,10 @@ ARP 通知链操作
 ## 配置arp
 # 查看
 ## ip neigh查看arp表项
+```
+ip neigh
+ip -s neigh
+```
 ## /proc/net/stat/arp_cache说明
 ARP的缓存时间约10分钟。
 APR缓存列表没有对方的MAC地址或缓存过期的时候，会发送ARP请求获取MAC地址，在没有获取到MAC地址之前，用户发送出去的UDP数据包会被内核缓存到arp_queue这个队列中，默认最多缓存3个包，多余的UDP包会被丢弃。

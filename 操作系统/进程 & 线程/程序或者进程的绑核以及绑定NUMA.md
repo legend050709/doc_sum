@@ -30,6 +30,27 @@ taskset -cp 0,1 PID
 
 # numactl命令
 
+## 应用
+### 查看 各个numa上的cpu分布
+```bash
+numactl --hardware
+```
+
+![](attachments/Pasted%20image%2020240724155512.png)
+
+### 查看网卡所在的numa
+```bash
+# cat /sys/class/net/eth02/device/numa_node
+0
+```
+
+### 查看各个numa的内存使用
+```bash
+numastat -m -v
+```
+
+![](attachments/Pasted%20image%2020240724155607.png)
+
 # smp_affinity_list文件设置
 ```bash
 echo $cpuNumber > /proc/irq/$irq/smp_affinity_list 

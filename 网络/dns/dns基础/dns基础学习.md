@@ -469,6 +469,7 @@ DNS解析流程分为**递归查询**和**迭代查询**。
 **递归 DNS 服务器大多数在运营商端，负责网络接入终端的 DNS 查询，即网络访问设备上配置的 DNS 服务器 IP。**
 递归 DNS 的访问过程如下图所示（递归 DNS 在图中表示为 Local DNS）：
 ![](attachments/Pasted%20image%2020231225140931.png)
+
 ## 迭代查询（iteration）
 ![](attachments/Pasted%20image%2020231225120103.png)
 ### 定义
@@ -496,6 +497,18 @@ DNS解析流程分为**递归查询**和**迭代查询**。
 例如A主机要查询C域中的一个主机，A所指向的DNS服务器为B，递归和迭代查询的方式是这样的：
 递归查询：`A --> B --> C --> B --> A`
 迭代查询：`A --> B A --> C --> A`
+
+### 其他
+
+#### DNS 转介(Referral)
+
+DNS Referral 即 迭代查询中，返回的 信息中不含有 answer，而是在 `authoritative name servers` 包含了各个NS的信息。
+
+![](attachments/Pasted%20image%2020240701165328.png) 
+
+```bash
+The term referral indicates a response to a query which does not contain an answer section (it is empty) but which contains one or more authoritative name servers (in the Domain Authority section) that are closer to the required query question. The response will typically (always from the root and TLD servers) contain in the Additional Information section the IP addresses (the A or glue records) of the supplied servers. 
+```
 
 ## 反向查询
 ### 定义
@@ -539,14 +552,20 @@ DNS服务器未负责的域，由缓存或者查询到的记录返回的答案
 # DNS的泛域名解析
 
 ## 定义
-泛解析（泛域名：Wildcard DNS）是指将多个子域名解析到同一个IP地址；例如域名 `cloud-example.com`，设置泛解析 `*.cloud-example.com` ，则该域名下所有的子域名（如 `a.cloud-example.com`，`b.cloud-example.com`，`c.cloud-example.com`等）都将指向与 `*.cloud-example.com` 相同的IP地址。
+泛解析（泛域名：Wildcard DNS）是指将多个子域名解析到同一个IP地址；
+
+例如域名 `cloud-example.com`，设置泛解析 `*.cloud-example.com` ，则该域名下所有的子域名（如 `a.cloud-example.com`，`b.cloud-example.com`，`c.cloud-example.com`等）都将指向与 `*.cloud-example.com` 相同的IP地址。
 
 ## 场景  
+
 在网站运营中，域名持有者为了避免因为错误输入，而造成用户流失，就会使用泛域名解析。  它可以将没有明确设置的子域名一律解析到一个IP地址上。这样，即使用户输入错误的子域名，也可以访问到域名持有者指定的IP地址。
 
-## 分类
-### 泛解析
-泛解析：使用通配符 `*` 来匹配所有的子域名。通配符记录以星号 (`*`) 字符作为域名的最左侧标签。例如，`*.example.com`。域名中其他位置的`*`仅作为普通字符使用。例如， `new.*.example.com` 不是有效的通配符 DNS 记录。
+
+## 泛解析
+
+泛解析：使用通配符 `*` 来匹配所有的子域名。通配符记录以星号 (`*`) 字符作为域名的最左侧标签。
+
+例如，`*.example.com`。域名中其他位置的`*`仅作为普通字符使用。例如， `new.*.example.com` 不是有效的通配符 DNS 记录。
 
 当您需要解析的多个子域名对应为同一个 IP 时，可通过以下两种方式进行添加：
 - 普通添加方式：当您有多个子域名时，需添加多条记录进行解析。如下图所示：
@@ -561,31 +580,7 @@ DNS服务器未负责的域，由缓存或者查询到的记录返回的答案
 # 第一个解析记录优先级，大于，第二个泛解析记录
 ```
 
-### 混合泛解析
-混合泛解析：在泛解析的基础上，增加一个限制，使记录可以按照需求进行分类。
 
-混合泛解析可通过在`*`前添加字符或者在`*`后添加字符。且仅支持添加3个字符。例如：`aaa*`或者`*aaa`。
-
-- 普通添加方式：当您有多个子域名时，需添加多条记录进行解析。如下图所示：
-![](attachments/Pasted%20image%2020240122104849.png)
-
-- 混合泛解析添加方式：当您有多个子域名时，只需按照分组添加记录，即可对多个子域名进行解析。如下图所示：
-![](attachments/Pasted%20image%2020240122104907.png)
-
-```bash
-原解析记录，如下：
-111.demo.com	A	6.6.6.6
-112.demo.com	A	6.6.6.6
-113.demo.com	A	6.6.6.6
-
-771.demo.com	A	7.7.7.7
-772.demo.com	A	7.7.7.7
-773.demo.com	A	7.7.7.7
-
-转为泛解析，如下：
-1*.demo.com		A	6.6.6.6
-7*.demo.com		A	7.7.7.7
-```
 
 ## 泛解析查询规则
 - DNS查询请求优先进行线路（view）匹配查询，其次进行域名匹配查询；
@@ -600,40 +595,67 @@ DNS服务器未负责的域，由缓存或者查询到的记录返回的答案
 CNAME方式是指将一个域名指向另一个域名，这种方式可以方便地管理大量的子域名。
 A记录方式是指将多个域名都解析到同一个IP地址，这种方式应用于对性能要求较高的场景。
 
+## 特点
+
+
+![](attachments/Pasted%20image%2020240606171820.png)
+
+### 通配符只作用于最左边的第一个标签  
+
+`subdomain.*.example.com ` 域名不是一个泛域名，其中的`*`只是字符`*`，而不是通配符。
+
+
+### 特定域名记录的优先级高于泛域名
+
+比如：存在下面的记录 
+```bash
+A   *.example.com   192.0.2.3
+A   b.example.com   192.2.2.2
+```
+
+那么查询  `b.example.com`, 得到的结果为 `192.2.2.2`
+
+
+### 泛域名和特定域名同时存在时，特定域名及其以下域名的终止
+
+通配符将应用于多个级别，但任何相同或更低级别上的特定记录将终止该特定记录上或以下的任何内容。
+
+![](attachments/Pasted%20image%2020240606172419.png)
+
+
+如上所示，查询 `subdomain1.example.com`  的  Txt记录，将会得到 对应的 text 内容。
+但是查询 `subdomain1.example.com` 或者  `xxx.subdomain1.example.com` 的 **A记录**，并不会得到  `192.0.2.3`, 而是 NoDomain， 但是查询 `c.example.com` 或者 `d.c.example.com` 的A记录，则会得到 `192.0.2.3`。
+
+#### 原因
+
+==**解释**== ：
+```bash
+The wildcard matches any names below the point of wildcard record which are in _branches that do not exist_ (keep in mind, DNS is a tree).
+```
+其实**还是从dns名查询的实现角度考虑的，一个域名的各个标签可以认为是树的 节点**。
+即：泛解析(通配符) 只能匹配 泛域名记录点以下的任何名称，这些名称位于**不存在的分支中**（请记住，DNS 是一棵树）。
+
+
+![](attachments/Pasted%20image%2020240606173811.png)
+
+参见：[RFC 1034](https://datatracker.ietf.org/doc/html/rfc1034.html#section-4.3.3)
+
+#### 解决
+为了防止  特定域名对于泛域名的困扰，可以基于特定域名再添加泛域名，和之前的泛域名有相同的记录。
+
+比如：设置如下的域名：
+```bash
+A   *.example.com   192.0.2.3
+A subdomain1.example.com  192.0.2.4
+A   *.subdomain1.example.com   192.0.2.3
+```
+
 ## 范例
-DNS的泛域名解析，就是都匹配不到的时候，此时就会匹配到`*`的地址。
-```bash
-# cat /var/named/test.cn.zone
-$TTL 1D
-@       IN SOA  @ rname.invalid. (
-                                        0       ; serial
-                                        1D      ; refresh
-                                        1H      ; retry
-                                        1W      ; expire
-                                        3H )    ; minimum
-test.cn. NS     tk
-tk      A       10.0.0.200
-www     A       10.0.0.201
-www     A       10.0.0.202
-*       A       1.1.1.1
-```
 
-我们进行测试
-```bash
-[root@gitlab ~]# nslookup abc.test.cn
-Server:         10.0.0.200
-Address:        10.0.0.200#53
-Name:   abc.test.cn
-Address: 1.1.1.1
 
-[root@gitlab ~]# nslookup www.test.cn
-Server:         10.0.0.200
-Address:        10.0.0.200#53
-Name:   www.test.cn
-Address: 10.0.0.201
-Name:   www.test.cn
-Address: 10.0.0.202
-```
+
+
+
 
 ## 建议
 慎用泛域名解析。
@@ -644,6 +666,8 @@ Address: 10.0.0.202
 2> 发展一段时间后 `a.example.com` 有了新需求，需要加个 TXT 做验证
 3> 运维同学添加解析 `a.example.com TXT xxx`
 4> 此时因为 `a.example.com` 只有 TXT 记录，没有 `A/AAAA` 或 `CNAME`，直接导致 a 站点无法访问。
+
+
 
 # 资源记录RR
 当一个解析器把域名传递给DNS时，DNS所返回的是与该域名相关联的资源记录；DNS的主要功能就是将域名映射到资源记录上。

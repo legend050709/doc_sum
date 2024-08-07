@@ -344,6 +344,51 @@ delzone  zone  [class [view]]                   #删除一个zone
 # rndc  -s 192.168.10.11 reload   base07.com
 ```
 
+## `rndc zonestatus` 检查zone的状态
+
+![](attachments/Pasted%20image%2020240626162241.png)
+
+```bash
+rndc zonestatus blacklist. IN bjzey
+
+blacklist.：zone的名称；
+bjzey: view信息；
+```
+
+可以利用上诉命令，获取到如下内容：
+- zone的 sn
+- zone对应的文件位置
+- zone的更改时间、过期时间、下次refresh时间
+> 注：上诉显示的时间，和实际的时间，差了8个小时。如上所示，显示的是 “last loaded: Tue, 25 Jun 2024 11:09:06 GMT”，实际发生的的时间为 "last loaded: Tue, 25 Jun 2024 19:09:06 CST"。 即 GMT 时间和 CST 时间差距为 8h。
+
+```
+GMT表示格林尼治时间(Greenwich Mean Time)
+
+BST表示英国夏令时间(British Summer Time)
+
+UTC表示世界标准时间/协调世界时/世界协调时间(Coordinated Universal Time),是最主要的世界时间标准，其以原子时秒长为基础，在时刻上尽量接近于格林尼治标准时间。
+
+CST表示中国标准时间(China Standard Time)的时候，在时区划分上，北京属东八区，比协调世界时早8小时，记为UTC+8。
+
+
+CST 却同时可以代表如下 4 个不同的时区：
+古巴 Cuba    Standard Time UT-4:00
+中国 China   Standard Time UT+8:00
+美国 Central Standard Time USA UT-6:00
+澳大利亚 Central Standard Time Australia UT+9:30
+```
+
+### 应用
+
+应用场景：
+（1）检查master和slave的zone是否同步
+对于slave而言，可以获取自身**内存**中的 zone的sn，然后向master请求该zone的SOA记录，获取SN；然后SN进行对比，就可以知道某个view下的 master和slave之间的该zone是否同步。
+
+
+（2）检查内存中的 某个view下的 zone是否存在
+
+（3）
+
 
 ## `rndc status`检查rndc管理状态
 ```shell

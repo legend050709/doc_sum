@@ -41,6 +41,7 @@ NXDOMAIN is nothing but non-existent Internet or Intranet domain name.
 由于不常见本文就不展开了，递归服务器在收到其他错误应答后，给请求源一个SERVFAIL的应答，并缓存1S。
 
 ## REFUSE
+
 拒绝服务，即Rcode值为5（REFUSE）的情况。
 除了记录不存在（NXDOMAIN）和解析失败（SERVFAIL）以外，如果请求源不在递归服务器的服务范围内，这种情况下递归服务器会直接给请求源一个REFUSE的应答，本地直接应答无缓存。
 ![](attachments/Pasted%20image%2020240104142519.png)

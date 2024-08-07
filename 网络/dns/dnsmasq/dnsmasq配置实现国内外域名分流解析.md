@@ -19,6 +19,15 @@ hosts则遵循hosts文件的语法：`192.168.1.1 test.com`。
 ## 参数说明
 ![](attachments/Pasted%20image%2020240123143809.png)
 
+```bash
+查看配置文件语法是否正确，可执行下列命令
+[root@localhost ~]# dnsmasq -test 
+dnsmasq: syntax check OK.
+```
+
+
+
+
 ## 参数配置
 ### 基础配置
 可以在`dnsmasq.conf`配置如下参数：
@@ -38,7 +47,24 @@ nameserver 8.8.4.4
 ```
 需要注意的是，resolv.conf文件最多可以定义3个DNS服务器；
 ![](attachments/Pasted%20image%2020240123145121.png)
-如果想让dnsmasq配置三个以上的上游DNS服务器，则可以在`dnsmasq.conf`文件中通过参数`resolv-file=xxx.conf`自定义读取文件即可。
+
+
+Linux 处理 DNS 请求时有个限制，在 resolv.conf 中最多只能配置三个域名服务器（nameserver）。
+作为一种变通方法,可以在 resolv.conf 文件中只保留 localhost 作为域名服务器，然后为外部域名服务器另外创建 resolv-file 文件。可以在`dnsmasq.conf`文件中通过参数`resolv-file=xxx.conf`自定义读取文件即可。
+
+```ruby
+#  cp  -p /etc/resolv.conf  /etc/resolv.dnsmasq.conf
+
+# echo 'nameserver 114.114.114.114'  >  /etc/resolv.dnsmasq.conf
+ 
+#  vi /etc/dnsmasq.conf
+################################
+resolv-file=/etc/resolv.dnsmasq.conf
+#################################
+
+echo  'nameserver 127.0.0.1' > /etc/resolv.conf
+```
+
 ### 拓展配置
 如果设置`resolv.conf`，也会影响运行dnsmasq的本机器的请求。
 对于`dns query`要去`resolv.conf`定义的上游DNS查找，那么如果想让服务器本身也走`dnsmasq`，则可以在`resolv.conf`文件中将DNS设置为本地地址：

@@ -166,9 +166,32 @@ free((nil))  call number: 180
 
 ```
 
+
+## 误删基础库的应用
+
+比如：误删 libc.so.6， 实际上 libc.so.6 是一个软链接。
+```bash
+# ll /lib64/libc.so.6
+lrwxrwxrwx 1 root root 12 Jun 19  2018 /lib64/libc.so.6 -> libc-2.17.so
+```
+
+该软链接被删除之后，影响是，linux下的任何命令依赖于 libc库都无法使用，比如常见的 ls/cp/mv 等等；如下所示，此时无法恢复。
+
+![](attachments/Pasted%20image%2020240620200829.png)
+
+
+**解决方法**
+（1）如果本机安装有 busybox 也可以。 因为 busybox 中的 工具是不依赖于动态库的，都是静态编译。通过busybox 的 ln 进行软链接。
+
+（2）LD_PRELOAD 提前使用真实库中的符号，忽略掉了  libc.so.6 软链接。
+
+```bash
+LD_PRELOAD=/lib64/libc-2.17.so ln -s /lib64/libc-2.17.so /lib64/libc.so.6
+```
+
 # 优缺点
 ## 优点
-LD_PRELOAD的优势主要包括以下几个方面：
+LD_PRELOAD 的优势主要包括以下几个方面：
 
 **灵活性**
 使用LD_PRELOAD可以在运行时动态加载指定的共享库，灵活性非常高，可以根据需要替换程序中的任何函数。

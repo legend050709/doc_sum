@@ -134,6 +134,29 @@ unset LD_PREALOD
 4）默认共享目录 `/lib和/usr/lib`  
 
 
+# LD_LIBRARY_PATH 环境变量
+
+## 使用
+### 临时生效
+```bash
+LD_LIBRARY_PATH=xxxx CMD
+```
+这样 LD_LIBRARY_PATH 只是在执行 CMD的时候生效，执行完成之后，就不在生效；
+
+
+### 当前终端生效
+```bash
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:xxxx
+```
+如上所示，设置环境变量的方式，这是在当前终端的后续命令的执行过程中生效。在其他的终端中执行命令其实是不生效的。
+
+### 永久生效
+即每个终端都生效。
+
+
+### 其他
+LD_PRELOAD环境变量 的使用同理。
+
 
 # so动态库使用的常见问题
 ## cp命令拷贝一个新的so去覆盖旧的so时，如果有进程正在使用这个so，有可能导致该进程coredump

@@ -1,13 +1,14 @@
 ```table-of-contents
 ```
-#  lldp命令
+
+# lldp命令
 实现交换机端口的抓取，目前我知道的有两种工具，一种是 lldpad，另一种是 lldpd。
 
 ## 介绍
 lldpad 工具 通过 lldpad –d 启动守护进程，然后通过 lldptool 来进行查看。
 lldpd 工具通过 lldpd 来启动守护进程，然后通过 lldpcli 来进行查看。
 ## 安装 & 启动
-- 安装启动 lldpad
+### 安装启动 lldpad
 ```c
 yum install lldpad -y
 
@@ -15,7 +16,9 @@ yum install lldpad -y
 lldpad –d
 ```
 ![](attachments/Pasted%20image%2020231103115215.png)
-- 安装启动 lldpd
+
+### 安装启动 lldpd
+
 ```c
 yum install lldpd -y
 
@@ -27,7 +30,7 @@ lldpd
 
 ## 应用
 ### 查看接口的对端信息
-- 使用 lldptool
+#### 使用 lldptool 查看 lldpad 进程的交互信息
 ![](attachments/Pasted%20image%2020231103113840.png)
 查看网卡的邻居信息 `lldptool -t -n -i eth01`
 ```c
@@ -72,10 +75,17 @@ Maximum Frame Size TLV
 End of LLDPDU TLV
 ```
 
-- **使用lldpcli**
+#### 使用lldpcli 查看lldpd的交互信息
+
 ![](attachments/Pasted%20image%2020231103115354.png)
-`lldpcli show neighbors ports eth01` 查看接口的对端信息，如下所示：
+
+`lldpcli show neighbors ports eth01： （可以简写为： lldpcli s n）` 查看接口的对端信息，如下所示：
 ![](attachments/Pasted%20image%2020231103115433.png)
+
+如上所示：
+SysName 表示的交换机的名称；
+PortID：表示的是交换机的某个接口。
+> 注：**可以通过上诉命令，查看2个物理机是否连接在同一个TOR交换机下**。
 
 ### 查看接口的本地信息
 查看所有端口的本地信息。(即使未接线，也会显示)
@@ -92,4 +102,8 @@ https://blog.csdn.net/legend050709/article/details/128097276
 
 lldp工具的使用：
 https://www.cnblogs.com/zhangxinglong/p/14163351.html
+
+
+# LLDP链路层发现协议介绍
+https://blog.csdn.net/legend050709/article/details/128097276
 ```

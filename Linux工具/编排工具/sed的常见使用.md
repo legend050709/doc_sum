@@ -164,6 +164,51 @@ sed -i "s/^[^#].*$/#&/g" ${outFile}
 ```
 ![](attachments/Pasted%20image%2020230720123333.png)
 ## 替换
+
+**替换操作**
+替换操作：s 命令
+```
+sed 's/books/BOOKS/' ./test.js
+```
+
+**直接编辑文件 选项-i**
+接编辑文件 选项-i ，会匹配 file 文件中每一行的所有 book 替换为 books：
+```
+sed -i 's/book/books/g' file
+```
+
+
+**全面替换**
+全面替换标记 g
+使用后缀 /g 标记会替换每一行中的所有匹配：
+```bash
+sed 's/book/books/g' file
+```
+
+当需要从第 N 处匹配开始替换时，可以使用 /Ng：
+```
+echo sksksksksksk | sed 's/sk/SK/2g'
+skSKSKSKSKSK
+
+echo sksksksksksk | sed 's/sk/SK/3g'
+skskSKSKSKSK
+
+echo sksksksksksk | sed 's/sk/SK/4g'
+skskskSKSKSK
+```
+
+
+#### 定界符
+以上命令中字符 / 在 sed 中作为定界符使用，也可以使用任意的定界符：
+```
+sed 's:test:TEXT:g'
+sed 's|test|TEXT|g'
+```
+定界符出现在样式内部时，需要进行转义：
+```
+sed 's/\/bin/\/usr\/local\/bin/g'
+```
+
 ### 替换为常量
 ```c
 ls *tcp_8080.conf | xargs sed -i 's/192.20.1/192.20.45/g'
@@ -173,6 +218,21 @@ ls *tcp_8080.conf | xargs sed -i 's/192.20.1/192.20.45/g'
 ```c
 for a in `seq 25 39`; do sed -i 's/192.22.2.'${a}'_tcp_80/192.22.2.'${a}'_tcp_8080/g' 192.22.2.${a}_tcp_8080.conf; done
 ```
+
+### 替换包含关键字的整行
+
+```bash
+查找关键字 user10 所在的行，替换整行内容为aaaaaaaaaa
+
+#sed -i "s/^.user10.*$/aaaaaaaaaa/" useradd.txt
+
+说明：^.* 即以任意开头，包含 user10;
+     .*$ 即以任意结尾。整体就是，包含 user10的行。
+ 
+```
+
+![](attachments/Pasted%20image%2020240730111050.png)
+
 
 ### 替换整个目录下文件的指定字符串
 ```bash

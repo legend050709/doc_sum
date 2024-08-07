@@ -1,9 +1,26 @@
 ```table-of-contents
 ```
+# 基本概念
+## publicDns
+
+![](attachments/Pasted%20image%2020240626171258.png)
+
+公共解析 PublicDNS 向用户提供 DNS 服务器的地址。用户可以将设备的 DNS 服务器地址设置为该地址。公共解析 PublicDNS 可以提升用户的互联网访问速度，还可以帮助用户避免 DNS 欺骗、DNS 劫持等问题。
+
+
 # DNS的安全缺陷
 默认情况下，DNS 查询和响应以明文形式（通过 UDP）发送，这意味着它们可以被网络、ISP 或任何能够监视传输的人读取。即使网站使用 HTTPS，也会显示导航到该网站所需的 DNS 查询。
 
 设计 DNS 的时候，互联网基本上还是个玩具。那年头的互联网协议，压根儿都没考虑安全性，DNS 当然也不例外。所以 DNS 的交互过程全都是【明文】滴，既无法做到“保密性”，也无法实现“完整性”。  
+
+
+
+## 传统DNS(Udp 53)
+
+传统的 UDP 53 协议虽然实现简单且具有广泛的适用性，但其存在诸多问题，如容易被劫持和篡改，以及易受分布式拒绝服务（DDoS）攻击等。因此，传统 DNS 已无法满足现代网络安全和隐私的需求。
+
+![](attachments/Pasted%20image%2020240626172309.png)
+
 
 **缺乏“保密性”**
 意味着 — — 任何一个能【监视】你上网流量的人，都可以【看到】你查询了哪些域名。直接引发的问题就是隐私风险。  
@@ -70,6 +87,7 @@ DNSKEY资源记录存储的是公开密钥，下面是一个DNSKEY的资源记�
 
 下面是一个完整的 DNSKEY 查询响应，可以看到包含了 KSK 以及 ZSK：
 ![](attachments/Pasted%20image%2020240108142612.png)
+
 ### DS 记录 和 DNSSEC信任链
 如果攻击者完全伪造了一套 KSK 与 ZSK，那我们的验证手段就依然失效了吗？
 
@@ -129,10 +147,35 @@ dnssec并没有办法在域名劫持上起到很好的作用，如果发生域�
 **DNSSEC 并不是一个保证 Client 到 Resolver 之间通讯安全性的协议**
 在国内的网络用户如果使用国外的 DNS Resolver，其收到的解析结果也有很大几率被污染，因为DNSSEC 并不是一个保证 Client 到 Resolver 之间通讯安全性的协议；即使使用国内某些支持 DNSSEC 的解析器，其与国外 NS 的通讯过程也会被干扰，导致用户依然无法查询到解析结果。
 
-
-# DNS over HTTPS
+# DoT
 ## 介绍
-“DNS over HTTPS”有时也被简称为【DoH】。顾名思义，DNS over HTTPS 就是基于 HTTPS 隧道之上的域名协议。而 HTTPS 又是“HTTP over TLS”。所以 DoH 相当于是【双重隧道】的协议。  
+DNS over TLS（简称DoT）是一项域名解析安全扩展协议，它使用TLS协议加密传输用户和递归解析服务器之间的DNS消息，起到防止中间用户窃听和域名查询隐私泄漏的作用。
+
+
+## DoT的流程
+
+![](attachments/Pasted%20image%2020240626172440.png)
+
+
+TLS 传输的过程，如下：
+- TCP 三次握手
+- SSL 的 ClientHello 和 ServerHello 和对应的秘钥交换 KeyExchange
+- Client和 Server互相 ChangeCipherSpec 通知进入加密模式，此时可以进入数据传输状态
+- 应用数据传输过程
+- 应用数据传输完成，TCP 两次挥手
+
+抛开 TCP 连接和数据包文传输的部分，TLS 握手部分将使用 2 个 RTT。
+DNS-over-TLS 使用了 TCP 853 作为传输端口来完成 TLS 握手，再执行普通的 DNS 请求/应答。因此在 DNS-over-TLS 的整个过程中，将使用至少 4 次 RTT，这也将导致 DNS 的查询延时放大 4 倍。
+
+## 优缺点
+
+![](attachments/Pasted%20image%2020240626172533.png)
+
+# DoH
+## 介绍
+“DNS over HTTPS”有时也被简称为【DoH】。即使用安全的 HTTPS 协议运行 DNS ，主要目的是增强用户的安全性和隐私性。
+
+顾名思义，DNS over HTTPS 就是基于 HTTPS 隧道之上的域名协议。而 HTTPS 又是“HTTP over TLS”。所以 DoH 相当于是【双重隧道】的协议。  
 与 DoT（DNS Over TLS） 类似，DoH 最终也是依靠 TLS 来实现了【保密性】与【完整性】。 TLS 本身已经实现了保密性与完整性，因此，DoH 和 DoT都具有 保密性与完整性。
 
 协议栈如下所示：
@@ -149,16 +192,34 @@ TCP
 IP  
 --------
 ```
-## 优点
 
+## 流程
+
+DoH（DNS-over-HTTPS）协议的标准文件为 RFC 8484；
+
+![](attachments/Pasted%20image%2020240626172845.png)
+
+这就是整个 DoH 请求的过程，客户端还需要自行解密 DNS 查询结果；然而 DoH 首次请求（在 keep-alive 保持连接后速度就很不错了），流程就是这么多，所以导致 DoH 的资源开销是目前加密技术最大的。
+
+## 优缺点
+
+![](attachments/Pasted%20image%2020240626173042.png)
+
+**优点**
 基本上，DoT 具备的优点，DoH 也具备。  
 相比 DoT，DoH 还多了一个优点：  
 由于 DoH 是基于 HTTP 之上。而主流的编程语言都有成熟的 HTTP 协议封装库；再加上 HTTP 协议的使用本身很简单。因此，要想用各种主流编程语言开发一个 DoH 的客户端，是非常容易滴。
-## 缺点
+
+**缺点**
 DoH 目前还只有 RFC 的草案，尚未正式发布。
 相比 DoT，DoH 还有一个小缺点 — — 由于 DoH 比 DoT 多了一层（请对比两者的协议栈），所以在性能方面，DoH 会比 DoT 略差。为啥说这是个【小】缺点捏？因为域名的查询并【不】频繁，而且客户端软件可以很容易地对域名的查询结果进行【缓存】（以降低查询次数）。所以 DoH 比 DoT 性能略差，无伤大雅。
 
-## DoT vs DoH
+
+
+
+## DoT 和 DoH 对比
+DoH默认端口是443，即HTTPS的默认端口（DNS over TLS有自己的端口853）
+
 DoT 因为协议栈少了一层，性能会比 DoH 更好。但是前面也说了，域名查询的频度是比较低的，而且还可以利用客户端软件的 DNS 缓存，进一步减少域名查询的频度。所以 DoT 虽然性能更好，但优势不明显。
 
 DoH 的强项体现在如下几方面：  
@@ -170,9 +231,46 @@ DoH 的强项体现在如下几方面：
 DoH 可以充分利用 HTTP 2.0 的特性（HTTP/2 在 HTTP/1.1 基础上加了很多功能）。
 正是因为 DoH 的这些优势，浏览器厂商对 DoH 的支持更积极。对比一下就可以看出来 — — DoT 在两年前正式发布 RFC，主流的浏览器没一个支持；而 DoH 目前才仅仅是 RFC 草案，Firefox 与 Chrome/Chromium 都开始支持了。
 
+# H3
+## 介绍
+H3（HTTP/3）协议的标准文件是 RFC 9114， H3 基于 QUIC 协议实现，使用 UDP 传输层。
+
+![](attachments/Pasted%20image%2020240626173433.png)
+
+## 优缺点
+
+![](attachments/Pasted%20image%2020240626173450.png)
+
+
+# DoQ
+## 介绍
+DNS over  QUIC （DoQ） 专用QUIC连接上的DNS；它的标准文件是 RFC 9250，基于 QUIC 协议实现，使用 UDP 传输层。DoQ 结合了 QUIC 协议的高效性能和 DNS 查询的加密保护。
+
+QUIC 提供的加密与 TLS 提供的加密具有相似的属性，而 QUIC 传输消除了 TCP 固有的线头阻塞问题，并提供比 UDP 更有效的丢包恢复。DoQ 实现了隐私属性，也解决了 延迟大的问题。
+
+DoQ 连接不得使用 UDP 端口 53。反对将端口 53 用于 DoQ 的建议是为了避免混淆 DoQ 和使用 DNS over UDP （传统DNS，RFC1035）。 在递归场景中，使用端口 443 作为双方同意的替代端口在操作上可能是有益的，因为与其他端口相比，端口 443 不太可能被阻塞。
+
+## 流程
+
+![](attachments/Pasted%20image%2020240626173935.png)
+
+## 优缺点
+
+![](attachments/Pasted%20image%2020240626174027.png)
+
+
+## 对比
+
+![](attachments/Pasted%20image%2020240626174223.png)
+
+
 
 # 参考
 ```c
+
+# 保护隐私与优化网络：深入比较 DoT、DoH、H3 和 DoQ 协议的功能与优势
+https://www.timochan.cn/posts/study/protecting_privacy_and_optimizing_networks#DoH
+
 # 阿里DNS：浅析DNS-over-TLS
 https://zhuanlan.zhihu.com/p/47170371
 
@@ -182,5 +280,8 @@ https://init.blog/dnssec/
 
 ## DNSSEC学习笔记
 https://abcdxyzk.github.io/blog/2023/01/25/dns-sec-2/
+
+# PublicDNS服务提供商增加字节，将支持 DoH/DoT/DoQ 等协议
+https://blog.csdn.net/weixin_37813152/article/details/132322595
 
 ```

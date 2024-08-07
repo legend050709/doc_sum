@@ -3,6 +3,148 @@
 # 转发器介绍
 当`bind9` 设置了`forwarders`转发器后，所有非本域的和在缓存中无法找到的域名查询都将转发到设置的DNS转发器上，由这台DNS来完成解析工作并做缓存，因此这台转发器的缓存中记录了丰富的域名信息。因而对非本域的查询，很可能转发器就可以在缓存中找到答案，避免了再次向外部发送查询，减少了流量。
 
+# 多个转发器
+
+在 named.conf.options 配置多个转发器；如下所示：
+```bash
+    forwarders {
+            223.5.5.5;
+            119.29.29.29;
+    };
+
+223.5.5.5:   阿里的public pod;
+119.29.29.29: 腾讯的public pod;
+```
+
+
+## 无效授权
+
+**delegation授权**
+授权是指将部分工作交给或转移到别处的行为。在 DNS 中，授权的具体含义是将查询重定向到其他的DNS服务器，比如迭代查询中，查找`example.com`,根服务器返回`com.`域名的NS服务器信息，让迭代器 查询`com.`域名的NS服务器。
+
+![](attachments/Pasted%20image%2020240702182028.png)
+
+在域名系统 (DNS) 中，“无效授权(Lame delegation)”或“无效响应”是指已委派一个或多个名称服务器为某个域提供权威 DNS 信息，但这些服务器未能提供这些信息。
+
+### 无效授权的原因
+
+当负责为某个域提供权威答案的名称服务器未能对 DNS 查询作出响应或以某种方式作出错误响应时，就会发生无效授权。造成无效授权的原因可能是：
+
+- **不可用**。当名称服务器无法访问、未正常运行或名称服务器的 IP 地址无法路由时，可能会出现无效授权。
+- **配置错误**。当名称服务器配置错误或其 DNS 软件未正常工作时，它们将无法对查询作出响应。
+- **无法连接**。网络连接问题或防火墙限制可能导致名称服务器无法访问。
+- **不一致**。如果多个所委派的名称服务器的 DNS 配置不一致，则可能会导致无效授权。当 DNS 区域数据不一致或区域传输不正确时，可能会导致配置不一致。
+- **不存在**。如果某个域的指定名称服务器不存在，或者在未更新委派记录的情况下被停用，那么该名称服务器将无法正确地响应 DNS 查询。
+- **缺少更新**。在进行新的委派后，如果特定的名称服务器尚未进行配置或更新，它将无法对 DNS 查询返回正确的响应。
+
+### 无效授权的影响
+
+无效授权可能会产生各种不利影响。
+
+- **DNS 查找时间变长**。在发生无效授权时，DNS 请求可能需要更长的时间来解析，这可能会导致网页加载和 Web 资源访问出现延迟。
+- **解析失败**。当授权无效时，对域名的 DNS 解析可能会失败，导致用户和设备无法访问该域。这可能会引发功能缺失和停机。
+- **用户体验降级**。查找时间变长和解析失败将不可避免地导致用户体验不佳，因为用户可能会遇到延迟、超时或错误等问题。
+- **安全威胁**。攻击者可能会利用无响应或配置错误的名称服务器发起一系列 DNS 攻击，如 DNS 劫持、缓存中毒或放大攻击。
+
+### 如何才能防止发生无效授权
+
+IT 和安全团队可以遵循一些最佳实践，以防止发生无效授权并确保 DNS 服务能够继续高效运行。
+
+- 定期验证名称服务器的配置可确保名称服务器设置正确并能够正确地响应 DNS 查询。
+- 将 DNS 委派分发给位于不同位置和网络中的多个名称服务器有助于提高冗余性，并确保系统在某个服务器无响应时仍然可以继续处理查询。
+- 通过主动监控名称服务器的运行状况和响应速度，可以及早发现并解决问题。
+- 定期执行 DNS 审计有助于验证所有权威 DNS 服务器上的委派信息是否是最新、准确且一致。
+- 启用 DNS 安全扩展 (DNSSEC) 可以提高 DNS 解析的安全性和完整性，确保 DNS 响应的真实性并降低发生 DNS 欺骗的风险。
+
+## lame server
+
+![](attachments/Pasted%20image%2020240702203239.png)
+
+lame server 的 判定：
+（1）referral 过程中（即迭代过程中），某个NS无法给出下一步迭代的信息，则该NS被标记为 lame server。
+
+（2）迭代过程中，reslover和某个NS之间的网络出现问题，这个NS可能被标记为 Lame。
+（3）迭代过程中，某个NS负责该zone，但是没配置要查询的域名，则这个NS被标记为 Lame。
+
+在 BIND中，以上的几种情况，只有情况1才被标记为 Lame Server。在Bind 中，lame nameservers 和 valid nameservers 是分开缓存的，lame nameservers 的缓存被用来避免reslover 在一段时间内（`lame-ttl`）向这些Server进行后续的同类型域名(Qname/Type)的查询。
+
+> 注：`lame-ttl` 在 9.11中默认值为600s，在 9.18版本中，默认中为0，且无法配置为其他的非0的值。这个是因为 lame server 的 缓存存在bug，非0值，可能导致  lame server 的 缓存无限制的增长，导致clinet查询经过reslover时查询时间过长进而超时。如下所示，通过设置 `lame-ttl = 0` 来规避该问题。
+
+![](attachments/Pasted%20image%2020240703102516.png)
+
+
+## 转发器的质量相关日志
+
+### 背景
+
+比如 存在多个转发器时，对于某个外网域名的解析超时。那么不知道是哪个转发器的质量不太好。可以通过查看日志，看到哪个转发器对于该域名的解析质量问题。
+
+如下的日志配置：
+
+查询错误日志 ：
+```bash
+category query-errors {query-errors_log; };
+
+channel query-errors_log {
+	file "/var/named/logs/query-errors.log" versions 5 size 20m;
+	print-time yes;
+	print-category yes;
+	print-severity yes;
+	severity dynamic;
+};
+
+# 注：severity 最好不要设置为 dynamic，设置为 可能更好呢。
+
+```
+
+
+
+```bash
+category resolver { auth_servers_log; default_debug; };
+category cname { auth_servers_log; default_debug; };
+category delegation-only { auth_servers_log; default_debug; };
+category lame-servers { auth_servers_log; default_debug; };
+category edns-disabled { auth_servers_log; default_debug; };
+
+# resolver 日志
+channel auth_servers_log {
+	file "/var/named/logs/auth_servers.log" versions 100 size 20m;
+	print-time yes;
+	print-category yes;
+	print-severity yes;
+	severity info;
+};
+
+# debug channel, 仅仅在 debug level 不为 0 时输出
+channel default_debug {
+	file "/var/named/logs/debug.log" versions 3 size 100m;
+	print-time yes;
+	print-category yes;
+	print-severity yes;
+	severity dynamic;
+};
+```
+
+
+### 分析
+
+错误日志如下所示：
+
+![](attachments/Pasted%20image%2020240628121850.png)
+
+如下所示，可以知道。对于 `qq.com`这个zone下的外网域名解析的错误，主要是 "119.29.29.29" 这个forwarder导致的。
+
+![](attachments/Pasted%20image%2020240628122724.png)
+
+```
+另外：
+   query-errors.log 中的 query failed (timed out) 和  query failed (SERVFAIL) 应该不一样。
+   前者应该是向 forwarder 发送请求，但是没有在规定时间内得到响应。
+   后者 应该是都没有向 forwarder 发送请求，比如由于限速直接给client回复 SERVFAIL 或者 向转发器请求超时后给client回复的 SERVFAIL 。
+   
+```
+
+
 # `SRTT` DNS服务器选择算法
 大家都知道BIND在作为递归服务器时在向权威DNS请求时会使用优选策略. 
 无论是 多个`forwarder`的选择，还是某个域存在多个 NS服务器时NS服务器的选择，都使用 `SRTT` 算法。

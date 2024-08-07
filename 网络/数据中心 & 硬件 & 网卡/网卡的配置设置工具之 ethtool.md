@@ -1,5 +1,8 @@
 ```table-of-contents
 ```
+# 介绍 
+
+ehttool 只是一个 Linux 中管理 NIC的用户态的管理工具，其代码并没有集成到Linux内核中。类似于 iptables/netfilter 中的的 iptables。内核中集成了各个网卡驱动的 ethtool的操作API 接口。
 
 # 通用使用
 Ethtool is a standard Linux utility for controlling network drivers and hardware, particularly for wired Ethernet devices. It can be used to:
@@ -10,9 +13,246 @@ Ethtool is a standard Linux utility for controlling network drivers and hardware
 - Control DMA ring sizes and interrupt moderation
 - Flash device firmware using a .mfa2 image
 
-## ethtool -k/-K 
-见下
-## ethtool -x/-X
+
+==`ethtool` 参数 有个惯例，小写一般都是查询某个配置，对应的大写表示修改这个配置==。
+
+参见：[# Linux 网络栈接收数据（RX）：配置调优（2022）](https://arthurchiao.art/blog/linux-net-stack-tuning-rx-zh/)
+
+
+参见：[不同版本的 ethtool 镜像包 ](https://mirrors.edge.kernel.org/pub/software/network/ethtool/)
+
+## ethtool -k/-K 打开关闭N元组过滤
+
+使用 如下所示：
+
+![](attachments/Pasted%20image%2020240625103908.png)
+
+范例如下：
+
+![](attachments/Pasted%20image%2020240620181951.png)
+
+## ethtool -n/-N 设置 RSS hash
+
+RSS (Receive Side Scaling)
+
+```bash
+# ethtool -N <ethX> rx-flow-hash <type> <option>
+
+Where <type> is:
+  tcp4    signifying TCP over IPv4
+  udp4    signifying UDP over IPv4
+  gtpc4   signifying GTP-C over IPv4
+  gtpc4t  signifying GTP-C (include TEID) over IPv4
+  gtpu4   signifying GTP-U over IPV4
+  gtpu4e  signifying GTP-U and Extension Header over IPV4
+  gtpu4u  signifying GTP-U PSC Uplink over IPV4
+  gtpu4d  signifying GTP-U PSC Downlink over IPV4
+  tcp6    signifying TCP over IPv6
+  udp6    signifying UDP over IPv6
+  gtpc6   signifying GTP-C over IPv6
+  gtpc6t  signifying GTP-C (include TEID) over IPv6
+  gtpu6   signifying GTP-U over IPV6
+  gtpu6e  signifying GTP-U and Extension Header over IPV6
+  gtpu6u  signifying GTP-U PSC Uplink over IPV6
+  gtpu6d  signifying GTP-U PSC Downlink over IPV6
+And <option> is one or more of:
+  s     Hash on the IP source address of the Rx packet.
+  d     Hash on the IP destination address of the Rx packet.
+  f     Hash on bytes 0 and 1 of the Layer 4 header of the Rx packet.
+  n     Hash on bytes 2 and 3 of the Layer 4 header of the Rx packet.
+  e     Hash on GTP Packet on TEID (4bytes) of the Rx packet.
+```
+
+
+
+查看：
+
+![](attachments/Pasted%20image%2020240625104013.png)
+
+设置：
+
+![](attachments/Pasted%20image%2020240625104106.png)
+
+action 如下：
+
+![](attachments/Pasted%20image%2020240625104611.png)
+
+
+范例如下：
+```bash
+(1) 查看tcp和udp
+# ethtool -n eth02 rx-flow-hash udp4
+UDP over IPV4 flows use these fields for computing Hash flow key:
+IP SA
+IP DA
+L4 bytes 0 & 1 [TCP/UDP src port]
+L4 bytes 2 & 3 [TCP/UDP dst port]
+
+# ethtool -n eth02 rx-flow-hash tcp4
+TCP over IPV4 flows use these fields for computing Hash flow key:
+IP SA
+IP DA
+L4 bytes 0 & 1 [TCP/UDP src port]
+L4 bytes 2 & 3 [TCP/UDP dst port]
+
+（2）设置 tcp 和 udp
+
+ethtool -N eth02 rx-flow-hash udp4 sdfn
+
+```
+![](attachments/Pasted%20image%2020240620181732.png)
+
+![](attachments/Pasted%20image%2020240725174150.png)
+
+
+### intel 网卡的 flow-type 的限制
+
+（1）flow-type 相同的多个过滤规则，需要有相同类型的匹配条件。
+
+![](attachments/Pasted%20image%2020240624112406.png)
+
+
+### user-def 字段
+
+参考：[#  Intel(R) Ethernet Controller 700 Series](https://www.kernel.org/doc/html/v4.20/networking/i40e.html)
+
+参考：[intel E800 系列（ice驱动）网卡](https://docs.kernel.org/networking/device_drivers/ethernet/intel/ice.html)
+
+
+
+
+![](attachments/Pasted%20image%2020240624110300.png)
+
+#### flow-type l3/l4 设置 user-def 
+
+![](attachments/Pasted%20image%2020240625164807.png)
+
+```bash
+# ethtool -U <ethX> flow-type tcp4 src-ip 192.168.10.1 dst-ip \
+192.168.10.2 user-def 0x4FFFF action 2 [loc 1]
+
+where the value of the user-def field contains the offset (4 bytes) and
+the pattern (0xffff).
+```
+
+![](attachments/Pasted%20image%2020240625165209.png)
+即：payload 偏移指定字节数后，然后看2个字节的数据是否是设置的数据（flexible data）？？
+
+
+注：用户定义（user-defined）的灵活偏移也被视为输入集（input set）的一部分，不能为同一类型(flow-type )的多个滤波器单独编程。然而，灵活数据不是输入集的一部分，并且多个过滤器可以使用相同的偏移量但匹配不同的数据。
+
+
+#### i40e 通过 user-def 设置 VF
+
+![](attachments/Pasted%20image%2020240624120745.png)
+
+![](attachments/Pasted%20image%2020240624120917.png)
+
+```
+如上所示：
+(1) user-def 一共是 64bit；
+如果高32bit是 0xffffffff，那么过滤器规则就是当做 L3 VEB filter, 即 非隧道包。
+如果高32bit不是 0xffffffff，那么 过滤器规则就是当做 Cloud Filter，高32bit 携带 vni；
+
+（2） user-def 的 低32位：
+user-def 的 低32位 指定的是 VF，如果 低32位的值 >= max_vfs, 那么 代表的是PF;
+action 字段指定具体的  queue。
+
+
+(3) Cloud Filter：
+dst 表示的是 外层；
+src 表示的 内层；
+
+```
+
+
+
+
+ **范例**
+
+![](attachments/Pasted%20image%2020240624121926.png)
+
+![](attachments/Pasted%20image%2020240624121951.png)
+
+
+
+
+
+
+### ethtool -x/-X 查看设置RSS表和key
+
+
+
+设置：
+![](attachments/Pasted%20image%2020240625115707.png)
+
+```bash
+(1) 查看 与设置
+
+ethtool -x|--show-rxfh-indir|--show-rxfh devname
+
+ethtool -X|--set-rxfh-indir|--rxfh devname [hkey xx:yy:zz:aa:bb:cc:...]  [ equal N | weight W0 W1 ... | default ] [hfunc FUNC] [context CTX | new] [delete]
+
+```
+
+
+![](attachments/Pasted%20image%2020240625115617.png)
+
+
+
+## ethtool -u/-U 设置与查看N元祖过滤
+
+```bash
+# ethtool -U <ethX> flow-type <type> src-ip <ip> [m <ip_mask>] dst-ip <ip>
+[m <ip_mask>] src-port <port> [m <port_mask>] dst-port <port> [m <port_mask>]
+action <queue>
+
+Where:
+  <ethX> - the Ethernet device to program
+  <type> - can be ip4, tcp4, udp4, sctp4, ip6, tcp6, udp6, sctp6
+  <ip> - the IP address to match on
+  <ip_mask> - the IPv4 address to mask on
+            NOTE: These filters use inverted masks.
+  <port> - the port number to match on
+  <port_mask> - the 16-bit integer for masking
+            NOTE: These filters use inverted masks.
+  <queue> - the queue to direct traffic toward (-1 discards the
+            matched traffic)
+```
+
+
+```bash
+ethtool -U eth0 flow-type tcp4 src-ip 192.168.1.100 dst-port 80 action 0
+```
+
+### 删除N元祖过滤条件
+
+![](attachments/Pasted%20image%2020240624111513.png)
+
+```bash
+基于 ID 进行删除；在 设置 n-tuple filter的时候，也可以通过 loc 来设置 规则的 id。
+
+如下所示：
+
+```
+
+![](attachments/Pasted%20image%2020240624111923.png)
+
+```bash
+ethtool -u eth04  # 查看规则的id
+ethtool -U eth04 delete 7679  #基于规则id进行删除
+```
+
+
+### 修改 GRO 配置
+
+![](attachments/Pasted%20image%2020240620182244.png)
+
+
+## ethtool -x/-X 调整队列权重
+
+![](attachments/Pasted%20image%2020240620181518.png)
+
 ```c
        -x --show-rxfh-indir --show-rxfh
               Retrieves the receive flow hash indirection table and/or RSS hash key.
@@ -43,9 +283,74 @@ Ethtool is a standard Linux utility for controlling network drivers and hardware
 调整网卡RSS队列配置：
 查看：`ethtool -x ethx`；  
 调整：`ethtool -X ethx xxxx`；
+``` 
+ethtool -X ens4f0 start 8 equal 8  //均衡的分发到8-15号队列；
+```
+
+### context 设置：将指定规则的流量分发到多个队列
+
+**背景**
+当前的网卡可能支持创建多个RSS规则并存，实际使用时基于匹配的流量选择对应的规则。
+当应用程序想要限制接收流量的队列集时，这非常有用，例如特定的目标端口或 IP 地址。下面的示例显示如何将 TCP 端口 22 的所有流量定向到队列 0 和 1。
+
+![](attachments/Pasted%20image%2020240711110449.png)
+
+```bash
+(1) 创建
+ethtool -X eth0 start 2 equeal 8 hfunc toeplitz context new
+
+创建一个新的RSS context：起始的队列是2， 一共8个队列。
+比如，返回的 context 为 1
+
+(2) 查看 
+ethtool -x eth0 context 1
 
 
-## ethtool -a/-A
+（3）设置FDIR 匹配规则：
+ethtool -N eth0 flow-type tcp6 dst-port 22 context 1
+
+（4）删除 fdir规则和 RSS context 规则：
+# ethtool -N eth0 delete 1023
+# ethtool -X eth0 context 1 delete
+```
+
+#### ethtool 工具支持 RSS context
+
+ ethtool 从 4.8.9 版本开始支持，参见：[CentOS 7 - Updates for x86_64: applications/system: ethtool](https://linuxsoft.cern.ch/cern/centos/7/updates/x86_64/repoview/ethtool.html); 但是很多网卡可能自身不支持 设置 rss context。
+
+![](attachments/Pasted%20image%2020240711112253.png)
+
+
+#### 网卡驱动支持 FDIR 导流到queue group
+
+目前看 intel  e810系列的网卡，通过 ethtool 好像无法设置 RSS context，可能是 ice 驱动版本的限制 或者 是ice 驱动的限制 ??？ 
+
+参考：[#  Intel® Ethernet 700 Series Configure RSS Queue Regions Tests](https://doc.dpdk.org/dts/test_plans/queue_region_test_plan.html)
+![](attachments/Pasted%20image%2020240711121032.png)
+
+如下所示，查看了最新版本的内核，Intel E810系列网卡的 ICE驱动程序是不支持 RSS context的。博通网卡的bnxt驱动也是不支持RSS context的，目前看内核也就是Marvel的mvpp2驱动和  Solarflare（2019年被赛灵思Xilinx 收购，Xilinx 又被AMD收购） 的 sfc 驱动支持 RSS context设置。
+
+![](attachments/image%20(10).png)
+
+![](attachments/Pasted%20image%2020240712121901.png)
+
+#### DPDK的PMD中支持 FDIR 导流到queue group
+但是 看 `Intel® Ethernet Controller E810 DDP—Comms DDP Package Utilization` 中介绍，通过 DPDK 的 rte_flow 是可以设置  queue的 group的「DPDK不在使用 Ice的驱动，而是使用 用户态的 PMD 驱动」。
+如下所示：DPDK中 将具有特定DSCP值的IPv4包 重定向到多个 queue中，多个queue之间通过RSS负载均衡。
+
+![](attachments/Pasted%20image%2020240711115200.png)
+
+![](attachments/Pasted%20image%2020240711114914.png)
+
+![](attachments/Pasted%20image%2020240711115413.png)
+
+
+testpmd 中 FDIR 规则使用 queue group 如下：
+
+![](attachments/Pasted%20image%2020240711120400.png)
+
+
+## ethtool -a/-A 流控的设置与查看 
 查看流控统计：
 ```c
 ethtool -S eth1 | grep control
@@ -53,6 +358,10 @@ ethtool -S eth1 | grep control
 ![](attachments/Pasted%20image%2020231023141453.png)
 rx_flow_control_xon 是在网卡的 RX Buffer 满或其他网卡内部的资源受限时，给交换机端口发送的开启流控的pause帧计数。
 对应的，tx_flow_control_xoff 是在资源可用之后发送的关闭流控的pause帧计数。
+
+![](attachments/Pasted%20image%2020240625103643.png)
+
+
 
 查看网络流控配置：`ethtool -a eth1`
 ![](attachments/Pasted%20image%2020231023141349.png)
@@ -65,11 +374,62 @@ ethtool -A ethx rx off # 接收模块关闭
 ```
 
 
-## ethtool -g/-G
-见下
-## ethtool -l/-L
-见下
-## ethtool -c/-C
+## ethtool -g/-G 调整队列大小
+
+![](attachments/Pasted%20image%2020240625103610.png)
+
+![](attachments/Pasted%20image%2020240620181339.png)
+
+## ethtool -l/-L 调整队列个数
+使用：
+
+![](attachments/Pasted%20image%2020240625104157.png)
+
+范例：
+![](attachments/Pasted%20image%2020240620181212.png)
+
+`combined` 表示 接受队列和发送队列个数绑定在一起，所以两者的数量都是一样的。调整的时候，调整一个，另外一个也会调整，且数值一样。
+
+如果你的设备和驱动支持分别设置 TX queue 和 RX queue 的数量，那你可以分别设置。
+```bash
+ethtool -L eth0 tx 8
+```
+
+
+**注意**
+对于大部分驱动，调整以上设置会导致网卡先 down 再 up，经过这个网卡的连接会断掉  
+。
+
+## ethtool -c/-C 进行中断合并
+
+![](attachments/Pasted%20image%2020240620182144.png)
+
+
+**intel i40e驱动的中断速率限制**
+
+![](attachments/Pasted%20image%2020240624115431.png)
+
+## ethtool priv-flags的设置与查看
+
+![](attachments/Pasted%20image%2020240625104228.png)
+
+```bash
+   ethtool --show-priv-flags devname
+   ethtool --set-priv-flags devname flag on|off ...
+```
+
+## ethtool 的  FEC设置与查看
+FEC(Forward Error Correction): 前向纠错。
+
+使用：
+![](attachments/Pasted%20image%2020240625104335.png)
+
+
+范例：
+```bash
+   ethtool --show-fec devname
+   ethtool --set-fec devname encoding auto|off|rs|baser|llrs [...]
+```
 
 ## ethtool -i 
 排查一下网卡phy芯片firmware是不是有bug，安装的版本是不是符合预期，查看 ethtool -i eth1:
@@ -77,7 +437,7 @@ ethtool -A ethx rx off # 接收模块关闭
 
 比如：集群中存在多台设备时，个别设备存在问题时，而机器的其他的配置，内核版本，内核参数都一样时，这个时候可能是硬件的固件版本不一致导致的。
 ## 其他操作
-- Mellanox网卡设置抓包
+### Mellanox网卡设置抓包
 ```c
 ethtool --set-priv-flags enp130s0f0 sniffer on
 ```
@@ -157,7 +517,7 @@ sudo ethtool -G eth0 rx 4096
 
 1. 网卡支持 flow indirection（flow 重定向）
 2. 网卡驱动实现了 `get_rxfh_indir_size` 和 `get_rxfh_indir` 方法
-3. 使用的 ethtool 版本足够新，支持 `-x` 和 `-X` 参数来设置 indirection table
+3. 使用的 ethtool 版本足够新，支持 `-x` 和 `-X` 参数来设置 indirection table(间接表)
 
 `ethtool -x` 检查 flow indirection 设置：
 ```c
@@ -216,6 +576,7 @@ sudo ethtool -N eth0 rx-flow-hash udp4 sdfn
 
 
 ### n元组过滤ntuple filter/fdir
+
 一些网卡支持 “ntuple filtering” 特性。该特性允许用户（通过 ethtool ）指定一些参数来在硬件上过滤收到的包，然后将其直接放到特定的 RX queue。例如，用户可以指定到特定目端口的 TCP 包放到 RX queue 1。
 
 Intel 的网卡上这个特性叫 Intel Ethernet Flow Director，其他厂商可能也有他们的名字，这些都是出于市场宣传原因，底层原理是类似的。

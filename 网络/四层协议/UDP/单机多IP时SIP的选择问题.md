@@ -202,7 +202,7 @@ iptables -I PREROUTING -t raw -p udp --dport 5060 -j CT --notrack
 答案也是否定的，因为 NAT 需要 conntrack 来做翻译工作，如果去掉 conntrack 等于 SNAT 完全没用。
 
 # 解决方法
-## UDP接口多IP使用IP_PKTINFO sockopt
+## UDP接口多IP使用 IP_PKTINFO 的sockopt
  获取 TCP socket 的目的地址很容易，通过 getsockname即可。但是对于无连接状态的 UDP socket 获取目的地址比较麻烦。
  
 通过查找，发现 `IP_PKTINFO` 这个选项就是让内核在 socket 中保存 IP 报文的信息，当然也包括了报文的源地址和目的地址。

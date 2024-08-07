@@ -977,7 +977,10 @@ recursive-clients 为待处理的递归客户端定义“硬配额”限制；�
 
 max-clients-per-query 指示的是对于外网的某个特定的递归查询（多个并发查询有相同的请求name和type）的并发请求限制。
 如果对外网的多个并发请求不同，但是属于一个zone或者其下的子zone，那么 max-clients-per-query 将无法进行限制。
-即 对于特定域名以及类型的多个并发查询，被归拢为一个 fetch，只迭代发送一个递归请求给外网dns服务器。隶属于同一个zone及其下的子zone的不同类型以及域名的查询，属于不同的fetch，fetch的个数受限于 fetches-per-zone。
+
+即 多个client 对于特定域名以及类型的多个并发查询，被归拢为一个 fetch，只迭代发送一个递归请求给外网dns服务器。
+
+隶属于同一个zone及其下的子zone的不同类型以及域名的查询，属于不同的fetch，fetch的个数受限于 fetches-per-zone。
 
 超过阈值之后的动作：
 1> 直接丢弃。（默认动作）
@@ -997,8 +1000,6 @@ max-clients-per-query 指示的是对于外网的某个特定的递归查询（�
 fetches-per-server 200 fail;
 fetch-quota-params 100 0.1 0.3 0.7;
 ```
-
-
 
 参考：https://bind9.readthedocs.io/en/v9.18.25/reference.html
 

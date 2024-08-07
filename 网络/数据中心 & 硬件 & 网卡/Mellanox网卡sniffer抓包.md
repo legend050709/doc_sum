@@ -73,7 +73,7 @@ DPDK 官方 的 Mellanox Cx4 25G网卡的性能调优：
 ![](attachments/image%20(12).png)
 
 
-> 注：实际在测试过程中，发现使能了 txq_inline=200,txq_mpw_en=1，即使在client发送超过了800B的数据包，在DPVS上通过sniffer抓包，也是没抓取到物理网卡发出去的包的。
+> 注：**实际在测试过程中，发现使能了 txq_inline=200,txq_mpw_en=1，即使在client发送超过了800B的数据包，在DPVS上通过sniffer抓包，也是没抓取到物理网卡发出去的包的**。
 
 # 影响
 开启sniffer，对于网卡的收包性能会存在影响。经过测试DPVS使用sniffer网卡，大概存在40-50%的影响。比如 25G Mellanox网卡，未开启的情况下，256B的数据包的转发能力达到了 23Gbps。 开启了Sniffer之后，可能就只有10Gbps。

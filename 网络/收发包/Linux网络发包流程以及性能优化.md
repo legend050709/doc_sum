@@ -110,14 +110,33 @@ input和output被赋予不同的函数依赖于包的类型.
 # 网络设备子系统层
 # 驱动层
 
-# 统计计数
-# 性能调优参数
+# 监控统计
+# 性能调优
+
+# 其他
+## 发包时如何选择哪个发包队列的
+## 发包时tcpdump/tc/netfilter/gso等的顺序
+
 # 参考
 ```c
-# [转][译]Linux 网络栈监控和调优：发送数据（2017）
+# [译]Linux 网络栈监控和调优：发送数据（2017）
 https://colobu.com/2019/12/09/monitoring-tuning-linux-networking-stack-sending-data/
+# [译] Linux 网络栈监控和调优：发送数据（2017）
+https://arthurchiao.art/blog/tuning-stack-tx-zh/
 
-# 说明的很清楚
+# Linux网络栈中的队列
+https://cxd2014.github.io/2016/08/16/linux-network-stack/
+
+# Linux 网络发包流程：详细
+https://www.cnblogs.com/edisonfish/p/17637507.html
+
+# 代码层面的发包流程
+https://juejin.cn/post/6981790483215286309
+
+# 小林coding：# 2.3 Linux 系统是如何收发网络包的？
+https://xiaolincoding.com/network/1_base/how_os_deal_network_package.html#linux-%E5%8F%91%E9%80%81%E7%BD%91%E7%BB%9C%E5%8C%85%E7%9A%84%E6%B5%81%E7%A8%8B
+
+# # Linux网络数据包接受过程（说明的很清楚）
 https://simonzgx.github.io/2020/08/17/Linux%E7%BD%91%E7%BB%9C%E6%95%B0%E6%8D%AE%E5%8C%85%E6%8E%A5%E5%8F%97%E8%BF%87%E7%A8%8B/
 
 发包流程：

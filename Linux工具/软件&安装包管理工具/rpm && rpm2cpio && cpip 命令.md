@@ -42,6 +42,18 @@ coreutils-8.22.tar.xz
 
 ```
 
+
+# 其他
+## libxxx.rpm 和  libxxx-devel.rpm 和 libxxx.src.rpm的关系
+
+![](attachments/Pasted%20image%2020240719115019.png)
+
+![](attachments/Pasted%20image%2020240719115221.png)
+
+libxxx.rpm 和  libxxx-devel.rpm 结合使用，提供给外部开发者。其中提供了 lib库(一般还会存在libxxx.pc 文件，供 pkgconfig 发现，比如：/usr/lib64/pkgconfig/libbpf.pc )，以及.h 头文件，不存在.c的文件。
+
+libxxx.src.rpm 则是存在 .h、.c 以及 makefile 的文件，可以看到源码实现；但是需要编译成lib库 + 头文件的形式，提供给外部使用。
+
 # 参考
 ```c
 https://juejin.cn/post/6981019721197944845

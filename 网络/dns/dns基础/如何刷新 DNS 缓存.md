@@ -12,6 +12,38 @@
 TTL 定义了 DNS 记录「保持有效」的时间段（以秒为单位）。在此期间，所有查询请求将从本地缓存中得到回答，而无需再次查询 DNS 服务器。一旦 TTL 到期，该条目将自动从缓存中删除。
 **有时我们要强制刷新 DNS，而不是等待所有条目 TTL 自动到期。**
 
+# DNS的缓存机制
+
+## 缓存的对象
+
+
+如果dns服务器上存在某个权威记录，那么在这个DNS服务器上就不存在这个记录的缓存，这些权威记录都是存储在DB数据库中，而不是缓存中。
+不存在某个记录的时候，才会向转发器发起请求，获取响应之后，缓存下来。
+
+> 注：缓存和权威记录是2个概念，缓存针对的是本地没有的权威记录。
+
+
+## 缓存响应的TTL
+
+DNS缓存中的记录的TTL是一直在变少的，直到超时，才会再次向权威服务器发起请求。
+因此，DNS服务器中存在缓存时，其响应给Client的记录的TTL也是一直在变小的。
+
+如下所示，2次查询时，响应是从缓存中获取的。Cname的TTL为1049，A记录的TTL为207;
+![](attachments/Pasted%20image%2020240624194859.png)
+
+10s之后的4次查询，响应也是从缓存中获取的。Cname的TTL为1039，A记录的TTL为197;
+![](attachments/Pasted%20image%2020240624195027.png)
+
+
+查看named的缓存文件，也可以看到 缓存的TTL是不断变少的，如下所示；
+第一次查询，没有缓存，会向转发器发起请求，获得响应之后，进行缓存；后续的查询，缓存中存在，响应较快。
+![](attachments/Pasted%20image%2020240624195810.png)
+
+## 缓存中的 cname和A的TTL不一致时
+
+如果缓存中一个域名的Cname和Cname的A记录的TTL不一致时。
+比如：cname的缓存时间较短，那么缓存中的cname超时之后，再次发起请求，查询不到Cname，就会再次向权威发起请求，不用等待A记录超时才向权威发起请求。
+
 # 为什么要刷新 DNS 缓存
 有几个主要原因可能会需要清空 DNS 缓存，这些原因可能与安全、技术问题或数据隐私有关。
 ## 防止 DNS 欺骗
@@ -158,12 +190,35 @@ Microsoft Edge 在 2020 年切换到了 Chromium 内核以提高其稳定性和�
 ## dnsmasq
 `Dnsmasq` 是轻量级的 DHCP 和 DNS 缓存名称服务器。它可以应用在内部网和 Internet 连接的时候的 IP 地址 NAT 转换，也可以用做小型网络的 DNS 服务。
 
-在`dnsmasq`的配置文件（`dnsmasq.conf`）中，可以通过设置`cache-size`和`cache-min-ttl`参数来控制DNS缓存时间。`cache-size`参数控制缓存的最大DNS记录数量，`cache-min-ttl`参数控制缓存最小的TTL值。例如：
+### dnsmasq的缓存时长
+在`dnsmasq`的配置文件（`dnsmasq.conf`）中，可以通过设置`cache-size`和`cache-min-ttl`参数来控制DNS缓存时间。
+
+man dnsmasq 如下所示：
 ```bash
-cache-size=1000    // 缓存最多1000条DNS记录
-cache-min-ttl=3600 // 缓存最小TTL值为1小时
+ --max-cache-ttl=<time>
+        Set a maximum TTL value for entries in the cache. 
+        the maximum time a DNS record is kept in the cache, regardless of the TTL provided by the authoritative server;
+
+ --min-cache-ttl=<time>
+        Extend short TTL values to the time given when caching them. Note that artificially extending TTL values is in general a bad idea, do not do it unless you have a good reason,  and  understand
+        what you are doing.  Dnsmasq limits the value of this option to one hour, unless recompiled.
+        
+ -c, --cache-size=<cachesize>
+        Set the size of dnsmasq's cache. The default is 150 names. Setting the cache size to zero disables caching.
+
+ -N, --no-negcache
+        Disable negative caching. Negative caching allows dnsmasq to remember "no such domain" answers from upstream nameservers and answer identical queries without forwarding them again.
 ```
 
+`cache-size`参数控制缓存的最大DNS记录数量，`min-cache-ttl`参数控制缓存最小的TTL值。`max-cache-ttl` 控制缓存的最大ttl值。
+例如：
+
+```bash
+cache-size=1000    // 缓存最多1000条DNS记录
+min-cache-ttl=3600 // 缓存最小TTL值为1小时
+```
+
+### 操作查看dnsmasq
 如果你的 DNS 服务器是用 dnsmasq 实现的，用下面这个命令:
 ```
 1》 查看是否运行

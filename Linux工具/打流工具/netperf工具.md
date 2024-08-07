@@ -49,6 +49,29 @@ make && make install
 ```
 
 # 使用
+
+`-H host ：指定远端运行netserver的server IP地址。`
+
+`-l testlen：指定测试的时间长度（秒）`  
+
+`-t testname：指定进行的测试类型，包括TCP_STREAM，UDP_STREAM，TCP_RR，TCP_CRR，UDP_RR`
+
+ `-s size 设置本地系统的socket发送与接收缓冲大小`
+
+ `-S size 设置远端系统的socket发送与接收缓冲大小`
+
+ `-m size 设置本地系统发送测试分组的大小`  
+
+`-M size 设置远端系统接收测试分组的大小`
+
+`-r  req,resp 设置request和reponse分组的大小`
+
+```
+-D 对本地与远端系统的socket设置TCP_NODELAY选项
+```
+
+
+
 #  网络性能测试分类
 ## 批量(bulk)网络流量的性能测试
 根据使用传输协议的不同，批量数据传输又分为TCP批量传输和UDP批量传输。
@@ -62,7 +85,8 @@ UDP_STREAM用来测试进行UDP批量传输时的网络性能。
 在client/server结构中的request/response模式。在每次交易（transaction）中，client向server发出小的查询分组，server接收到请求，经处理后返回大的结果数据。
 
 ### TCP_RR
-TCP_RR：测试**同一个TCP连接**中的多次TCP request和response的响应效率。
+
+TCP_RR(RR: request/reponse)：测试**同一个TCP连接**中的多次TCP request和response的响应效率。
 这种模式常常出现在数据库应用中。数据库的client程序与server程序建立一个TCP连接以后，就在这个连接中传送数据库的多次交易过程。
 ```javascript
 [root@Netperf-test ~]# netperf -t TCP_RR -H 192.168.0.128
@@ -86,11 +110,15 @@ bytes  Bytes  bytes bytes   secs. per sec
 16384  87380  32 1024 10.00 4945.97
 16384  87380
 ```
+
 ### TCP_CRR
-TCP_CRR：TCP_CRR与TCP_RR不同,测试多个TCP连接中的request和response的响应效率，每个TCP请求、响应都建立一个新的TCP连接。
+
+TCP_CRR(CRR: concurrent request/reponse)：TCP_CRR与TCP_RR不同,测试**多个TCP连接**中的request和response的响应效率，**每个TCP请求、响应都建立一个新的TCP连接**。
 最典型的应用就是HTTP，每次HTTP交易是在一条单独的TCP连接中进行的。因此，由于需要不停地建立新的TCP连接，并且在交易结束后拆除TCP连接，交易率一定会受到很大的影响。
+
 ### UDP_RR
 UDP_RR方式使用UDP分组进行request/response的交易过程。
+
 # 参考
 ```c
 https://bbs.huaweicloud.com/blogs/228744

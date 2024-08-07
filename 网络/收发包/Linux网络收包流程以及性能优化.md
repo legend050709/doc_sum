@@ -976,6 +976,9 @@ TIME     PID    IP SADDR:SPORT          > DADDR:DPORT          STATE (FLAGS)
 ```
 # 参考
 ```c
+# Linux 网络栈接收数据（RX）：配置调优（2022）
+https://arthurchiao.art/blog/linux-net-stack-tuning-rx-zh/
+
 https://zhuanlan.zhihu.com/p/150086151
 https://simonzgx.github.io/2020/08/17/Linux%E7%BD%91%E7%BB%9C%E6%95%B0%E6%8D%AE%E5%8C%85%E6%8E%A5%E5%8F%97%E8%BF%87%E7%A8%8B/
 
