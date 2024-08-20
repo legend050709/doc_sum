@@ -21,7 +21,8 @@ Ethtool is a standard Linux utility for controlling network drivers and hardware
 
 参见：[不同版本的 ethtool 镜像包 ](https://mirrors.edge.kernel.org/pub/software/network/ethtool/)
 
-## ethtool -k/-K 打开关闭N元组过滤
+## ethtool -k/-K 设置
+### 打开关闭N元组过滤
 
 使用 如下所示：
 
@@ -30,6 +31,55 @@ Ethtool is a standard Linux utility for controlling network drivers and hardware
 范例如下：
 
 ![](attachments/Pasted%20image%2020240620181951.png)
+
+### vxlan offload设置与查看
+```bash
+// 查看
+# ethtool -k ens1f0 | grep udp_tnl 
+tx-udp_tnl-segmentation: on 
+
+# ethtool -k eth03 | grep udp
+udp-fragmentation-offload: off
+tx-udp_tnl-segmentation: on
+tx-udp_tnl-csum-segmentation: on
+tx-udp-segmentation: on
+rx-udp_tunnel-port-offload: on
+
+// 设置
+ethtool -K eth03 tx-udp_tnl-segmentation on
+```
+
+#### mellanox网卡的vxlan offload特性
+
+![](attachments/Pasted%20image%2020240816183337.png)
+
+
+
+
+#### mellanox网卡vxlan offload的问题
+参考：[mellanox-adapters_users-guide_en-us](https://dl.dell.com/manuals/all-products/esuprt_ser_stor_net/esuprt_pedge_srvr_ethnt_nic/mellanox-adapters_users-guide_en-us.pdf)
+
+
+**问题**
+默认情况下，Mellanox Cx4网卡，只对于 vxlan的 udp port 为 4789 支持 offload。对于其它的 udp port 不支持 offload。可能华为的网卡也有类似的问题。
+
+
+**解决**
+
+
+![](attachments/Pasted%20image%2020240816183819.png)
+
+
+### tc offload
+```bash
+# 查看
+# ethtool -k eth03 | grep tc-off
+hw-tc-offload: off
+
+# 设置
+ethtool -K eth0 hw-tc-offload on
+```
+
 
 ## ethtool -n/-N 设置 RSS hash
 
@@ -176,30 +226,6 @@ src 表示的 内层；
 
 
 
-
-
-
-### ethtool -x/-X 查看设置RSS表和key
-
-
-
-设置：
-![](attachments/Pasted%20image%2020240625115707.png)
-
-```bash
-(1) 查看 与设置
-
-ethtool -x|--show-rxfh-indir|--show-rxfh devname
-
-ethtool -X|--set-rxfh-indir|--rxfh devname [hkey xx:yy:zz:aa:bb:cc:...]  [ equal N | weight W0 W1 ... | default ] [hfunc FUNC] [context CTX | new] [delete]
-
-```
-
-
-![](attachments/Pasted%20image%2020240625115617.png)
-
-
-
 ## ethtool -u/-U 设置与查看N元祖过滤
 
 ```bash
@@ -249,6 +275,43 @@ ethtool -U eth04 delete 7679  #基于规则id进行删除
 ![](attachments/Pasted%20image%2020240620182244.png)
 
 
+### 不同网卡的 ntuple的规则个数限制
+
+对于不同的网卡，可以设置的FD规则的限制不同。
+（1）mellanox网卡(Cx4-Lx 25G) mlx5 驱动。
+每个物理口上（所有队列）支持的FD规则的个数是1024个。
+```bash
+
+  // 查看
+  ethtool -u eth02
+  
+  // 设置
+  for a in `seq 9000 10020`; do ethtool -U eth02 flow-type udp4 src-port $a dst-port 80 action 1; done
+  for a in `seq 10021 10026`; do ethtool -U eth02 flow-type udp4 src-port $a dst-port 80 action 0; done
+    
+  // 删除
+  for a in `seq 0 1023`; do ethtool -U eth02 delete ${a}; done
+```
+
+（2） intel (E810 25G ) ice 驱动网卡
+每个物理口上支持的FD规则的个数是：15360个
+```bash
+  // 查看
+  ethtool -u eth02
+  
+  // 设置
+  for a in `seq 512 15800`; do ethtool -U eth02 flow-type udp4 src-port $a dst-port 80 action 1; done
+  for a in `seq 16000 16100`; do ethtool -U eth02 flow-type udp4 src-port $a dst-port 80 action 0; done
+    
+  // 删除
+  for a in `seq 512 15871`; do ethtool -U eth02 delete ${a}; done
+```
+
+（3）FD规则的设置
+最简单的设置是每个FD规则，都指定一个具体的port。
+复杂一些的情况，则是每个FD规则，代表了一个port-range。多个 FD规则代表的port-range关系，可能是包含关系，比如rule1包含了rule2，rule2包含了rule3，rule3包含了rule4；需要考虑如何设置优先级或者顺序，做到最短最匹配，这样进行port-range的划分。
+> 但是，可能存在一个问题，就是如果是相同类型的规则，mask可能不可以设置不同。这样就导致无法做到port-range的划分。
+
 ## ethtool -x/-X 调整队列权重
 
 ![](attachments/Pasted%20image%2020240620181518.png)
@@ -285,6 +348,8 @@ ethtool -U eth04 delete 7679  #基于规则id进行删除
 调整：`ethtool -X ethx xxxx`；
 ``` 
 ethtool -X ens4f0 start 8 equal 8  //均衡的分发到8-15号队列；
+
+ethtool -X eth03 default // 恢复为默认配置；
 ```
 
 ### context 设置：将指定规则的流量分发到多个队列
@@ -349,6 +414,25 @@ testpmd 中 FDIR 规则使用 queue group 如下：
 
 ![](attachments/Pasted%20image%2020240711120400.png)
 
+
+### ethtool -x/-X 查看设置RSS表和key
+
+
+
+设置：
+![](attachments/Pasted%20image%2020240625115707.png)
+
+```bash
+(1) 查看 与设置
+
+ethtool -x|--show-rxfh-indir|--show-rxfh devname
+
+ethtool -X|--set-rxfh-indir|--rxfh devname [hkey xx:yy:zz:aa:bb:cc:...]  [ equal N | weight W0 W1 ... | default ] [hfunc FUNC] [context CTX | new] [delete]
+
+```
+
+
+![](attachments/Pasted%20image%2020240625115617.png)
 
 ## ethtool -a/-A 流控的设置与查看 
 查看流控统计：
@@ -417,6 +501,10 @@ ethtool -L eth0 tx 8
    ethtool --show-priv-flags devname
    ethtool --set-priv-flags devname flag on|off ...
 ```
+
+
+![](attachments/Pasted%20image%2020240816104826.png)
+
 
 ## ethtool 的  FEC设置与查看
 FEC(Forward Error Correction): 前向纠错。

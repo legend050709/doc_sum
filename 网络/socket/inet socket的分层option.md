@@ -104,11 +104,84 @@ ipv6_setsockopt
 
 # socket level 分层
 ## socket层
+### SO_INCOMING_CPU
+**背景**
+
+
+**思路**
+`getsockopt(SO_INCOMING_CPU)` 可以判断当前哪个 CPU 在处理这个 socket 的网络包。 然后，您的应用程序可以使用此信息将套接字移交给在所需CPU上运行的线程，以帮助增加数据局部性和CPU缓存命中率。
+
+> 即：目标是期望将内核线程对于数据的处理（socket处理），以及应用线程对于数据的处理，放在同一个core上。
+
+```c
+After accept(), connect(), or even file descriptor passing around
+processes, applications can use :
+
+ int cpu;
+ socklen_t len = sizeof(cpu);
+
+ getsockopt(fd, SOL_SOCKET, SO_INCOMING_CPU, &cpu, &len);
+```
+
+###  socket 低延迟选项：SO_BUSY_POLL
+
+![](attachments/Pasted%20image%2020240810124909.png)
+
+socket 有个 `SO_BUSY_POLL` 选项，可以让内核在**阻塞式接收**（blocking receive） 时做 busy poll。这个选项会减少延迟，但会增加 CPU 使用量和耗电量。
+
+**重要提示**：要使用此功能，首先要检查设备驱动是否支持。 如果驱动实现（并注册）了 `struct net_device_ops` 的 **`ndo_busy_poll()`** 方法，那就是支持。
+
+``` bash
+man 7 socket
+```
+![](attachments/Pasted%20image%2020240809123508.png)
+
+
+#### 分类
+（1）单个 socket 设置
+对单个 socket 设置此选项，需要传一个以微秒（microsecond）为单位的时间，内核会 在这个时间内对设备驱动的接收队列做 busy poll。当在这个 socket 上触发一个阻塞式读请 求时，内核会 busy poll 来收数据。
+
+
+
+（2）全局设置
+全局设置此选项，可以修改 sysctl 配置项：
+```bash
+在µs单位下添加了两个全局sysctl:  
+/proc/sys/net/core/busy_read
+/proc/sys/net/core/busy_poll
+
+# sysctl -a | grep busy
+net.core.busy_poll = 0
+net.core.busy_read = 0
+
+```
+
+建议设置在50到100µs范围内。它们的使用非常有限，因为它们强制对所有套接字进行忙轮询，这并不可取。它们为在专用主机上使用遗留程序快速测试忙轮询提供了一种简单粗暴的方法。
+
+注意：这并不是一个 flag 参数，而是一个毫秒（microsecond）为单位的时间长度，当 `poll` 或 `select` 方 法以阻塞方式调用时，busy poll 的时长就是这个值。
+
+#### 使用
+
+比如使用 select/poll 多路复用监听 fds时候，如果没有事件发生。select/poll 含有超时时间，那么就会等待。等待就意味着当前进程让出CPU，进入睡眠。
+但是，如果这些fds被设置了 SO_BUSY_POLL，那么就不会进入到睡眠，不会让出CPU，而是busy-polling一段时间（具体时间是在sock option中设置，或者全局设置的）。
+
+#### 范例
+
+![](attachments/Pasted%20image%2020240809122621.png)
+
+socket的 busy-polling 可能和 中断合并（interrupt coalescing）一起来进行使用。
+中断合并 可以减少中断，同时也可能会增加延迟，那么通过 busy-polling
+
 ## tcp/udp层
 ## ip层
 ### IPv4层
 ### Ipv6 层
 ## raw socket的opt
+
+
+
+
+
 # 范例
 ## IP_BIND_ADDRESS_NO_PORT
 ![](attachments/Pasted%20image%2020231115135400.png)

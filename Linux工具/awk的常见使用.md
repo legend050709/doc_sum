@@ -109,14 +109,267 @@ echo "var1=$var1 ----- var2=$var2"
 #### awk 传递数组出来给shell
 首先申明一下数组 `declare -A xxxx`；然后再使用awk 输出若干条给shell数组赋值的命令；再用shell去执行这些命令。
 
+##### 范例一：awk 多行求和
+
 ```bash
 date +%T.%N; declare -A sum1; eval $(ipvsadm -ln -u 118.121.194.195:4666 --fstats | grep "\-> 10" | awk '{print $2, $3}' | awk -F'[: ]' '{print $1,$3}' | awk 'BEGIN{sum[$1]=0}{sum[$1] += $2}END{for(i in sum) if(sum[i]!=0){printf "sum1[%s]=%d;",i,sum[i]}}'); sleep 300; declare -A sum2; eval $(ipvsadm -ln -u 118.121.194.195:4666 --fstats | grep "\-> 10" | awk '{print $2, $3}' | awk -F'[: ]' '{print $1,$3}' | awk 'BEGIN{sum[$1]=0}{sum[$1] += $2}END{for(i in sum) if(sum[i]!=0){printf "sum2[%s]=%d;",i,sum[i]}}'); for bb1 in "${!sum1[@]}"; do echo $bb1 ${sum1[$bb1]}; done; date; for bb1 in "${!sum2[@]}"; do echo $bb1 ${sum2[$bb1]}; done; for bb in "${!sum1[@]}"; do echo $bb diff=$((${sum2[$bb]} - ${sum1[$bb]})); done;
+
+注意：上面的 eval() 中 awk的 `printf` 输出变量赋值中使用了双引号，即 "xxx=xxx;"
 ```
 
 说明：
 ```bash
 for bb1 in "${!sum1[@]}" // 遍历索引数组的每一个下标；
 declare -A sum1 // 申明一个数组
+```
+
+##### 范例二：ethtool统计累计值的差值
+正常输出的累计值如下所示：
+```bash
+# ethtool -S eth02 | grep -v ": 0" | grep -i -e xdp -e drop -e disc -e out -e err -e full -e pci -e wake -e xsk -e stop -e pause | awk -F: '{print $1,$2}' | awk '{print $1,$2}'
+rx_xdp_drop 26835566565
+rx_xdp_redirect 19825095281
+tx_queue_stopped 8479939
+tx_queue_wake 8479939
+rx_xsk_xdp_redirect 2839393509
+rx_xsk_buff_alloc_err 163580331
+tx_xsk_xmit 2838931268
+tx_xsk_full 303171057
+tx_xsk_cqes 48351037
+rx_out_of_buffer 2396568440
+tx_pause_ctrl_phy 1224554
+rx_discards_phy 6510045870
+tx_pci_signal_integrity 7
+outbound_pci_stalled_wr_events 362
+rx_prio0_discards 6510045870
+tx_global_pause 1224554
+tx_global_pause_duration 657121418
+rx0_xdp_drop 17042264150
+rx0_xdp_redirect 4179441741
+rx0_xsk_xdp_redirect 2839393509
+rx0_xsk_buff_alloc_err 163580331
+rx1_xdp_drop 987107407
+rx1_xdp_redirect 1489697536
+rx2_xdp_drop 855849518
+rx2_xdp_redirect 1585203229
+rx3_xdp_drop 889268809
+rx3_xdp_redirect 1721918804
+rx4_xdp_drop 866127425
+rx4_xdp_redirect 1675922651
+rx5_xdp_drop 862589327
+rx5_xdp_redirect 1568384560
+rx6_xdp_drop 678926129
+rx6_xdp_redirect 1375556544
+rx7_xdp_drop 772185628
+rx7_xdp_redirect 1301017364
+rx8_xdp_drop 611932527
+rx8_xdp_redirect 828089089
+rx9_xdp_drop 444358330
+rx9_xdp_redirect 820054091
+rx10_xdp_drop 839127444
+rx10_xdp_redirect 730749083
+rx11_xdp_drop 651551365
+rx11_xdp_redirect 835357700
+rx12_xdp_drop 406896929
+rx12_xdp_redirect 924071263
+rx13_xdp_drop 927382630
+rx13_xdp_redirect 789631719
+tx0_stopped 34839
+tx0_wake 34839
+tx1_stopped 5
+tx1_wake 5
+tx3_stopped 3169312
+tx3_wake 3169312
+tx4_stopped 3689271
+tx4_wake 3689271
+tx5_stopped 776691
+tx5_wake 776691
+tx6_stopped 703902
+tx6_wake 703902
+tx7_stopped 79106
+tx7_wake 79106
+tx10_stopped 137
+tx10_wake 137
+tx11_stopped 7942
+tx11_wake 7942
+tx12_stopped 1745
+tx12_wake 1745
+tx13_stopped 16989
+tx13_wake 16989
+tx0_xsk_xmit 2838931268
+tx0_xsk_full 303171057
+tx0_xsk_cqes 48351037
+```
+
+
+
+计算Mellanox网卡的一些异常统计的pps，如下所示：
+```bash
+sleep_time=1
+declare -A allinfo1
+declare -A allinfo2
+while true
+do
+	echo ------------------$(date)----------------------
+	eval $(ethtool -S eth02 | grep -v ": 0" | grep -i -e xdp -e drop -e disc -e out -e err -e full -e pci -e wake -e xsk -e stop -e pause | awk -F: '{print $1,$2}' | awk '{print $1,$2}' | awk  '{printf "allinfo1[%s]=%d;",$1,$2'})
+       	sleep ${sleep_time}
+       	for key1 in "${!allinfo1[@]}"
+       	do
+		diff=$((allinfo1[$key1] - allinfo2[$key1]))
+		echo $key1 : ${diff}
+		allinfo2[$key1]=${allinfo1[$key1]}
+       	done
+done
+```
+
+结果如下：
+```bash
+------------------Wed Aug 7 08:47:10 PM CST 2024----------------------
+rx8_xdp_redirect : 0
+tx0_wake : 20
+rx_xdp_drop : 5328032
+tx0_xsk_xmit : 0
+tx0_xsk_full : 0
+rx_xsk_buff_alloc_err : 0
+tx3_wake : 0
+rx11_xdp_redirect : 0
+rx0_xdp_redirect : 272319
+rx4_xdp_drop : 0
+tx10_stopped : 0
+rx12_xdp_redirect : 0
+rx3_xdp_redirect : 0
+rx1_xdp_drop : 0
+tx_global_pause : 0
+rx1_xdp_redirect : 0
+tx7_wake : 0
+tx13_wake : 0
+tx1_wake : 0
+tx10_wake : 0
+tx_pci_signal_integrity : 0
+tx6_wake : 0
+tx11_wake : 0
+rx2_xdp_redirect : 0
+tx13_stopped : 0
+tx4_wake : 0
+tx12_wake : 0
+rx0_xdp_drop : 5329752
+outbound_pci_stalled_wr_events : 0
+rx13_xdp_drop : 0
+tx_queue_stopped : 20
+rx_xdp_redirect : 272576
+tx1_stopped : 0
+rx13_xdp_redirect : 0
+rx3_xdp_drop : 0
+rx7_xdp_redirect : 0
+tx0_xsk_cqes : 0
+tx_pause_ctrl_phy : 0
+rx9_xdp_redirect : 0
+tx_queue_wake : 20
+tx_xsk_xmit : 0
+rx10_xdp_redirect : 0
+rx6_xdp_drop : 0
+rx11_xdp_drop : 0
+rx7_xdp_drop : 0
+rx10_xdp_drop : 0
+rx_out_of_buffer : 2917461
+rx5_xdp_redirect : 0
+tx_global_pause_duration : 0
+rx12_xdp_drop : 0
+rx_discards_phy : 0
+tx11_stopped : 0
+tx6_stopped : 0
+rx0_xsk_xdp_redirect : 0
+rx2_xdp_drop : 0
+tx0_stopped : 20
+rx9_xdp_drop : 0
+rx5_xdp_drop : 0
+tx_xsk_full : 0
+tx5_wake : 0
+tx12_stopped : 0
+tx3_stopped : 0
+rx8_xdp_drop : 0
+rx0_xsk_buff_alloc_err : 0
+tx_xsk_cqes : 0
+tx7_stopped : 0
+rx6_xdp_redirect : 0
+tx5_stopped : 0
+tx4_stopped : 0
+rx4_xdp_redirect : 0
+rx_prio0_discards : 0
+rx_xsk_xdp_redirect : 0
+------------------Wed Aug 7 08:47:11 PM CST 2024----------------------
+rx8_xdp_redirect : 0
+tx0_wake : 20
+rx_xdp_drop : 5326916
+tx0_xsk_xmit : 0
+tx0_xsk_full : 0
+rx_xsk_buff_alloc_err : 0
+tx3_wake : 0
+rx11_xdp_redirect : 0
+rx0_xdp_redirect : 272416
+rx4_xdp_drop : 0
+tx10_stopped : 0
+rx12_xdp_redirect : 0
+rx3_xdp_redirect : 0
+rx1_xdp_drop : 0
+tx_global_pause : 0
+rx1_xdp_redirect : 0
+tx7_wake : 0
+tx13_wake : 0
+tx1_wake : 0
+tx10_wake : 0
+tx_pci_signal_integrity : 0
+tx6_wake : 0
+tx11_wake : 0
+rx2_xdp_redirect : 0
+tx13_stopped : 0
+tx4_wake : 0
+tx12_wake : 0
+rx0_xdp_drop : 5325880
+outbound_pci_stalled_wr_events : 0
+rx13_xdp_drop : 0
+tx_queue_stopped : 20
+rx_xdp_redirect : 272178
+tx1_stopped : 0
+rx13_xdp_redirect : 0
+rx3_xdp_drop : 0
+rx7_xdp_redirect : 0
+tx0_xsk_cqes : 0
+tx_pause_ctrl_phy : 0
+rx9_xdp_redirect : 0
+tx_queue_wake : 20
+tx_xsk_xmit : 0
+rx10_xdp_redirect : 0
+rx6_xdp_drop : 0
+rx11_xdp_drop : 0
+rx7_xdp_drop : 0
+rx10_xdp_drop : 0
+rx_out_of_buffer : 2916515
+rx5_xdp_redirect : 0
+tx_global_pause_duration : 0
+rx12_xdp_drop : 0
+rx_discards_phy : 0
+tx11_stopped : 0
+tx6_stopped : 0
+rx0_xsk_xdp_redirect : 0
+rx2_xdp_drop : 0
+tx0_stopped : 20
+rx9_xdp_drop : 0
+rx5_xdp_drop : 0
+tx_xsk_full : 0
+tx5_wake : 0
+tx12_stopped : 0
+tx3_stopped : 0
+rx8_xdp_drop : 0
+rx0_xsk_buff_alloc_err : 0
+tx_xsk_cqes : 0
+tx7_stopped : 0
+rx6_xdp_redirect : 0
+tx5_stopped : 0
+tx4_stopped : 0
+rx4_xdp_redirect : 0
+rx_prio0_discards : 0
+rx_xsk_xdp_redirect : 0
 ```
 
 

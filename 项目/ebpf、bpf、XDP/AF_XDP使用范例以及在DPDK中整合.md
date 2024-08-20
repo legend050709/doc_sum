@@ -467,9 +467,24 @@ static void rx_and_process(struct config *cfg,
 
 ## 特性
 
+### headroom
+
+![](attachments/Pasted%20image%2020240811151611.png)
+
+头部空间 headroom 是结构体xdp_umem_reg中的一个字段。如果不为零，内核将在UMEM块内部向右移动数据包的起始位置。环形描述符中的地址addr仍然指示数据包的起始位置，但不再与块对齐。
+
+在用户期望封装接收到的数据包并再次传输它们的情况下，使用headroom是理想的。该过程可以将封装头部写入头部空间，并相应地调整TX环描述符中的地址和长度。
+如果不使用头部空间，该过程将被迫将整个数据包复制x个字节以容纳头部，因此使用头部空间是一种重要的优化。
+
 ### XDP的copy模式和zero-copy模式
 
 ![](attachments/Pasted%20image%2020240716163247.png)
+
+参考：[# AF_XDP](https://ebpf-docs.dylanreimerink.nl/linux/concepts/af_xdp/)
+
+![](attachments/Pasted%20image%2020240811150511.png)
+
+zero-copy和copy指的是nic和umem之间，dma访问的是否为umem。
 
 #### copy模式
 
@@ -514,7 +529,11 @@ DMA将报从网卡传送到ring-buffer的描述符指定的内存中，此内存
 
 #### 不同网卡的不同特性
 
-intel E810 25G网卡（ice驱动）的所有队列都是支持zc这个特性的。但是Mellanox Cx4-Lx 25G（mlx5-core）驱动不是所有队列支持zc，只有后半部分队列支持zc。
+参考：[afxdp_perfeval](https://github.com/jalalmostafa/afxdp_perfeval)
+
+![](attachments/Pasted%20image%2020240808175102.png)
+
+intel E810 25G网卡（ice驱动）的所有队列都是支持zc这个特性的。但是Mellanox Cx4-Lx 25G（mlx5-core）驱动不是所有队列支持zc，只有后半部分队列支持zc。对于博通网卡，应该是需要升级到官方的最新的驱动。
 
 参考：[af-xdp zc 问题](https://lore.kernel.org/xdp-newbies/51ddb56f-5155-aabd-19b3-1bae187009ac@cesnet.cz/T/)
 
@@ -549,6 +568,169 @@ I know Jonathan has been running it.
 ```
 
 
+代码层面，查看不同网卡的驱动是否支持NIC的DMA到umem的ZC。
+```c
+int xp_assign_dev(struct xsk_buff_pool *pool,
+      struct net_device *netdev, u16 queue_id, u16 flags)
+{
+  bool force_zc, force_copy;
+  struct netdev_bpf bpf;
+  int err = 0;
+
+  ASSERT_RTNL();
+
+  force_zc = flags & XDP_ZEROCOPY;
+  force_copy = flags & XDP_COPY;
+
+  if (force_zc && force_copy)
+    return -EINVAL;
+
+  if (xsk_get_pool_from_qid(netdev, queue_id))
+    return -EBUSY;
+
+  pool->netdev = netdev;
+  pool->queue_id = queue_id;
+  err = xsk_reg_pool_at_qid(netdev, pool, queue_id);
+  if (err)
+    return err;
+
+  if (flags & XDP_USE_NEED_WAKEUP)
+    pool->uses_need_wakeup = true;
+  /* Tx needs to be explicitly woken up the first time.  Also
+   * for supporting drivers that do not implement this
+   * feature. They will always have to call sendto() or poll().
+   */
+  pool->cached_need_wakeup = XDP_WAKEUP_TX;
+
+  dev_hold(netdev);
+
+  if (force_copy)
+    /* For copy-mode, we are done. */
+    return 0;
+
+  if (!netdev->netdev_ops->ndo_bpf ||
+      !netdev->netdev_ops->ndo_xsk_wakeup) {
+    err = -EOPNOTSUPP;
+    goto err_unreg_pool;
+  }
+
+  bpf.command = XDP_SETUP_XSK_POOL;
+  bpf.xsk.pool = pool;
+  bpf.xsk.queue_id = queue_id;
+
+  err = netdev->netdev_ops->ndo_bpf(netdev, &bpf);   
+  // dev设置zero-copy, cmd=XDP_SETUP_XSK_POOL;
+  if (err)
+    goto err_unreg_pool;
+
+  if (!pool->dma_pages) {
+    WARN(1, "Driver did not DMA map zero-copy buffers");
+    err = -EINVAL;
+    goto err_unreg_xsk;
+  }
+  pool->umem->zc = true;
+  return 0;
+
+err_unreg_xsk:
+  xp_disable_drv_zc(pool);
+err_unreg_pool:
+  if (!force_zc)
+    err = 0; /* fallback to copy mode */
+  if (err) {
+    xsk_clear_pool_at_qid(netdev, queue_id);
+    dev_put(netdev);
+  }
+  return err;
+}
+
+
+在内核中搜索：".ndo_bpf", 可以看到 不同网卡驱动的 设置。
+
+（1）bnxt驱动：
+    如下所示，linux5.4内核版本中，bnxt驱动，不支持 XDP_SETUP_XSK_POOL， 即不支持af-xdp的 zc mode。
+    官方最新的驱动，看着是支持了 XDP_SETUP_XSK_POOL。
+
+int bnxt_xdp(struct net_device *dev, struct netdev_bpf *xdp)
+{
+  struct bnxt *bp = netdev_priv(dev);
+  int rc;
+
+  switch (xdp->command) {
+  case XDP_SETUP_PROG:
+    rc = bnxt_xdp_set(bp, xdp->prog);
+    break;
+  default:
+    rc = -EINVAL;
+    break;
+  }
+  return rc;
+}
+
+（2）intel ice驱动：
+
+static const struct net_device_ops ice_netdev_ops = {
+  .ndo_open = ice_open,
+  .ndo_stop = ice_stop,
+  .ndo_start_xmit = ice_start_xmit,
+  .ndo_features_check = ice_features_check,
+  .ndo_set_rx_mode = ice_set_rx_mode,
+  .ndo_set_mac_address = ice_set_mac_address,
+  .ndo_validate_addr = eth_validate_addr,
+  .ndo_change_mtu = ice_change_mtu,
+  .ndo_get_stats64 = ice_get_stats64,
+  .ndo_set_tx_maxrate = ice_set_tx_maxrate,
+  .ndo_do_ioctl = ice_do_ioctl,
+  .ndo_set_vf_spoofchk = ice_set_vf_spoofchk,
+  .ndo_set_vf_mac = ice_set_vf_mac,
+  .ndo_get_vf_config = ice_get_vf_cfg,
+  .ndo_set_vf_trust = ice_set_vf_trust,
+  .ndo_set_vf_vlan = ice_set_vf_port_vlan,
+  .ndo_set_vf_link_state = ice_set_vf_link_state,
+  .ndo_get_vf_stats = ice_get_vf_stats,
+  .ndo_vlan_rx_add_vid = ice_vlan_rx_add_vid,
+  .ndo_vlan_rx_kill_vid = ice_vlan_rx_kill_vid,
+  .ndo_set_features = ice_set_features,
+  .ndo_bridge_getlink = ice_bridge_getlink,
+  .ndo_bridge_setlink = ice_bridge_setlink,
+  .ndo_fdb_add = ice_fdb_add,
+  .ndo_fdb_del = ice_fdb_del,
+#ifdef CONFIG_RFS_ACCEL
+  .ndo_rx_flow_steer = ice_rx_flow_steer,
+#endif
+  .ndo_tx_timeout = ice_tx_timeout,
+  .ndo_bpf = ice_xdp,
+  .ndo_xdp_xmit = ice_xdp_xmit,
+  .ndo_xsk_wakeup = ice_xsk_wakeup,
+};
+
+/**
+ * ice_xdp - implements XDP handler
+ * @dev: netdevice
+ * @xdp: XDP command
+ */
+static int ice_xdp(struct net_device *dev, struct netdev_bpf *xdp)
+{
+  struct ice_netdev_priv *np = netdev_priv(dev);
+  struct ice_vsi *vsi = np->vsi;
+
+  if (vsi->type != ICE_VSI_PF) {
+    NL_SET_ERR_MSG_MOD(xdp->extack, "XDP can be loaded only on PF VSI");
+    return -EINVAL;
+  }
+
+  switch (xdp->command) {
+  case XDP_SETUP_PROG:
+    return ice_xdp_setup_prog(vsi, xdp->prog, xdp->extack);
+  case XDP_SETUP_XSK_POOL:
+    return ice_xsk_pool_setup(vsi, xdp->xsk.pool,
+            xdp->xsk.queue_id);
+  default:
+    return -EINVAL;
+  }
+}
+```
+
+
 #### 注意
 
 内核版本需要 >= 5.4 才可以使用 驱动的 zero-copy, zero-copy 使能的话，一般需要和 ring need-wakeup 一起配合使用。
@@ -562,9 +744,55 @@ I know Jonathan has been running it.
 
 ### xdp的 need-wakeup 特性
 
-默认情况下，驱动程序(作为消费者)将主动检查 TX 和 FILL 环以查看是否需要完成工作。
-通过在bind xdp socket的时候设置 XDP_USE_NEED_WAKEUP 标记，就是告诉驱动
-不需要主动去检查 tx/fill ring是否准备好，而是依赖用户进程通过系统调用去触发。
+![](attachments/Pasted%20image%2020240809153149.png)
+
+默认情况下，驱动程序会主动检查 TX 和 FILL 环来查看是否需要进行工作。通过在绑定套接字时设置 XDP_USE_NEED_WAKEUP 标志，您告诉驱动程序永远不要主动检查环缓冲区，而是现在由进程负责通过系统调用触发此操作。
+
+> 注：收包时，驱动程序作为FILL环的消费者；发包时，驱动程序作为TX换的消费者。即，驱动程序作为消费者，不需要主动检查ring环，而是通过应用程序的系统调用来触发检查ring环。
+
+（1）收包时：
+当设置了 XDP_USE_NEED_WAKEUP 标志时，应用程序必须通过 recvfrom 系统调用来触发驱动程序对 FILL 环缓冲区的消费，如下所示。
+如果内核由于应用程序方面的fill ring不足而用尽了用于填充数据包的块，驱动程序将禁用中断并丢弃任何数据包，直到有更多块可用为止。
+```bash
+recvfrom(fd, NULL, 0, MSG_DONTWAIT, NULL, NULL);
+
+ssize_t recvfrom(int socket, void *restrict buffer, size_t length,
+   int flags, struct sockaddr *restrict address, socklen_t *restrict address_len);
+
+
+参数说明：
+
+flags：操作方式标志；（该问题主要出在这里，所以详细说一下）
+
+	一般设置为0：默认阻塞状态；（我这种情况就不一般，不能为0）
+	
+	MSG_DONTWAIT：临时将sockfd 设置为非阻塞模式,而无论原有是阻塞还是非阻塞。
+	
+	MSG_PEEK：只用于接收函数，表示接收消息后在消息队列中保留原数据，不刷新缓冲区，只是从缓冲区查数据而不是取走数据；
+	
+	MSG_WAITALL：要求阻塞操作；
+
+```
+
+（2）发包时：
+此外，当设置了 XDP_USE_NEED_WAKEUP 标志时，只有在通过 sendto 系统调用触发时，驱动程序才会发送在 TX 缓冲区中排队的数据包，如下所示：
+
+```bash
+sendto(fd, NULL, 0, MSG_DONTWAIT, NULL, 0);
+
+ssize_t send(int sockfd, const void *buf, size_t len, int flags);
+
+ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
+               const struct sockaddr *dest_addr, socklen_t addrlen);
+
+
+MSG_DONTWAIT: 临时执行非阻塞操作，如果操作可能阻塞，则立刻返回 EAGAIN or EWOULDBLOCK。
+```
+
+
+
+（3）小结
+need-wakeup 模式需要应用检查方面的更多工作，但仍然建议使用，因为它可以显着提高性能，特别是在批量操作时（排队一些数据包然后通过单个系统调用触发）。
 
 need-wakeup 特性 更多的是在 用户态程序和内核程序在一个core时使用。
 
@@ -637,10 +865,9 @@ NAPI 是 Linux 上采用的一种提高网络处理效率的技术，它的核�
 
 [**AF_XDP new prefer busy poll**](https://lore.kernel.org/xdp-newbies/2eefacdbbee1bac291abbdfffb40b09d58c21831.camel@coverfire.com/T/)
 
-通过 busy-poll, 可以在 af-xdp socket的应用程序的上下文中通过系统调用(比如：poll、recvmsg/sendmsg、read/write) 就触发了驱动的执行。
+通过 busy-poll, 可以在 af-xdp socket的**应用程序的上下文中通过系统调用(比如：poll、recvmsg/sendmsg、read/write) 就触发了驱动的执行**。
 
-这样做的好处是，应用程序的执行和驱动的执行可以发生在一个core上，可以减少core和core之间cache切换。如果没有busy-poll，应用程序和驱动的执行可能在不同core上，就需要core和core之间的cache切换。
-
+这样做的好处是，**应用程序的执行和驱动的执行可以发生在一个core上，可以减少core和core之间cache切换**。如果没有busy-poll，应用程序和驱动的执行可能在不同core上，就需要core和core之间的cache切换。
 
 > 即：通过 busy-poll， af-xdp应用程序可以通过系统调用触发xdp驱动代码的执行，并且应用程序和驱动代码可以在同一个core上执行。
 
@@ -661,26 +888,26 @@ busy-polling模式下，应用程序只需要一个系统调用即可。
 > 注：如果从单个应用程序的角度来看，core足够的话，可能驱动处理和应用处理在不同的core上，应用程序的吞吐更高。
 
 3> 它为无缝替换DPDK中的用户空间驱动程序提供了一种方式，改用内核空间中的Linux驱动程序。
-DPDK的模型是应用程序和驱动程序都在同一核心上运行，因为它们都在用户空间。在af_xdp上，如果我们可以提供相同的模型（都在同一核心上高效运行，而不是在用户空间中的驱动程序），那么DPDK用户很容易进行切换。比如，如果系统构建者在他的设备中有12个core，并且有12个DPDK应用程序实例，每个核心一个DPDK程序；那么他/她在使用AF_XDP时，重新分配应用程序和驱动程序核心时会如何推理？8个应用程序核心和4个驱动程序核心，或者各6个？也许还与数据包相关？
+**DPDK的模型是应用程序和驱动程序都在同一核心上运行，因为它们都在用户空间**。在af_xdp上，如果我们可以提供相同的模型（都在同一核心上高效运行，而不是在用户空间中的驱动程序），那么DPDK用户很容易进行切换。比如，如果系统构建者在他的设备中有12个core，并且有12个DPDK应用程序实例，每个核心一个DPDK程序；那么他/她在使用AF_XDP时，重新分配应用程序和驱动程序核心时会如何推理？8个应用程序核心和4个驱动程序核心，或者各6个？也许还与数据包相关？
 如果我们有一种有效的方法在同一核心上运行它们两者，迁移就会简单得多。
 
 **（2）缺点**：
   
 busy-poll 的缺点是 从单个应用程序角度看到的最大吞吐量将会较低（由于系统调用），但在从每个核心的角度上，它通常会更高，因为正常模式在两个核心上运行（一个core上驱动程序redirect到xdp socket，一个core是在应用层进行处理），忙轮询在单个核心上运行。
 
-
 ##### 实现机制
 
 对于接受测而言，存在busy-polling后，af-xdp应用程序，发现rx ring中无法获取到包，那么应用程序就可以进行系统调用(比如：poll、recvmsg/sendmsg、read/write) -----> 进入到 netdev 的 napi poll 机制（此时napi 不是中断触发，而是系统调用触发，即减少中断的发生）-----> 存在数据包时，则将包 重定向到 xdp socket ring。
 
-**busy-polling 模式下是否存在中断？**
+**（1）busy-polling 模式下是否存在中断？**
 存在中断，但是一开始启动的时候，中断被disable了。我们希望尽量避免中断，因为当它们触发时，我们将回到非忙碌轮询（非 busy-polling）模型，即应用程序和驱动代码在两个单独的核心上处理，上述优势将消失。
+
 那么，如何实现尽可能的避免中断呢？
 一种方法是使用我们在af-xdp socket 绑定的队列上创建一个没有关联中断或已禁用中断的 napi 上下文。在这种情况下，af-xdp 套接字只能在调用 poll() 系统调用时接收和发送数据包。如果不调用 poll()，就不会收到任何数据包，也不会发送任何数据包。也就是，将poll() 的超时值设置为0，这将具有最佳性能。
 在某个时刻, 可以通过设置poll的超时时间>0 来重新启动中断。在应用程序调用 poll() 时，其所在的core将不断的调用禁用了中断的 napi 上下文，直到找到数据包；如果一直没有包，也最多持续一段时间，直到忙碌轮询超时（就像今天的常规忙碌轮询一样）。如果poll超时，我们将进入 poll() 调用的常规超时处理，启用与 napi 关联的队列的中断，并将进程置于睡眠状态。一旦被中断唤醒（即收到了数据包），napi 的中断将再次被禁用，并将控制返回给应用程序。
 通过这种方案，我们将在具有中断禁用的core本地（即：af-xdp应用和xdp驱动程序在一个core上）上处理绝大多数数据包，只有在负载较低且在 poll 处于休眠/等待状态时，我们才会使用与中断绑定的核心上，通过中断处理一些数据包。
 
-**busy-polling 模式下驱动代码是否会starve? **
+**（2）busy-polling 模式下驱动代码是否会starve? **
 
 在 busy-polling 模式下，应用程序通过系统调用来执行驱动代码，那么是否意味着驱动会被用户程序给饿死（starve）呢？
 
@@ -699,7 +926,7 @@ there are no packets after "defer count" times, interrupts will be
 enabled. This to ensure that the driver is not starved by userland.
 ```
 
-**系统调用如何选择**
+**（3）系统调用如何选择**
 recvmsg/sendmsg 以及 poll（poll比较全，可以用于接受侧和发送侧），但是poll的开销会比 send/recv 大一些。
 > 注：应该是对于内核之前的poll进行了扩展，支持af-xdp socket。
 Busy-poll 模式下，如果 fill ring 为空(接收侧)，或 complete ring (发送侧)满了， 调用poll 进行驱动的rx/tx，则会返回失败（POLLERR）；
@@ -711,6 +938,67 @@ sendto for tx queues.  Poll works as well, but the overhead for poll
 is larger than send/recv.
 ```
 
+
+**（4）af-xdp socket的busy-poll模式理解***
+此中的 busy-poll 设置（busy-budeget 设置）是 per af-xdp socket的，那么也只有属于这个af-xdp socket的流量（一般是某个网卡的队列收到的流量）才会 进行 busy-poll。
+
+#### 内核参数
+**背景**：
+
+（1）NAPI 用来干什么？
+A1: NAPI 接收数据包的方式和传统方式不同，它允许设备驱动注册一个 poll 方法，然后调 用这个方法完成收包。
+大概过程是这样的，网卡接受到一个包，DMA搬运到内存，触发一个硬件中断，然后伴随soft irq，唤醒NAPI接管，并调用驱动的poll 方法收包，并抑制网卡的硬件中断，当没有包接受了，才会唤醒网卡硬件中断。
+和传统的硬件中断收包相比，NAPI一次可以收多个包，从而提高收包效率，降低中断频率。通过netif_napi_add 函数注册NAPI。
+
+（2）GRO是用来干什么的？
+
+A2: GRO(Generic Receive Offload)的功能将多个 TCP 数据聚合在一个skb（socbuff）结构，然后作为一个大数据包交付给上层的网络协议栈，以减少上层协议栈处理skb的开销（减少协议栈对于每个数据包解析二层、三层、四层头），提高系统接收TCP数据包的性能。这个功能需要网卡驱动程序的支持。合并了多个skb的超级 skb能够一次性通过网络协议栈，从而减轻CPU负载。
+GRO是针对网络收包流程进行改进的，并且只有NAPI类型的驱动才支持此功能。因此如果要支持GRO，不仅要内核支持，驱动也必须调用相应的接口来开启此功能。用`ethtool -K eth0x gro on`来开启GRO。
+==支持GRO的驱动会在NAPI的回调poll方法中读取数据包，然后调用GRO的接口napi_gro_receive或者napi_gro_frags来将数据包送进协议栈==。
+```bash
+例如virtionet中函数调用栈如下
+receive_buf->napi_gro_
+receive->skb_gro_reset_offset->napi_skb_finish
+```
+
+##### 接口的gro_flush_timeout 和  napi_defer_hard_irqs 配置
+```text
+NAPI can be configured to arm a repoll timer instead of unmasking the hardware interrupts as soon as all packets are processed. The `gro_flush_timeout` sysfs configuration of the netdevice is reused to control the delay of the timer, while `napi_defer_hard_irqs` controls the number of consecutive empty polls before NAPI gives up and goes back to using hardware IRQs.
+```
+
+![](attachments/Pasted%20image%2020240810144846.png)
+
+```text
+在提交3b47d30396ba（"net: gro: add a per device gro flush timer"）中，我们添加了一项功能(gro_flush_timeout)，可以启动一个高分辨率定时器，用于在GRO引擎中保留未完整的数据包更长时间，希望能够进一步添加其他帧到它们中。
+
+自那时以来，我们添加了napi_complete_done()接口，并且提交364b6055738b（"net: busy-poll: return busypolling status to drivers"）如果我们承诺它们的NAPI poll()处理程序将在不久的将来被调用的话，允许驱动程序避免重新启动NIC中断。
+
+我们注意到，在一些具有32个或更多RX队列的100G网卡的服务器上，由于中断传递和重新启动导致的NIC和主机之间的闲聊可能会使吞吐量降低约20%。相比之下，hrtimers使用本地（percpu）资源，成本可能更低。
+```
+默认情况下，gro_flush_timeout和napi_defer_hard_irqs都为零。
+
+**gro_flush_timeout理解**
+NAPI可以配置为在所有数据包处理完成后，不是立即取消屏蔽硬件中断，而是启动一个重新轮询定时器。netdevice的 `gro_flush_timeout` 系统配置被重用以控制定时器的延迟。
+即：`gro_flush_timeout`  是napi完成后，不开启硬件中断，那么就无法继续触发NAPI的执行，就需要定时器从时间上定义多久开启 napi。
+
+
+**napi_defer_hard_irqs理解**
+而`napi_defer_hard_irqs`控制在NAPI放弃并重新开始使用硬件中断之前的连续空轮询次数。napi_defer_hard_irqs 控制连续空轮询（poll）的次数，即在 NAPI 放弃并重新开始使用硬件 IRQ 之前的空轮询次数。
+
+```bash
+比如：
+echo 20000 >/sys/class/net/eth1/gro_flush_timeout  
+echo 10 >/sys/class/net/eth1/napi_defer_hard_irqs
+```
+如果一轮napi的数据包被处理完毕，那么我们将napi计数器重置为10（napi_defer_hard_irqs），确保至少对队列进行10次周期性扫描。
+在繁忙的队列上，`napi_defer_hard_irqs`应该能避免NIC硬中断，而在此之前，仅当napi->poll()耗尽其预算并且不调用`napi_complete_done()`时，才能避免中断。
+
+**二者联系**
+两者一般是一起配置，一般不会只配置一个。
+`gro_flush_timeout`是相对于在每次napi->poll()之间插入XX微秒的延迟，这可以增加缓存效率，因为我们增加了批量大小。它还可以使处于空闲状态的CPU不会空闲太长时间，减少尾延迟。
+
+#### socket选项：SO_BUSY_POLL 和 SO_PREFER_BUSY_POLL
+
 **af_xdp的busy-poll 和 af_inet socket的 busy-polling**
 
 ![](attachments/Pasted%20image%2020240730152951.png)
@@ -721,16 +1009,11 @@ is larger than send/recv.
 
 从API的角度来看，使用AF_XDP套接字的繁忙轮询（busy-poll）方式，用户会将af-xdp socket绑定到一个接收队列，并将其应用程序设置为在特定核心core上执行，然后应用程序和驱动程序的执行都将仅在该核心上进行。在我看来，这比使用常规轮询或当前状态下的 AF_XDP（即：在接收端不使用系统调用）更简单，因为后者需要设置中断的cpu亲和性以及af-xdp应用程序的cpu亲和性。
 
-**af-xdp socket的busy-poll模式理解***
-此中的 busy-poll 设置（busy-budeget 设置）是 per af-xdp socket的，那么也只有属于这个af-xdp socket的流量（一般是某个网卡的队列收到的流量）才会 进行 busy-poll。
+##### socket选项(SO_PREFER_BUSY_POLL)和内核配置(gro_flush_timeout 和  napi_defer_hard_irqs)的联系
 
+- 内核的参数是在系统层面进行配置，影响的是内核中softirqd的收包处理。
 
-#### SO_BUSY_POLL 和 SO_PREFER_BUSY_POLL
-
-
-
-
-
+- socket配置是在用户态的socket上进行配置，应该是可以在应用程序层面通过系统调用来触发内核进行polling，如果应用程序没有通过系统调用来进行polling，本身内核也是存在超时时间来进行polling机制，保证内核的polling不会饿死。
 
 #### 配置
 ![](attachments/Pasted%20image%2020240723155128.png)
@@ -781,9 +1064,10 @@ busy-polling 特性是在内核 5.11 及其以后才支持的。
 ### umem的chunk大小
 
 #### XDP_UMEM_UNALIGNED_CHUNK_FLAG
+
 ![](attachments/Pasted%20image%2020240723170016.png)
 
-默认情况下，mem 的 ring的大小需要是2048和page_size之间的2的N次方；
+默认情况下，umem 的 chunk 的大小需要是2048和page_size之间的2的N次方；
 这个就比较受到限制了，比如 chunk大小为2k，那么多个chunk的起始地址只能是0,2k,4k,6k,8k...等等。如果存在跨越页边界，可能存在较大的浪费。
 
 如果在 `struct xdp_umem_reg>flags`中设置了 XDP_UMEM_UNALIGNED_CHUNK_FLAG 标记 ，那么可以打破限制，比如设置为 3000；
@@ -800,14 +1084,15 @@ busy-polling 特性是在内核 5.11 及其以后才支持的。
 ```
 
 
-对于DPDK的 AF_XDP而言，通过查看是否定义了 `XDP_UMEM_UNALIGNED_CHUNK_FLAG` 来决定是否启动 umem和 af_xdp pmd之间的 ZC（即 umem 和dpdk程序之间的 zc）。
+**对于DPDK的 AF_XDP而言，通过查看是否定义了 `XDP_UMEM_UNALIGNED_CHUNK_FLAG` 来决定是否启动 umem和 af_xdp pmd之间的 ZC（即 umem 和dpdk程序之间的 zc）**。
+> 注：注意和 nic到umem的 zc 区分。
 
 因为，正常情况下，xdp驱动程序传到用户态程序的是 原始的 frame，使用的是umem的内存空间。在dpdk中使用的 mempool 的mbuf 来进行数据包的组织，这2个空间可能不是一个空间，那么就需要进行拷贝，如果使用同一个空间，那么就不需要进行拷贝了。
 
 ![](attachments/Pasted%20image%2020240723171805.png)
 
 
-##### 区分
+##### 区分umem 和 pmd 之间的 ZC和 网卡 DMA 到 UMEM 的ZC
 需要对 umem 和 pmd 之间的 ZC (称之为 PMD的 zero copy)和 网卡 DMA 到 UMEM 进行区分。
 
 如果网卡 DMA 到 网卡自身的 ring-buffer 对应的描述符的空间，那么从 ring-buffer 描述符的空间到 UMEM 应该还有一个拷贝。
@@ -1042,11 +1327,1092 @@ DEFINE_XSK_RING(xsk_ring_cons);
 ```
 
 上面代码需要关注的一点是 mmap() 函数中指定内存的长度——  `off.fr.desc + umem->config.fill_size * sizeof(__u64)`, `umem->config.fill_size * sizeof(__u64)`没什么好说的，就是ring数组的长度；
-而`off.fr.desc`是desc相对 ring 结构体起始地址的偏移。
+
+而`off.fr.desc`是desc相对 ring 结构体起始地址的偏移。我们用一张图来看下ring所在内存的结构分布：
 
 ![](attachments/Pasted%20image%2020240728185820.png)
 
+### 将COMPLETION RING 映射到用户态
+
+跟上面 FILL RING 的映射一样，只贴代码好了：
+```c
+    map = mmap(NULL, off.cr.desc + umem->config.comp_size * sizeof(__u64),
+           PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, fd,
+           XDP_UMEM_PGOFF_COMPLETION_RING);
+    if (map == MAP_FAILED) {
+        err = -errno;
+        goto out_mmap;
+    }
+
+    comp->mask = umem->config.comp_size - 1;
+    comp->size = umem->config.comp_size;
+    comp->producer = map + off.cr.producer;
+    comp->consumer = map + off.cr.consumer;
+    comp->flags = map + off.cr.flags;
+    comp->ring = map + off.cr.desc;
+```
+
+
+### 创建RX RING和TX RING然后mmap
+
+这里和 FILL RING 以及 COMPLETION RING的做法基本完全一致
+```c
+        if (rx) {
+                err = setsockopt(xsk->fd, SOL_XDP, XDP_RX_RING,
+                                 &xsk->config.rx_size,
+                                 sizeof(xsk->config.rx_size));
+                if (err) {
+                        err = -errno;
+                        goto out_socket;
+                }
+        }
+        if (tx) {
+                err = setsockopt(xsk->fd, SOL_XDP, XDP_TX_RING,
+                                 &xsk->config.tx_size,
+                                 sizeof(xsk->config.tx_size));
+                if (err) {
+                        err = -errno;
+                        goto out_socket;
+                }
+        }
+
+        err = xsk_get_mmap_offsets(xsk->fd, &off);
+        if (err) {
+                err = -errno;
+                goto out_socket;
+        }
+
+        if (rx) {
+                rx_map = mmap(NULL, off.rx.desc +
+                              xsk->config.rx_size * sizeof(struct xdp_desc),
+                              PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE,
+                              xsk->fd, XDP_PGOFF_RX_RING);
+                if (rx_map == MAP_FAILED) {
+                        err = -errno;
+                        goto out_socket;
+                }
+
+                rx->mask = xsk->config.rx_size - 1;
+                rx->size = xsk->config.rx_size;
+                rx->producer = rx_map + off.rx.producer;
+                rx->consumer = rx_map + off.rx.consumer;
+                rx->flags = rx_map + off.rx.flags;
+                rx->ring = rx_map + off.rx.desc;
+        }
+        xsk->rx = rx;
+
+        if (tx) {
+                tx_map = mmap(NULL, off.tx.desc +
+                              xsk->config.tx_size * sizeof(struct xdp_desc),
+                              PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE,
+                              xsk->fd, XDP_PGOFF_TX_RING);
+                if (tx_map == MAP_FAILED) {
+                        err = -errno;
+                        goto out_mmap_rx;
+                }
+
+                tx->mask = xsk->config.tx_size - 1;
+                tx->size = xsk->config.tx_size;
+                tx->producer = tx_map + off.tx.producer;
+                tx->consumer = tx_map + off.tx.consumer;
+                tx->flags = tx_map + off.tx.flags;
+                tx->ring = tx_map + off.tx.desc;
+                tx->cached_cons = xsk->config.tx_size;
+        }
+        xsk->tx = tx;
+```
+
+注：rx/tx ring中的每个元素的类型是：`struct xdp_desc`;
+而 fill/complete ring中的每个元素的类型是 u64.
+```c
+/* Rx/Tx descriptor */
+struct xdp_desc {
+    __u64 addr; 
+    // addr指向UMEM中某个帧的具体位置，并且不是真正的虚拟内存地址，而是相对UMEM内存起始地址的偏移。
+    __u32 len;
+    // len则是指报文的具体的长度，当XDP程序向desc填充报文的时候需要设置len，但是用户态程序向FILL RING中填充desc则不用关心len。
+    __u32 options;
+};
+```
+主要原因是作用不同，rx/tx主要是传递数据，需要知道数据的起始地址，以及长度。fill/complete主要是找到可用的chunk，只需要知道chunk的地址(即偏移量)即可。
+
+
+### 调用bind()将AF_XDP socket绑定的指定设备的某一队列
+```c
+// tools/include/uapi/linux/if_xdp.h
+struct sockaddr_xdp {
+    __u16 sxdp_family;
+    __u16 sxdp_flags;
+    __u32 sxdp_ifindex;
+    __u32 sxdp_queue_id;
+    __u32 sxdp_shared_umem_fd;
+};
+
+
+// tools/lib/bpf/xsk.c
+sxdp.sxdp_family = PF_XDP;
+sxdp.sxdp_ifindex = ctx->ifindex;
+sxdp.sxdp_queue_id = ctx->queue_id;
+if (umem->refcount > 1) {
+    sxdp.sxdp_flags |= XDP_SHARED_UMEM;
+    sxdp.sxdp_shared_umem_fd = umem->fd;
+} else {
+    sxdp.sxdp_flags = xsk->config.bind_flags;
+}
+
+err = bind(xsk->fd, (struct sockaddr *)&sxdp, sizeof(sxdp));
+if (err) {
+    err = -errno;
+    goto out_mmap_tx;
+}
+```
+
 ## 内核态程序
+
+XDP程序利用 bpf_reditrct() 函数可以将报文重定向到其他设备发送出去或者重定向到其他CPU继续处理，后来又发展出了bpf_redirect_map()函数，可以将重定向的目的地保存在map中。AF_XDP 正是利用了 bpf_redirect_map() 函数以及 BPF_MAP_TYPE_XSKMAP 类型的 map 实现将报文重定向到用户态程序。
+
+### 创建BPF_MAP_TYPE_XSKMAP类型的map
+
+该类型map的key是网口设备的queue_id，value则是该queue上绑定的AF_XDP socket fd，所以通常需要为每个网口设备各自创建独立的map，并在用户态将对应的queue_id->xsk_fd存储到map中。
+
+```bash
+用户态进程---->xsk_setup_xdp_prog ---->xsk_create_bpf_maps
+``` 
+
+```c
+// tools/lib/bpf/xsk.c
+static int xsk_create_bpf_maps(struct xsk_socket *xsk)
+{
+    struct xsk_ctx *ctx = xsk->ctx;
+    int max_queues;
+    int fd;
+
+    max_queues = xsk_get_max_queues(xsk);
+    if (max_queues < 0)
+        return max_queues;
+
+    fd = bpf_create_map_name(BPF_MAP_TYPE_XSKMAP, "xsks_map",
+                 sizeof(int), sizeof(int), max_queues, 0);
+    if (fd < 0)
+        return fd;
+
+    ctx->xsks_map_fd = fd;
+
+    return 0;
+}
+
+
+// tools/lib/bpf/bpf.c
+int bpf_create_map_name(enum bpf_map_type map_type, const char *name,
+            int key_size, int value_size, int max_entries,
+            __u32 map_flags)
+{
+    struct bpf_create_map_attr map_attr = {};
+
+    map_attr.name = name;
+    map_attr.map_type = map_type;
+    map_attr.map_flags = map_flags;
+    map_attr.key_size = key_size;
+    map_attr.value_size = value_size;
+    map_attr.max_entries = max_entries;
+
+    return bpf_create_map_xattr(&map_attr);
+}
+
+
+int bpf_create_map_xattr(const struct bpf_create_map_attr *create_attr)
+{
+    union bpf_attr attr;
+    int fd;
+
+    memset(&attr, '\0', sizeof(attr));
+
+    attr.map_type = create_attr->map_type;
+    attr.key_size = create_attr->key_size;
+    attr.value_size = create_attr->value_size;
+    attr.max_entries = create_attr->max_entries;
+    attr.map_flags = create_attr->map_flags;
+    if (create_attr->name)
+        memcpy(attr.map_name, create_attr->name,
+               min(strlen(create_attr->name), BPF_OBJ_NAME_LEN - 1));
+    attr.numa_node = create_attr->numa_node;
+    attr.btf_fd = create_attr->btf_fd;
+    attr.btf_key_type_id = create_attr->btf_key_type_id;
+    attr.btf_value_type_id = create_attr->btf_value_type_id;
+    attr.map_ifindex = create_attr->map_ifindex;
+    if (attr.map_type == BPF_MAP_TYPE_STRUCT_OPS)
+        attr.btf_vmlinux_value_type_id =
+            create_attr->btf_vmlinux_value_type_id;
+    else
+        attr.inner_map_fd = create_attr->inner_map_fd;
+
+    fd = sys_bpf(BPF_MAP_CREATE, &attr, sizeof(attr));
+    return libbpf_err_errno(fd);
+}
+
+static inline int sys_bpf(enum bpf_cmd cmd, union bpf_attr *attr,
+              unsigned int size)
+{
+    return syscall(__NR_bpf, cmd, attr, size);
+}
+
+```
+
+bpf_create_map_name参数详解：
+
+- BPF_MAP_TYPE_XSKMAP，map类型
+- "xsks_map"，map的名字
+- sizeof(int)，分别指定key和vlue的size
+- max_queues，map大小
+- 0, map_flags
+
+
+
+
+### driver xdp的整体流程
+```bash
+driver xdp:
+
+    intel ice驱动：
+        支持零拷贝: 
+            ice_napi_poll--->
+                ice_clean_rx_irq_zc--->
+                    ice_run_xdp_zc --> 
+                        action = bpf_prog_run_xdp (xdp驱动程序)---> 
+                            if (action == XDP_REDIRECT); then xdp_do_redirect;
+
+        不支持零拷贝: 
+            ice_napi_poll--->
+                ice_clean_rx_irq-->
+                    ice_run_xdp --> 
+                        action = bpf_prog_run_xdp (xdp驱动程序)---> 
+                            if (action == XDP_REDIRECT); then xdp_do_redirect;
+
+
+        xdp_do_redirect---> 
+            if (map type: BPF_MAP_TYPE_XSKMAP, 即 af-xdp socket) 则 __xsk_map_redirect  ----> 
+                xsk_rcv ----> 
+                    __xsk_rcv_zc or __xsk_rcv
+```
+
+![](attachments/Pasted%20image%2020240808162126.png)
+
+```bash
+Mellanox 的 mlx5 比较复杂，只写部分：
+    Mellanox Mlx5-core驱动：
+            mlx5e_xdp_handle --->
+                action = bpf_prog_run_xdp (xdp驱动程序)---> 
+                    if (action == XDP_REDIRECT); then xdp_do_redirect;
+```
+
+### XDP程序代码
+
+```c
+#include <linux/bpf.h>
+#include <bpf/bpf_helpers.h>
+#include "xdpsock.h"
+
+/* This XDP program is only needed for the XDP_SHARED_UMEM mode.
+ * If you do not use this mode, libbpf can supply an XDP program for you.
+ */
+
+struct {
+    __uint(type, BPF_MAP_TYPE_XSKMAP);
+    __uint(max_entries, MAX_SOCKS);
+    __uint(key_size, sizeof(int));
+    __uint(value_size, sizeof(int));
+} xsks_map SEC(".maps");
+
+
+SEC("xdp_sock") int xdp_sock_prog(struct xdp_md *ctx)
+{
+
+    int index = ctx->rx_queue_index;
+    if (bpf_map_lookup_elem(&xsks_map, &index))
+        return bpf_redirect_map(&xsks_map, index, 0);
+     
+    return XDP_PASS;
+
+}
+```
+
+### XDP程序的加载
+
+```c
+static int xsk_load_xdp_prog(struct xsk_socket *xsk)
+{
+        static const int log_buf_size = 16 * 1024;
+        char log_buf[log_buf_size];
+        int err, prog_fd;
+
+        /* This is the C-program:
+         * SEC("xdp_sock") int xdp_sock_prog(struct xdp_md *ctx)
+         * {
+         *     int index = ctx->rx_queue_index;
+         *
+         *     // A set entry here means that the correspnding queue_id
+         *     // has an active AF_XDP socket bound to it.
+         *     if (bpf_map_lookup_elem(&xsks_map, &index))
+         *         return bpf_redirect_map(&xsks_map, index, 0);
+         *
+         *     return XDP_PASS;
+         * }
+         */
+        struct bpf_insn prog[] = {
+                /* r1 = *(u32 *)(r1 + 16) */
+                BPF_LDX_MEM(BPF_W, BPF_REG_1, BPF_REG_1, 16),
+                /* *(u32 *)(r10 - 4) = r1 */
+                BPF_STX_MEM(BPF_W, BPF_REG_10, BPF_REG_1, -4),
+                BPF_MOV64_REG(BPF_REG_2, BPF_REG_10),
+                BPF_ALU64_IMM(BPF_ADD, BPF_REG_2, -4),
+                BPF_LD_MAP_FD(BPF_REG_1, xsk->xsks_map_fd),
+                BPF_EMIT_CALL(BPF_FUNC_map_lookup_elem),
+                BPF_MOV64_REG(BPF_REG_1, BPF_REG_0),
+                BPF_MOV32_IMM(BPF_REG_0, 2),
+                /* if r1 == 0 goto +5 */
+                BPF_JMP_IMM(BPF_JEQ, BPF_REG_1, 0, 5),
+                /* r2 = *(u32 *)(r10 - 4) */
+                                BPF_LD_MAP_FD(BPF_REG_1, xsk->xsks_map_fd),
+                BPF_LDX_MEM(BPF_W, BPF_REG_2, BPF_REG_10, -4),
+                BPF_MOV32_IMM(BPF_REG_3, 0),
+                BPF_EMIT_CALL(BPF_FUNC_redirect_map),
+                /* The jumps are to this instruction */
+                BPF_EXIT_INSN(),
+        };
+        size_t insns_cnt = sizeof(prog) / sizeof(struct bpf_insn);
+
+        prog_fd = bpf_load_program(BPF_PROG_TYPE_XDP, prog, insns_cnt,
+                                   "LGPL-2.1 or BSD-2-Clause", 0, log_buf,
+                                   log_buf_size);
+        if (prog_fd < 0) {
+                pr_warning("BPF log buffer:\n%s", log_buf);
+                return prog_fd;
+        }
+
+        err = bpf_set_link_xdp_fd(xsk->ifindex, prog_fd, xsk->config.xdp_flags);
+        if (err) {
+                close(prog_fd);
+                return err;
+        }
+
+        xsk->prog_fd = prog_fd;
+        return 0;
+}
+
+
+
+int bpf_load_program(enum bpf_prog_type type, const struct bpf_insn *insns,
+             size_t insns_cnt, const char *license,
+             __u32 kern_version, char *log_buf,
+             size_t log_buf_sz)
+{
+    struct bpf_load_program_attr load_attr;
+
+    memset(&load_attr, 0, sizeof(struct bpf_load_program_attr));
+    load_attr.prog_type = type;
+    load_attr.expected_attach_type = 0;
+    load_attr.name = NULL;
+    load_attr.insns = insns;
+    load_attr.insns_cnt = insns_cnt;
+    load_attr.license = license;
+    load_attr.kern_version = kern_version;
+
+    return bpf_load_program_xattr(&load_attr, log_buf, log_buf_sz);
+}
+```
+
+**XDP程序的load**
+
+调用函数 bpf_load_program() 之前的代码不用关心。通常 eBPF 程序使用 C 语言的一个子集（restricted C）编写，然后通过 LLVM 编译成字节码注入到内核执行。由于本例中XDP程序代码比较简单，功力深厚的作者直接将其编写为 eBPF（JIT）可识别的字节码，然后直接调用 bpf_load_program() 函数将字节码程序加载到内核中。
+
+**XDP程序的attach**
+
+XDP程序加载成功会返回对应的fd（后面统称为prog_fd），但是此时XDP程序还不会被执行（所有的eBPF都需要经过load和attach两步才能被触发执行，load只是将程序加载到内核中，attach将程序添加到hook点后，程序才能真正被触发执行）。我们调用函数 bpf_set_link_xdp_fd() 函数将XDP程序attach到指定网口设备的驱动中的hook点。
+
+>注意：**AF_XDP socket是跟指定网口设备的队列绑定，而XDP程序则是跟指定的网口设备绑定（attach） **。
+
+
+### 用户态将AF_XDP socket存储到XSKMAP中
+```c
+
+// tools/lib/bpf/xsk.c
+static int xsk_set_bpf_maps(struct xsk_socket *xsk)
+{
+    struct xsk_ctx *ctx = xsk->ctx;
+
+    return bpf_map_update_elem(ctx->xsks_map_fd, &ctx->queue_id,
+                   &xsk->fd, 0);
+}
+
+
+
+// tools/lib/bpf/bpf.c
+int bpf_map_update_elem(int fd, const void *key, const void *value,
+            __u64 flags)
+{
+    union bpf_attr attr;
+    int ret;
+
+    memset(&attr, 0, sizeof(attr));
+    attr.map_fd = fd;
+    attr.key = ptr_to_u64(key);
+    attr.value = ptr_to_u64(value);
+    attr.flags = flags;
+
+    ret = sys_bpf(BPF_MAP_UPDATE_ELEM, &attr, sizeof(attr));
+    return libbpf_err_errno(ret);
+}
+```
+
+将 xdp-socket 加入到 xskmap中，在xdp驱动程序执行过程中，才可以在map中基于 网卡队列 id 查找到。
+
+
+### xdp驱动程序的运行：bpf_prog_run_xdp
+xdp驱动程序的运行：
+```bash
+static int ice_run_xdp_zc(struct ice_ring *rx_ring, struct xdp_buff *xdp)
+{
+  int err, result = ICE_XDP_PASS;
+  struct bpf_prog *xdp_prog;
+  struct ice_ring *xdp_ring;
+  u32 act;
+
+  /* ZC patch is enabled only when XDP program is set,
+   * so here it can not be NULL
+   */
+  xdp_prog = READ_ONCE(rx_ring->xdp_prog);
+
+  act = bpf_prog_run_xdp(xdp_prog, xdp);
+
+  if (likely(act == XDP_REDIRECT)) {
+    err = xdp_do_redirect(rx_ring->netdev, xdp, xdp_prog);
+    if (err)
+      goto out_failure;
+    return ICE_XDP_REDIR;
+  }
+
+  switch (act) {
+  case XDP_PASS:
+    break;
+  case XDP_TX:
+    xdp_ring = rx_ring->vsi->xdp_rings[rx_ring->q_index];
+    result = ice_xmit_xdp_buff(xdp, xdp_ring);
+    if (result == ICE_XDP_CONSUMED)
+      goto out_failure;
+    break;
+  default:
+    bpf_warn_invalid_xdp_action(act);
+    fallthrough;
+  case XDP_ABORTED:
+out_failure:
+    trace_xdp_exception(rx_ring->netdev, xdp_prog, act);
+    fallthrough;
+  case XDP_DROP:
+    result = ICE_XDP_CONSUMED;
+    break;
+  }
+
+  return result;
+}
+
+
+
+static __always_inline u32 bpf_prog_run_xdp(const struct bpf_prog *prog,
+              struct xdp_buff *xdp)
+{
+  /* Driver XDP hooks are invoked within a single NAPI poll cycle and thus
+   * under local_bh_disable(), which provides the needed RCU protection
+   * for accessing map entries.
+   */
+  return __BPF_PROG_RUN(prog, xdp, BPF_DISPATCHER_FUNC(xdp));
+}
+
+```
+
+#### BPF_MAP_TYPE_XSKMAP 类型 的map
+
+`type = BPF_MAP_TYPE_XSKMAP`：指定该map的类型，它与bpf_redirect_map() 结合使用以将收到的帧传递到指定xdp socket套接字。
+
+针对以上key，value需要说明一下：对于`BPF_MAP_TYPE_XSKMAP`类型的map，value必须是XDP socket描述符，key必须是int类型，原因在于bpf_redirect_map()的第二个参数。
+
+#### bpf_redirect_map
+
+`bpf_redirect_map(&xsks_map, index, 0)`：`bpf_redirect_map`函数作用就是重定向，比如：将数据重定向到某个网卡，CPU， Socket等等；当`bpf_redirect_map`函数的第一个参数的map类型为`BPF_MAP_TYPE_XSKMAP`时，则表示将数据重定向到XDP Scoket。`bpf_redirect_map（）`会查找参数1即xsks_map 中 key为index 的 value 是否存在，若存在，则检查value是否是一个XDP Scoket，并且是否绑定到了该网卡（可以绑定到任意有效队列）
+
+```text
+// file: /usr/include/bpf/bpf_helper_defs.h
+/*
+ * bpf_redirect_map
+ *
+ *      Redirect the packet to the endpoint referenced by *map* at
+ *      index *key*. Depending on its type, this *map* can contain
+ *      references to net devices (for forwarding packets through other
+ *      ports), or to CPUs (for redirecting XDP frames to another CPU;
+ *      but this is only implemented for native XDP (with driver
+ *      support) as of this writing).
+ *
+ *      The lower two bits of *flags* are used as the return code if
+ *      the map lookup fails. This is so that the return value can be
+ *      one of the XDP program return codes up to **XDP_TX**, as chosen
+ *      by the caller. The higher bits of *flags* can be set to
+ *      BPF_F_BROADCAST or BPF_F_EXCLUDE_INGRESS as defined below.
+ *
+ *      With BPF_F_BROADCAST the packet will be broadcasted to all the
+ *      interfaces in the map, with BPF_F_EXCLUDE_INGRESS the ingress
+ *      interface will be excluded when do broadcasting.
+ *
+ *      See also **bpf_redirect**\ (), which only supports redirecting
+ *      to an ifindex, but doesn't require a map to do so.
+ *
+ * Returns
+ *      **XDP_REDIRECT** on success, or the value of the two lower bits
+ *      of the *flags* argument on error.
+ */
+static long (*bpf_redirect_map)(void *map, __u32 key, __u64 flags) = (void *) 51;
+```
+
+```bash
+# yum list installed |grep -i -e bpf -e xdp
+bpftool.x86_64                              4.18.0-2.6.6.kwaios1                               @x86_64
+libbpf.x86_64                               2:0.6.0-6.el8                                      @@commandline
+libbpf-devel.x86_64                         2:0.6.0-6.el8                                      @@commandline
+
+# rpm -ql bpftool.x86_64
+/etc/bash_completion.d/bpftool
+/etc/ima/digest_lists.tlv/0-metadata_list-compact_tlv-bpftool-4.18.0-2.6.6.kwaios1.x86_64
+/etc/ima/digest_lists/0-metadata_list-compact-bpftool-4.18.0-2.6.6.kwaios1.x86_64
+/usr/sbin/bpftool
+/usr/share/man/man7/bpf-helpers.7.gz
+/usr/share/man/man8/bpftool-cgroup.8.gz
+/usr/share/man/man8/bpftool-feature.8.gz
+/usr/share/man/man8/bpftool-map.8.gz
+/usr/share/man/man8/bpftool-net.8.gz
+/usr/share/man/man8/bpftool-perf.8.gz
+/usr/share/man/man8/bpftool-prog.8.gz
+/usr/share/man/man8/bpftool.8.gz
+
+# rpm -ql libbpf.x86_64
+/usr/lib/.build-id
+/usr/lib/.build-id/8b
+/usr/lib/.build-id/8b/356886263f24eedd3571a316ce037b7c59996f
+/usr/lib64/libbpf.so.0
+/usr/lib64/libbpf.so.0.6.0
+/usr/share/licenses/libbpf
+/usr/share/licenses/libbpf/LICENSE
+/usr/share/licenses/libbpf/LICENSE.BSD-2-Clause
+/usr/share/licenses/libbpf/LICENSE.LGPL-2.1
+
+# rpm -ql libbpf-devel.x86_64
+/usr/include/bpf
+/usr/include/bpf/bpf.h
+/usr/include/bpf/bpf_core_read.h
+/usr/include/bpf/bpf_endian.h
+/usr/include/bpf/bpf_helper_defs.h
+/usr/include/bpf/bpf_helpers.h
+/usr/include/bpf/bpf_tracing.h
+/usr/include/bpf/btf.h
+/usr/include/bpf/libbpf.h
+/usr/include/bpf/libbpf_common.h
+/usr/include/bpf/libbpf_legacy.h
+/usr/include/bpf/libbpf_version.h
+/usr/include/bpf/skel_internal.h
+/usr/include/bpf/xsk.h
+/usr/lib64/libbpf.so
+/usr/lib64/pkgconfig/libbpf.pc
+/usr/share/licenses/libbpf-devel
+/usr/share/licenses/libbpf-devel/LICENSE
+/usr/share/licenses/libbpf-devel/LICENSE.BSD-2-Clause
+/usr/share/licenses/libbpf-devel/LICENSE.LGPL-2.1
+
+# grep -i "bpf_redirect_map" /usr/include/bpf/* -r
+/usr/include/bpf/bpf_helper_defs.h: *   **bpf_redirect_map**\ (), which uses a BPF map to store the
+/usr/include/bpf/bpf_helper_defs.h: * bpf_redirect_map
+/usr/include/bpf/bpf_helper_defs.h:static long (*bpf_redirect_map)(void *map, __u32 key, __u64 flags) = (void *) 51;
+
+
+nm -D /usr/lib64/libbpf.so | grep redirect_map
+// 没有找到，应该是so 动态库中去除了符号表。
+```
+
+```c
+
+由于helper函数是：bpf_redirect_map，
+在内核中搜索：BPF_FUNC_redirect_map
+
+// linux: net/core/filter.c
+BPF_CALL_2(bpf_xdp_redirect, u32, ifindex, u64, flags)
+{
+    struct bpf_redirect_info *ri = this_cpu_ptr(&bpf_redirect_info);
+
+    if (unlikely(flags))
+        return XDP_ABORTED;
+
+    /* NB! Map type UNSPEC and map_id == INT_MAX (never generated
+     * by map_idr) is used for ifindex based XDP redirect.
+     */
+    ri->tgt_index = ifindex;
+    ri->map_id = INT_MAX;
+    ri->map_type = BPF_MAP_TYPE_UNSPEC;
+
+    return XDP_REDIRECT;
+}
+
+static const struct bpf_func_proto bpf_xdp_redirect_proto = {
+    .func           = bpf_xdp_redirect,
+    .gpl_only       = false,
+    .ret_type       = RET_INTEGER,
+    .arg1_type      = ARG_ANYTHING,
+    .arg2_type      = ARG_ANYTHING,
+};
+
+BPF_CALL_3(bpf_xdp_redirect_map, struct bpf_map *, map, u32, ifindex,
+       u64, flags)
+{
+    return map->ops->map_redirect(map, ifindex, flags);
+}
+
+static const struct bpf_func_proto bpf_xdp_redirect_map_proto = {
+    .func           = bpf_xdp_redirect_map,
+    .gpl_only       = false,
+    .ret_type       = RET_INTEGER,
+    .arg1_type      = ARG_CONST_MAP_PTR,
+    .arg2_type      = ARG_ANYTHING,
+    .arg3_type      = ARG_ANYTHING,
+};
+
+
+```
+
+
+注：bpf_redirect_map 是一个 bpf helper 函数。
+
+
+#### xsk_map_redirect
+
+```c
+
+// include/linux/filter.h
+struct bpf_nh_params {
+    u32 nh_family;
+    union {
+        u32 ipv4_nh;
+        struct in6_addr ipv6_nh;
+    };
+};
+
+struct bpf_redirect_info {
+    u32 flags;
+    u32 tgt_index;
+    void *tgt_value;
+    struct bpf_map *map;
+    u32 map_id;
+    enum bpf_map_type map_type;
+    u32 kern_flags;
+    struct bpf_nh_params nh;
+};
+
+static __always_inline int __bpf_xdp_redirect_map(struct bpf_map *map, u32 ifindex,
+                          u64 flags, const u64 flag_mask,
+                          void *lookup_elem(struct bpf_map *map, u32 key))
+{
+    struct bpf_redirect_info *ri = this_cpu_ptr(&bpf_redirect_info); // bpf_redirect_info 是一个线程变量.
+    const u64 action_mask = XDP_ABORTED | XDP_DROP | XDP_PASS | XDP_TX;
+    /* Lower bits of the flags are used as return code on lookup failure */
+    if (unlikely(flags & ~(action_mask | flag_mask)))
+        return XDP_ABORTED;
+    ri->tgt_value = lookup_elem(map, ifindex);
+    if (unlikely(!ri->tgt_value) && !(flags & BPF_F_BROADCAST)) {
+        /* If the lookup fails we want to clear out the state in the
+         * redirect_info struct completely, so that if an eBPF program
+         * performs multiple lookups, the last one always takes
+         * precedence.
+         */
+        ri->map_id = INT_MAX; /* Valid map id idr range: [1,INT_MAX[ */
+        ri->map_type = BPF_MAP_TYPE_UNSPEC;
+        return flags & action_mask;
+    }
+    ri->tgt_index = ifindex;
+    ri->map_id = map->id;
+    ri->map_type = map->map_type;
+    if (flags & BPF_F_BROADCAST) {
+        WRITE_ONCE(ri->map, map);
+        ri->flags = flags;
+    } else {
+        WRITE_ONCE(ri->map, NULL);
+        ri->flags = 0;
+    }
+    return XDP_REDIRECT; // 返回值是 XDP_REDIRECT
+}
+
+// linux: net/xdp/xskmap.c
+
+static void *__xsk_map_lookup_elem(struct bpf_map *map, u32 key)
+{
+    struct xsk_map *m = container_of(map, struct xsk_map, map);
+    if (key >= map->max_entries)
+        return NULL;
+    return rcu_dereference_check(m->xsk_map[key], rcu_read_lock_bh_held());
+}
+
+static int xsk_map_redirect(struct bpf_map *map, u32 ifindex, u64 flags)
+{
+    return __bpf_xdp_redirect_map(map, ifindex, flags, 0,
+                      __xsk_map_lookup_elem);
+}
+
+
+const struct bpf_map_ops xsk_map_ops = {
+    .map_meta_equal = xsk_map_meta_equal,
+    .map_alloc = xsk_map_alloc,
+    .map_free = xsk_map_free,
+    .map_get_next_key = xsk_map_get_next_key,
+    .map_lookup_elem = xsk_map_lookup_elem,
+    .map_gen_lookup = xsk_map_gen_lookup,
+    .map_lookup_elem_sys_only = xsk_map_lookup_elem_sys_only,
+    .map_update_elem = xsk_map_update_elem,
+    .map_delete_elem = xsk_map_delete_elem,
+    .map_check_btf = map_check_no_btf,
+    .map_btf_name = "xsk_map",
+    .map_btf_id = &xsk_map_btf_id,
+    .map_redirect = xsk_map_redirect,
+};
+
+```
+
+xdp驱动程序中调用 bpf_redirect_map 想要 redirect 数据到 umem内存空间，实际上 `bpf_redirect_map---> xsk_map_redirect ----> __bpf_xdp_redirect_map`;
+ 而 `__bpf_xdp_redirect_map` 中只是在map中查找key，然后将赋值了线程变量 bpf_redirect_info，返回值 为 XDP_REDIRECT。
+ 然后 回到  
+```c
+		ice_run_xdp_zc --> 
+			action = bpf_prog_run_xdp (xdp驱动程序)---> 
+				if (action == XDP_REDIRECT); then xdp_do_redirect;
+
+
+        xdp_do_redirect---> 
+            if (map type: BPF_MAP_TYPE_XSKMAP, 即 af-xdp socket) 则 __xsk_map_redirect  ----> 
+                xsk_rcv ----> 
+                    __xsk_rcv_zc or __xsk_rcv
+```
+
+下面 查看 xdp_do_redirect 的处理。
+
+#### xdp_do_redirect
+
+如下所示，就是 redirect 数据到 umem内存空间，具体就是内核驱动程序执行完xdp驱动钩子之后，访问af-xdp的 fill ring 和rx-ring 进行 redirect 数据。
+
+```c
+// net/xdp/xsk.c
+
+static int xsk_rcv(struct xdp_sock *xs, struct xdp_buff *xdp)
+{
+    int err;
+    u32 len;
+
+    err = xsk_rcv_check(xs, xdp);
+    if (err)
+        return err;
+
+    if (xdp->rxq->mem.type == MEM_TYPE_XSK_BUFF_POOL) {
+        len = xdp->data_end - xdp->data;
+        return __xsk_rcv_zc(xs, xdp, len);
+    }
+
+    err = __xsk_rcv(xs, xdp);
+    if (!err)
+        xdp_return_buff(xdp);
+    return err;
+}
+
+int __xsk_map_redirect(struct xdp_sock *xs, struct xdp_buff *xdp)
+{
+    struct list_head *flush_list = this_cpu_ptr(&xskmap_flush_list);
+    int err;
+
+    err = xsk_rcv(xs, xdp);
+    if (err)
+        return err;
+
+    if (!xs->flush_node.prev)
+        list_add(&xs->flush_node, flush_list);
+
+    return 0;
+}
+
+
+
+// net/core/filter.case
+int xdp_do_redirect(struct net_device *dev, struct xdp_buff *xdp,
+            struct bpf_prog *xdp_prog)
+{
+    struct bpf_redirect_info *ri = this_cpu_ptr(&bpf_redirect_info);  // 访问之前设置的线程变量；
+    enum bpf_map_type map_type = ri->map_type;
+    void *fwd = ri->tgt_value;  // tgt_value 就是 xdp-socket(struct xdp_sock* 类型)
+    u32 map_id = ri->map_id;
+    struct bpf_map *map;
+    int err;
+
+    ri->map_id = 0; /* Valid map id idr range: [1,INT_MAX[ */
+    ri->map_type = BPF_MAP_TYPE_UNSPEC;
+
+    switch (map_type) {
+    case BPF_MAP_TYPE_DEVMAP:
+        fallthrough;
+    case BPF_MAP_TYPE_DEVMAP_HASH:
+        map = READ_ONCE(ri->map);
+        if (unlikely(map)) {
+            WRITE_ONCE(ri->map, NULL);
+            err = dev_map_enqueue_multi(xdp, dev, map,
+                            ri->flags & BPF_F_EXCLUDE_INGRESS);
+        } else {
+            err = dev_map_enqueue(fwd, xdp, dev);
+        }
+        break;
+    case BPF_MAP_TYPE_CPUMAP:
+        err = cpu_map_enqueue(fwd, xdp, dev);
+        break;
+    case BPF_MAP_TYPE_XSKMAP:
+        err = __xsk_map_redirect(fwd, xdp);
+        break;
+    case BPF_MAP_TYPE_UNSPEC:
+        if (map_id == INT_MAX) {
+            fwd = dev_get_by_index_rcu(dev_net(dev), ri->tgt_index);
+            if (unlikely(!fwd)) {
+                err = -EINVAL;
+                break;
+            }
+            err = dev_xdp_enqueue(fwd, xdp, dev);
+            break;
+        }
+        fallthrough;
+    default:
+        err = -EBADRQC;
+    }
+
+    if (unlikely(err))
+        goto err;
+
+    _trace_xdp_redirect_map(dev, xdp_prog, fwd, map_type, map_id, ri->tgt_index);
+    return 0;
+err:
+    _trace_xdp_redirect_map_err(dev, xdp_prog, fwd, map_type, map_id, ri->tgt_index, err);
+    return err;
+}
+
+
+// drivers/net/intel/ice/ice_xsk.c
+static int
+ice_run_xdp_zc(struct ice_ring *rx_ring, struct xdp_buff *xdp)
+{
+    int err, result = ICE_XDP_PASS;
+    struct bpf_prog *xdp_prog;
+    struct ice_ring *xdp_ring;
+    u32 act;
+
+    /* ZC patch is enabled only when XDP program is set,
+     * so here it can not be NULL
+     */
+    xdp_prog = READ_ONCE(rx_ring->xdp_prog);
+
+    act = bpf_prog_run_xdp(xdp_prog, xdp); // 执行xdp驱动程序；
+
+    if (likely(act == XDP_REDIRECT)) {
+        err = xdp_do_redirect(rx_ring->netdev, xdp, xdp_prog);
+        if (err)
+            goto out_failure;
+        return ICE_XDP_REDIR;
+    }
+
+    switch (act) {
+    case XDP_PASS:
+        break;
+    case XDP_TX:
+        xdp_ring = rx_ring->vsi->xdp_rings[rx_ring->q_index];
+        result = ice_xmit_xdp_buff(xdp, xdp_ring);
+        if (result == ICE_XDP_CONSUMED)
+            goto out_failure;
+        break;
+    default:
+        bpf_warn_invalid_xdp_action(act);
+        fallthrough;
+    case XDP_ABORTED:
+out_failure:
+        trace_xdp_exception(rx_ring->netdev, xdp_prog, act);
+        fallthrough;
+    case XDP_DROP:
+        result = ICE_XDP_CONSUMED;
+        break;
+    }
+
+    return result;
+}
+```
+
+### 其他
+#### xdp action
+```bash
+enum xdp_action {
+  XDP_ABORTED = 0,
+  XDP_DROP,
+  XDP_PASS,
+  XDP_TX,
+  XDP_REDIRECT,
+};
+```
+#### generic xdp 的流程
+```bash
+generic xdp: 
+    __netif_receive_skb_core---->
+        do_xdp_generic---> 
+            act = netif_receive_generic_xdp-----> 
+                if(act == XDP_REDIRECT); then xdp_do_generic_redirect--->
+                    xdp_do_generic_redirect_map ----> 
+                        if (map type: BPF_MAP_TYPE_XSKMAP, 即 af-xdp socket) 则 xsk_generic_rcv  ----> 
+                            __xsk_rcv (xsk_generic_rcv 存在加锁)
+
+
+```
+
+![](attachments/Pasted%20image%2020240808162816.png)
+
+
+## 收发包流程
+收包处理，如下：
+![](attachments/Pasted%20image%2020240812164550.png)
+
+发包处理，如下：
+![](attachments/Pasted%20image%2020240812164622.png)
+
+下面仅仅从收包的初始化以及处理详细介绍。
+
+### 收包初始化
+收包过程是由XDP程序触发的，但是XDP程序收包，需要依赖用户态程序填充FILL RING，将可以承载报文的desc告诉XDP程序。所以在用户态程序初始化阶段，我们需要先填充FILL RING，直接看代码：
+
+```c
+
+// smaples/bpf/xdpsock_user.c
+static void xsk_populate_fill_ring(struct xsk_umem_info *umem)
+{
+    int ret, i;
+    u32 idx;
+
+    ret = xsk_ring_prod__reserve(&umem->fq,
+                     XSK_RING_PROD__DEFAULT_NUM_DESCS * 2, &idx);
+    if (ret != XSK_RING_PROD__DEFAULT_NUM_DESCS * 2)
+        exit_with_error(-ret);
+    for (i = 0; i < XSK_RING_PROD__DEFAULT_NUM_DESCS * 2; i++)
+        *xsk_ring_prod__fill_addr(&umem->fq, idx++) =
+            i * opt_xsk_frame_size;
+    xsk_ring_prod__submit(&umem->fq, XSK_RING_PROD__DEFAULT_NUM_DESCS * 2);  // 数据填充完毕，更新生产者下标。
+}
+
+
+
+static inline __u64 *xsk_ring_prod__fill_addr(struct xsk_ring_prod *fill,
+                          __u32 idx)
+{
+    __u64 *addrs = (__u64 *)fill->ring;
+
+    return &addrs[idx & fill->mask];
+}
+
+
+static inline void xsk_ring_prod__submit(struct xsk_ring_prod *prod, __u32 nb)
+{
+    /* Make sure everything has been written to the ring before indicating
+     * this to the kernel by writing the producer pointer.
+     */
+    libbpf_smp_store_release(prod->producer, *prod->producer + nb);
+}
+
+static inline __u32 xsk_prod_nb_free(struct xsk_ring_prod *r, __u32 nb)
+{
+    __u32 free_entries = r->cached_cons - r->cached_prod;
+
+    if (free_entries >= nb)
+        return free_entries;
+
+    /* Refresh the local tail pointer.
+     * cached_cons is r->size bigger than the real consumer pointer so
+     * that this addition can be avoided in the more frequently
+     * executed code that computs free_entries in the beginning of
+     * this function. Without this optimization it whould have been
+     * free_entries = r->cached_prod - r->cached_cons + r->size.
+     */
+    r->cached_cons = libbpf_smp_load_acquire(r->consumer);
+    r->cached_cons += r->size;
+
+    return r->cached_cons - r->cached_prod;
+}
+
+
+// 这个函数前面先判断一下：我现在想生产nb个数据，ring里有没有足够的地方放啊？没有的话直接退出，等会再试试。
+// 如果有足够的空间，那么会将生产者当前下标（cached_prog）赋值给idx，因为退出函数后会根据从这个idx指向的位置开始生产desc，最后cached_prod + nb。
+// 为什么要有个cached_prog呢？
+// 因为生产数据这个过程需要分几步完成，所以这个东西应该为了多线程同步吧。
+
+static inline __u32 xsk_ring_prod__reserve(struct xsk_ring_prod *prod, __u32 nb, __u32 *idx)
+{
+    if (xsk_prod_nb_free(prod, nb) < nb)
+        return 0;
+
+    *idx = prod->cached_prod;
+    prod->cached_prod += nb;
+
+    return nb;
+}
+```
+
+### 收包处理
+
+AF_XDP socket毕竟也是socket，所以select/poll/epoll这些函数都能用的，怎么用这里不介绍了。我们只看具体从一个AF_XDP socket收包的过程:
+
+
+```c
+static void rx_drop(struct xsk_socket_info *xsk)
+{
+    unsigned int rcvd, i;
+    u32 idx_rx = 0, idx_fq = 0;
+    int ret;
+
+    rcvd = xsk_ring_cons__peek(&xsk->rx, opt_batch_size, &idx_rx);
+    if (!rcvd) {
+        if (opt_busy_poll || xsk_ring_prod__needs_wakeup(&xsk->umem->fq)) {
+            xsk->app_stats.rx_empty_polls++;
+            recvfrom(xsk_socket__fd(xsk->xsk), NULL, 0, MSG_DONTWAIT, NULL, NULL);
+        }
+        return;
+    }
+
+    ret = xsk_ring_prod__reserve(&xsk->umem->fq, rcvd, &idx_fq);
+    while (ret != rcvd) {
+        if (ret < 0)
+            exit_with_error(-ret);
+        if (opt_busy_poll || xsk_ring_prod__needs_wakeup(&xsk->umem->fq)) {
+            xsk->app_stats.fill_fail_polls++;
+            recvfrom(xsk_socket__fd(xsk->xsk), NULL, 0, MSG_DONTWAIT, NULL, NULL);
+        }
+        ret = xsk_ring_prod__reserve(&xsk->umem->fq, rcvd, &idx_fq);
+    }
+
+    for (i = 0; i < rcvd; i++) {
+        u64 addr = xsk_ring_cons__rx_desc(&xsk->rx, idx_rx)->addr;
+        u32 len = xsk_ring_cons__rx_desc(&xsk->rx, idx_rx++)->len;
+        u64 orig = xsk_umem__extract_addr(addr);
+
+        addr = xsk_umem__add_offset_to_addr(addr);
+        char *pkt = xsk_umem__get_data(xsk->umem->buffer, addr);
+
+        hex_dump(pkt, len, addr);
+        *xsk_ring_prod__fill_addr(&xsk->umem->fq, idx_fq++) = orig;
+    }
+
+    xsk_ring_prod__submit(&xsk->umem->fq, rcvd);
+    xsk_ring_cons__release(&xsk->rx, rcvd);
+    xsk->ring_stats.rx_npkts += rcvd;
+}
+
+该函数并没有对报文做什么复杂处理，只是hex_dump了一下.
+```
 
 
 # AF_XDP实现流量分叉
@@ -1067,7 +2433,10 @@ DEFINE_XSK_RING(xsk_ring_cons);
 
 https://hal.science/hal-04458274v1/document
 
+如果是 收包的core 和 af-xdp应用程序的core 相同，那么时延可能 收到如下配置的影响：
+```bash
 
+```
 
 # DPDK中 整合 AF_XDP
 
@@ -1144,6 +2513,214 @@ echo 200000 | sudo tee /sys/class/net/eth0/gro_flush_timeout
 
 因此，上面配置延迟中断的使能，softirq 中 NAPI的调度是通过watchdog的超时，当DPDK程序退出Polling模式处理时，watchdog 定时器就会超时，然后正常的 softirq 中的 NAPI 就会恢复。
 
+## 网卡使用的区别
+由于前面介绍的 Mellanox网卡使用 mlx5-core驱动，如果使用了 af-xdp，只能在后半部分队列使用 zero-copy模式。
+Mellanox 网卡使用 zero-copy模式的 af-xdp，还存在另外一个问题。
+比如，Mellnoax只有一个队列， testpmd配置单个转发core，一个控制core，进行打流，会发现 转发core的 CPU使用中：softirq 占用了很大一部分比例，usr、sys占用剩余的部分。
+
+但是，如果是 Intel Ice的驱动，则所有的队列都可以 用来zero-copy，并且 使用单个转发core，打流，基本上 softirq 不占用cpu，都是user 和 sys占用cpu。
+
+## 统计计数
+
+如下所示，dpdk-testpmd使用 af-xdp 的统计计数；
+```bash
+testpmd> show port stats all
+
+  ######################## NIC statistics for port 0  ########################
+  RX-packets: 0          RX-missed: 0          RX-bytes:  0
+  RX-errors: 0
+  RX-nombuf:  0
+  TX-packets: 0          TX-errors: 0          TX-bytes:  0
+
+  Throughput (since last show)
+  Rx-pps:            0          Rx-bps:            0
+  Tx-pps:            0          Tx-bps:            0
+  ############################################################################
+```
+
+上面的 rx-miss 和  tx-error 和 之前的物理网卡的 imiss，以及 tx-error，完全不同。
+因为 dpdk 使用 af-xdp，其实是在 af-xdp pmd中将  af-xdp的接口都是按照 dev 网路设备进行封装的。
+因此，上面的 imiss 和 tx-error，更多的是 af-xdp的应用程序 和 xdp驱动程序在 操作 rx/tx/fill/complete 4 个 ring 时，由于 ring 满的丢包。
+另外，dpdk使用 af-xdp，还可以通过 ethtool -S eth0x 上的 ring-buffer 满的丢包。
+
+如下所示：
+
+```bash
+（1）Mellanox网卡的统计计数：
+# cat aa.sh
+sleep_time=1
+declare -A allinfo1
+declare -A allinfo2
+while true
+do
+	echo ------------------$(date)----------------------
+	eval $(ethtool -S eth02 | grep -v ": 0" | grep -i -e xdp -e drop -e disc -e out -e err -e full -e pci -e wake -e xsk -e stop -e pause | awk -F: '{print $1,$2}' | awk '{print $1,$2}' | awk  '{printf "allinfo1[%s]=%d;",$1,$2'})
+       	sleep ${sleep_time}
+       	for key1 in "${!allinfo1[@]}"
+       	do
+		diff=$((allinfo1[$key1] - allinfo2[$key1]))
+		echo $key1 : ${diff}
+		allinfo2[$key1]=${allinfo1[$key1]}
+       	done
+done
+```
+
+```bash
+（1）Mellanox相关的网卡统计如下：
+------------------Wed Aug 7 08:48:07 PM CST 2024----------------------
+rx8_xdp_redirect : 0
+tx0_wake : 20
+rx_xdp_drop : 5324748   // 这里应该和 af-xdp 的 RX-missed pps对应;
+tx0_xsk_xmit : 0
+tx0_xsk_full : 0
+rx_xsk_buff_alloc_err : 0
+tx3_wake : 0
+rx11_xdp_redirect : 0
+rx0_xdp_redirect : 271456  //这里和 af-xdp 的 rx-packets pps对应；
+rx4_xdp_drop : 0
+tx10_stopped : 0
+rx12_xdp_redirect : 0
+rx3_xdp_redirect : 0
+rx1_xdp_drop : 0
+tx_global_pause : 0
+rx1_xdp_redirect : 0
+tx7_wake : 0
+tx13_wake : 0
+tx1_wake : 0
+tx10_wake : 0
+tx_pci_signal_integrity : 0
+tx6_wake : 0
+tx11_wake : 0
+rx2_xdp_redirect : 0
+tx13_stopped : 0
+tx4_wake : 0
+tx12_wake : 0
+rx0_xdp_drop : 5324049 //只有一个queue
+outbound_pci_stalled_wr_events : 0
+rx13_xdp_drop : 0
+tx_queue_stopped : 20
+rx_xdp_redirect : 271456
+tx1_stopped : 0
+rx13_xdp_redirect : 0
+rx3_xdp_drop : 0
+rx7_xdp_redirect : 0
+tx0_xsk_cqes : 0
+tx_pause_ctrl_phy : 0
+rx9_xdp_redirect : 0
+tx_queue_wake : 20
+tx_xsk_xmit : 0
+rx10_xdp_redirect : 0
+rx6_xdp_drop : 0
+rx11_xdp_drop : 0
+rx7_xdp_drop : 0
+rx10_xdp_drop : 0
+rx_out_of_buffer : 2920155 //这里应该是剩余pps的对应;
+rx5_xdp_redirect : 0
+tx_global_pause_duration : 0
+rx12_xdp_drop : 0
+rx_discards_phy : 0
+tx11_stopped : 0
+tx6_stopped : 0
+rx0_xsk_xdp_redirect : 0
+rx2_xdp_drop : 0
+tx0_stopped : 20
+rx9_xdp_drop : 0
+rx5_xdp_drop : 0
+tx_xsk_full : 0
+tx5_wake : 0
+tx12_stopped : 0
+tx3_stopped : 0
+rx8_xdp_drop : 0
+rx0_xsk_buff_alloc_err : 0
+tx_xsk_cqes : 0
+tx7_stopped : 0
+rx6_xdp_redirect : 0
+tx5_stopped : 0
+tx4_stopped : 0
+rx4_xdp_redirect : 0
+rx_prio0_discards : 0
+rx_xsk_xdp_redirect : 0
+------------------Wed Aug 7 08:48:08 PM CST 2024----------------------
+rx8_xdp_redirect : 0
+tx0_wake : 20
+rx_xdp_drop : 5322453
+tx0_xsk_xmit : 0
+tx0_xsk_full : 0
+rx_xsk_buff_alloc_err : 0
+tx3_wake : 0
+rx11_xdp_redirect : 0
+rx0_xdp_redirect : 272384
+rx4_xdp_drop : 0
+tx10_stopped : 0
+rx12_xdp_redirect : 0
+rx3_xdp_redirect : 0
+rx1_xdp_drop : 0
+tx_global_pause : 0
+rx1_xdp_redirect : 0
+tx7_wake : 0
+tx13_wake : 0
+tx1_wake : 0
+tx10_wake : 0
+tx_pci_signal_integrity : 0
+tx6_wake : 0
+tx11_wake : 0
+rx2_xdp_redirect : 0
+tx13_stopped : 0
+tx4_wake : 0
+tx12_wake : 0
+rx0_xdp_drop : 5323366
+outbound_pci_stalled_wr_events : 0
+rx13_xdp_drop : 0
+tx_queue_stopped : 20
+rx_xdp_redirect : 272384
+tx1_stopped : 0
+rx13_xdp_redirect : 0
+rx3_xdp_drop : 0
+rx7_xdp_redirect : 0
+tx0_xsk_cqes : 0
+tx_pause_ctrl_phy : 0
+rx9_xdp_redirect : 0
+tx_queue_wake : 20
+tx_xsk_xmit : 0
+rx10_xdp_redirect : 0
+rx6_xdp_drop : 0
+rx11_xdp_drop : 0
+rx7_xdp_drop : 0
+rx10_xdp_drop : 0
+rx_out_of_buffer : 2922247
+rx5_xdp_redirect : 0
+tx_global_pause_duration : 0
+rx12_xdp_drop : 0
+rx_discards_phy : 0
+tx11_stopped : 0
+tx6_stopped : 0
+rx0_xsk_xdp_redirect : 0
+rx2_xdp_drop : 0
+tx0_stopped : 20
+rx9_xdp_drop : 0
+rx5_xdp_drop : 0
+tx_xsk_full : 0
+tx5_wake : 0
+tx12_stopped : 0
+tx3_stopped : 0
+rx8_xdp_drop : 0
+rx0_xsk_buff_alloc_err : 0
+tx_xsk_cqes : 0
+tx7_stopped : 0
+rx6_xdp_redirect : 0
+tx5_stopped : 0
+tx4_stopped : 0
+rx4_xdp_redirect : 0
+rx_prio0_discards : 0
+rx_xsk_xdp_redirect : 0
+```
+
+### 物理网卡的 imiss or rx_out_of_buffer
+### af-xdp的 RX-missed
+### af-xdp的 TX-errors
+### af-xdp的 RX-packets 和 Tx-packets
+
+
 
 # 相关问题
 ## 确保af xdp scoket的4个ring的操作都是SPSC
@@ -1167,6 +2744,13 @@ xdp驱动程序 redirct 到 用户态程序的 umem的 是  raw frame帧，对�
 dpdk收包都是从网卡设备dev收包，对于一些虚拟的pmd，比如，af-xdp pmd 是通过创建虚拟的 vdev设备，然后将各种 af-xdp的处理封装为 dev的 ops。
 
 由于 需要将 umem中收到的数据 拷贝封装到 rte_mbuf中，此时应该无法利用硬件的 offload 特性 以及 GRO 特性，因此 rte_mbuf 中的一些元数据 比如 ol_flags （offload features） 就无法赋值。
+
+
+## 如何理解af-xdp驱动代码只在收包的时候执行？
+
+自己编写的基于bpf的af-xdp驱动程序的确只是在收包的时候执行，驱动代码中如果将数据redirect到xdp-socket(即：bpf_redirect_map)，那么后面还涉及到在内核中执行 如下流程：消费 fill ring，填充数据，生产rx ring。
+同理，在应用程序发送数据时，内核中也存在着如下的流程：消费tx ring，发送完成，生产 complete ring， 但是不会再走到 基于bpf的af-xdp驱动代码流程中。
+
 
 # 参考
 ```bash

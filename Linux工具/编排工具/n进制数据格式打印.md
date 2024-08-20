@@ -233,6 +233,8 @@ echo "obase=16;15"|bc
 F
 ```
 
+![](attachments/Pasted%20image%2020240808170152.png)
+
 ### 10进制转换成8进制
 ```bash
 printf %o 9  

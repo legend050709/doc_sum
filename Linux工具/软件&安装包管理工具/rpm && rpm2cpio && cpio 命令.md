@@ -1,4 +1,8 @@
-# rpm
+```table-of-contents
+```
+# cpio命令
+# rpm2cpio 命令
+# rpm 命令
 # 查看命令的源码
 ##  查看二进制文件/命令的位置
 ```c
@@ -27,21 +31,45 @@ https://pkgs.org/search/?q=coreutils
 
 如上两种方式下载之后，得到 带有源码的 rpm文件：ccoreutils-8.22-24.el7.src.rpm。
 
+
 ## 查询源码的文件
 ```c
-#rpm -qpl ccoreutils-8.22-24.el7.src.rpm | grep tar
-
-coreutils-8.22.tar.xz
+#rpm -qpl xxxx.rpm
 ```
 
-## 提取源码文件
+## 提取rpm中的文件
+
+### 提取文件到指定 目录
+```bash
+正常的查看rpm中的文件为：
+rpm -qpl xxxx.rpm
+
+正常的提取rpm中的文件为：
+rpm2cpio xxxx.rpm | cpio -div
+```
+上诉方式，提取的文件，会直接放入到 `rpm -qpl xxxx.rpm` 中展示的路径中。不太好查看，也可能将之前的文件给覆盖了。
+
+如下所示，`rpm2cpio xxxx.rpm | cpio -div` 方式提取的文件，直接放入到了 `/usr/share/bnxt_en` 和  `/usr/src/bnxt_en-1.10.3.230.0.132.0` 目录。
+
+![](attachments/Pasted%20image%2020240813111409.png)
+
+
+如果想要提取文件到指定的目录，可以通过`-D dir`的方式，如下的命令：
+```bash
+make rpm_files_dir; 
+rpm2cpio bnxt_en-1.10.3.230.0.132.0-1dkms.noarch.rpm | cpio -div -D rpm_files_dir
+```
+
+### 提取源码tar文件
 ```c
-#rpm2cpio coreutils-8.22-24.el7.src.rpm |cpio -idv coreutils-8.22.tar.xz
+# rpm -qpl ccoreutils-8.22-24.el7.src.rpm | grep tar
+coreutils-8.22.tar.xz
+
+# rpm2cpio coreutils-8.22-24.el7.src.rpm |cpio -idv coreutils-8.22.tar.xz
 
 # mkdir -p new_dir; tar xvf coreutils-8.22.tar.xz -C new_dir
 
 ```
-
 
 # 其他
 ## libxxx.rpm 和  libxxx-devel.rpm 和 libxxx.src.rpm的关系

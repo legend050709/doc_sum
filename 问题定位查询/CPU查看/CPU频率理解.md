@@ -65,7 +65,7 @@ CPU和外设的频率不一致，这样一来CPU就无法很好与外设交流�
 默频 即默认基础频率，是 CPU 标出的主频。
 默频 是CPU制造商为其设计的正常运行频率，也称为基本频率或标称频率。例如，一块CPU可能被设计为在2.5 GHz的主频下运行。
 
-## 睿频
+## Intel 睿频Trubo Boost
 睿频 是采用 Intel 睿频加速技术可达到的更高频率，可以理解为自动超频。
 
 睿频是一种超频技术，使CPU可以在超过其主频的频率下运行。通过提高电压和时钟速度，睿频可以提高CPU的性能。
@@ -73,10 +73,74 @@ CPU和外设的频率不一致，这样一来CPU就无法很好与外设交流�
 
 如下面第九代 Intel core 处理器的介绍，已经明确标注默频、睿频能达到的频率，以及是未锁频，支持超频的也写在介绍中。
 ![](attachments/Pasted%20image%2020240131160038.png)
+
+### 为什么要开启睿频？
+
+以目前主流民用CPU i7 10700k为例，基础频率为3.8Ghz，全核睿频为4.7Ghz，同一CPU的性能跟频率高低成正比。开启睿频前，8个物理核心总频率为30.4Ghz，开启后为37.6Ghz，开启前后差距23.7%，如果不开启睿频，则意味着有接近23.7%的性能浪费。
+
+### 开启和关闭
+一般禁用睿频加速将限制您的 CPU 速度，以防止运行超过基本频率。 它对于节省电量并防止计算机过热很有用。 作为选择，用户还可以设置恒定的 CPU 速度，以获得最低功耗或最高性能。如今大多数机器在 BIOS 页面中都有选项来启用/禁用甚至更改 CPU 频率，但它并不灵活。
+
+对于 Linux，内核有一个名为 cpupower 的工具可以从命令行完成这项工作，用户可以通过 sysfs 打开/关闭 Turbo boost。
+
+#### windows系统设置
+
+在bois彻底关闭睿频加速方法（需要关机重启）
+不同型号电脑关闭的方式不一样，这里我只说一下我这个型号的关闭方式，此方法适合想彻底关闭睿频加速，让电脑保持冷静的朋友。  
+**来自戴尔客服的方案：**
+
+![](attachments/Pasted%20image%2020240807142409.png)
+
+#### linux 下 设置
+```bash
+### intel 关闭睿频
+echo 1 >  /sys/devices/system/cpu/intel_pstate/no_turbo
+
+如果上面的第一个命令输出“No such file or directory”，则说明正在使用其他缩放驱动程序。在这种情况下，运行命令来检查 sysfs：
+
+cat /sys/devices/system/cpu/cpufreq/boost
+```
+
+```bash
+ls /sys/devices/system/cpu/intel_pstate
+hwp_dynamic_boost  max_perf_pct  min_perf_pct  no_turbo  num_pstates  status  turbo_pct
+
+说明：
+max_perf_pct： 最大频率的百分比，例如4GHZ 4GHZ*90% = 3.6GHZ,可利用此控制最大频率
+min_perf_pct： 最小比列，p-state能够调到最小频率的比例，这个比例最节能
+no_turbo： 是否开启睿频， 0：开启 1： 关闭
+num_pstates : 处理器支持的p状态数量。这个值在0-255之前。包含了睿频和非睿频p-state。此属性是只读的, 这是所支持的p状态与cpu电压和频率的一张表
+
+```
+
+**查看**
+```bash
+# cpupower frequency-info
+```
+
+![](attachments/Pasted%20image%2020240807152816.png)
+
+
+### 范例
+
+![](attachments/Pasted%20image%2020240807143737.png)
+
+![](attachments/Pasted%20image%2020240807143902.png)
+
+如上所示，开启了Turbo ， 单核的CPU的频率会更高。标频为2.7GHz，开启了Turbo之后，睿频为3.3GHz。
+目前主流的民用CPU INTEL的 10700k，基础频率3.8Ghz, 睿频单核最高可以达到5.1Ghz。
+
 ## 超频
 超频 是为了实现超过额定频率性能，人为调整各种指标（如电压、散热、外频、电源、BIOS等），属于手动超频。
 
 但由于强行超频对系统和硬件会产生负面影响，所以大厂们在CPU出厂时将其倍频锁定在一个固定的数值，使其倍频系数不能再任何变动，即锁频。
+
+### 睿频跟超频的区别
+
+睿频：CPU根据实际运行程序的需求，动态的增加处理器的运行频率来提高处理器的性能，同时保持处理器继续稳定运行在规定的功耗、电流、电压和温度范围内，如果CPU出现故障，是享受质保的。**睿频是CPU自动实现的，无需人工设置，并且CPU运行稳定**。处理器商可以保证cpu达到睿频最大频率，并对cpu的寿命无影响。
+
+超频：**用户强制**CPU所有内核运行比额定频率高的频率上，功耗、电流、电压和温度都可能超出规定范围，如果出现损坏，那么有可能无法享受质保。超频需要调整各种指标，比如电压、散热、外频、电源、BIOS等等，并且容易出现系统不稳定的情况。处理器商不保证CPU可以达到的最大频率，并且会对cpu的寿命进行影响。
+
 
 ## 频率之间的关系
 睿频和超频很像，都可以提升频率，提高性能，但两者还是有本质区别。
@@ -91,7 +155,15 @@ CPU和外设的频率不一致，这样一来CPU就无法很好与外设交流�
 
 
 ## CPU支持的最大频率和最小频率
-# lscpu命令
+# 工具
+```bash
+yum install -y util-linux kernel-tools
+```
+
+![](attachments/Pasted%20image%2020240807143119.png)
+
+
+## lscpu命令
 ```bash
   [root@xeon ~]# lscpu
   Architecture:          x86_64
@@ -146,7 +218,7 @@ CPU和外设的频率不一致，这样一来CPU就无法很好与外设交流�
 - NUMA node1 CPU(s): 位于NUMA node1的CPU ****逻辑核**** 编号。
 
 
-# /proc/cpuinfo信息
+## /proc/cpuinfo信息
 ```bash
 [root@xeon ~]# cat /proc/cpuinfo | head -27
   processor       : 0
@@ -193,7 +265,7 @@ CPU和外设的频率不一致，这样一来CPU就无法很好与外设交流�
 2. 统计当前机器有多少个 ****CPU**** ： `grep "physical id" /proc/cpuinfo | sort -u | wc -l`
 
 
-## 范例
+### 范例
 ![](attachments/Pasted%20image%2020240131171612.png)
 
 我把 `/proc/cpuinfo` 内容中部分字段整理成表格形式，这样我们就可以直观的解读每个 ****逻辑核**** 信息，以 `27` 号 ****逻辑核**** 为例：
@@ -203,9 +275,9 @@ CPU和外设的频率不一致，这样一来CPU就无法很好与外设交流�
 - 该 ****逻辑核**** 所在 ****物理核**** 编号是 `10` ( `core id == 10` )
 - 该 ****逻辑核**** 所有 `CPU` 共有 10 个 ****物理核**** ( `cpu cores == 10` )
 
-# cpupower命令
-## CPU频率策略
-### 静态策略
+## cpupower命令
+### CPU频率策略
+#### 静态策略
 **performance**：将CPU频率固定工作在其支持的最高运行频率上，不动态调节，可以获取到最大的性能。
 
 **powersave**: 将 CPU 频率设置为最低的所谓 “省电” 模式，CPU 会固定工作在其支持的最低运行频率上。
@@ -218,19 +290,19 @@ CPU和外设的频率不一致，这样一来CPU就无法很好与外设交流�
 
 **conservative**: 与 ondemand 不同，平滑地调整 CPU 频率，频率的升降是渐变式的, 会自动在频率上下限调整，和 ondemand 的区别在于它会按需分配频率，而不是一味追求最高频率；
 
-## 查看
-### 查看当前cpu可用的策略
+### 查看
+#### 查看当前cpu可用的策略
 ```bash
 # cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors
 conservative userspace powersave ondemand performance
 ```
 
-### 查看当前cpu生效的策略
+#### 查看当前cpu生效的策略
 ```bash
 # cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
 conservative
 ```
-### 查看当前CPU频率
+#### 查看当前CPU频率
 ```bash
 # cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq
 1000000
@@ -243,9 +315,81 @@ CPU MHz:               2800.102
 or
 
 # cat /proc/cpuinfo | grep -i "CPU MHz"
+
+
 ```
 
-### 查看当前所有CPU的信息
+```bash
+# cpupower monitor -m Mperf
+              |Mperf
+PKG |CORE|CPU | C0   | Cx   | Freq
+   0|   0|   0|  0.05| 99.95|  2896
+   0|   0|  28|  0.00|100.00|  2890
+   0|   1|   2|  0.01| 99.99|  2931
+   0|   1|  30|  0.02| 99.98|  2900
+   0|   2|   4|  0.01| 99.99|  2901
+   0|   2|  32|  0.01| 99.99|  2892
+   0|   3|   6|  0.01| 99.99|  2895
+   0|   3|  34|  0.04| 99.96|  2898
+   0|   4|   8|  0.07| 99.93|  2898
+   0|   4|  36|  0.11| 99.89|  2897
+   0|   5|  10|  0.01| 99.99|  2910
+   0|   5|  38|  0.00|100.00|  2893
+   0|   6|  12|  0.01| 99.99|  2909
+   0|   6|  40|  0.00|100.00|  2886
+   0|   8|  14|  0.01| 99.99|  2919
+   0|   8|  42|  0.01| 99.99|  2893
+   0|   9|  16|  0.13| 99.87|  2898
+   0|   9|  44|  0.00|100.00|  2867
+   0|  10|  18|  0.00|100.00|  2934
+   0|  10|  46|  0.00|100.00|  2875
+   0|  11|  20|  0.01| 99.99|  2914
+   0|  11|  48|  0.05| 99.95|  2901
+   0|  12|  22|  0.02| 99.98|  2901
+   0|  12|  50|  0.00|100.00|  2875
+   0|  13|  24|  0.01| 99.99|  2898
+   0|  13|  52|  0.01| 99.99|  2893
+   0|  14|  26|  0.01| 99.99|  2898
+   0|  14|  54|  0.01| 99.99|  2900
+   1|   0|   1|  0.02| 99.98|  2905
+   1|   0|  29|  0.11| 99.89|  2899
+   1|   1|   3|  0.01| 99.99|  2903
+   1|   1|  31|  0.02| 99.98|  2898
+   1|   2|   5|  0.01| 99.99|  2911
+   1|   2|  33|  0.02| 99.98|  2896
+   1|   3|   7|  0.01| 99.99|  2900
+   1|   3|  35|  0.01| 99.99|  2890
+   1|   4|   9|  1.51| 98.49|  2898
+   1|   4|  37|  0.02| 99.98|  2891
+   1|   5|  11|  0.02| 99.98|  2895
+   1|   5|  39|  0.17| 99.83|  2899
+   1|   6|  13|  0.03| 99.97|  2898
+   1|   6|  41|  0.06| 99.94|  2899
+   1|   8|  15|  0.01| 99.99|  2891
+   1|   8|  43|  0.03| 99.97|  2899
+   1|   9|  17|  0.00|100.00|  2939
+   1|   9|  45|  0.00|100.00|  2889
+   1|  10|  19|  0.01| 99.99|  2907
+   1|  10|  47|  0.01| 99.99|  2932
+   1|  11|  21|  0.00|100.00|  2912
+   1|  11|  49|  0.00|100.00|  2909
+   1|  12|  23|  0.08| 99.92|  2898
+   1|  12|  51|  0.01| 99.99|  2895
+   1|  13|  25|  0.01| 99.99|  2884
+   1|  13|  53|  0.04| 99.96|  2899
+   1|  14|  27|  0.01| 99.99|  2876
+   1|  14|  55|  0.56| 99.44|  2898
+```
+
+```bash
+# 查看当前服务器是否开启了睿频(0:enable 1:diable)
+[root@node1 ~]# cat /sys/devices/system/cpu/intel_pstate/no_turbo
+
+# 关闭CPU环保模式，更改为性能模式 
+[root@node1 ~]# cpupower -c all frequency-set -g performance
+```
+
+#### 查看当前所有CPU的信息
 ```bash
 [root@CENTOS ~]# cpupower -c all frequency-info
 analyzing CPU 0:
@@ -272,11 +416,76 @@ cpupower -c 1 frequency-info        #查看CPU1的信息
 cpupower -c 2 frequency-info        #查看CPU2的信息
 ```
 
-## 设置所有CPU的模式
+### 设置所有CPU的模式
 ```bash
 cpupower -c all frequency-set -g powersave
 cpupower -c all frequency-set -g "conservative"
 ```
+# CPU驱动器
+通过`cpupower`命令可以查看系统当前使用的驱动。
+
+## intel_pstate驱动
+intel_pstate 驱动是 Linux内核中的一个组件，专门用于管理现代 Intel 处理器的电源管理和性能状态。它提供了一种机制，允许操作系统更精细地控制 CPU 频率和功耗，以适应不同的工作负载和性能需求。
+
+### 工作原理
+intel_pstate 驱动利用了 Intel 处理器的硬件特性，如 Performance-Scale Technology (P-state) 和 Power-Saving-Mode (P-state)。这些特性允许 CPU 根据当前负载和电源策略动态调整其运行频率和功耗状态。
+
+intel_pstate 驱动通过与处理器的硬件接口交互，读取和设置 CPU 性能状态。它使用硬件提供的 P-state 转换表来确定 CPU 频率和电压设置。驱动程序还与操作系统的调度器和电源管理策略协同工作，以确保 CPU 状态的变化与系统需求相匹配。
+
+### 配置开启intel_pstate
+要配置`intel_pstate=enable`，通常需要通过修改Linux系统的内核启动参数来实现。以下是一般步骤，但请注意，具体步骤可能会根据您使用的Linux发行版和内核版本有所不同。
+
+**(1) 编辑GRUB1配置文件**：
+打开GRUB配置文件/etc/default/grub，找到GRUB_CMDLINE_LINUX_DEFAULT或GRUB_CMDLINE_LINUX这一行。在这个参数中添加intel_pstate=enable。例如，如果原来的配置是这样的：
+```bash
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
+```
+应该修改为：
+```bash
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash intel_pstate=enable"
+```
+
+**(2)更新GRUB配置**
+```bash
+sudo grub2-mkconfig -o /boot/grub2/grub.cfg
+```
+
+**(3)重启系统**：
+为了使更改生效，需要重启系统。在重启后，`intel_pstate`驱动应该已经启用。
+
+**(4)验证**：通过cpupower命令可以查看。
+
+![](attachments/Pasted%20image%2020240807154207.png)
+
+## acpi-cpufreq驱动
+
+针对AMD处理器的服务器，当前配置显示使用的是acpi-cpufreq驱动，在这里也扩展一下知识。
+
+acpi-cpufreq驱动是Linux内核中的一个CPU频率缩放驱动程序，它基于高级配置和电源接口（ACPI）规范来实现CPU性能状态的管理。ACPI是一个开放标准，被所有主流操作系统所支持，用于操作系统和硬件之间的电源管理通信。
+
+### 工作原理
+
+acpi-cpufreq驱动通过与系统的ACPI接口交互来调整CPU的频率和电压。它利用ACPI提供的接口和方法来查询和设置CPU的性能状态（P-states），这些状态定义了CPU的频率和电压水平。驱动程序可以响应系统负载的变化，通过调整CPU频率来优化性能和功耗。
+
+![](attachments/Pasted%20image%2020240807154552.png)
+
+### 驱动对比
+
+如上的2个截图，对比如下：
+
+**性能模式**：
+- intel_pstate：只支持powersave模式和performance模式；
+- acpi-cpufreq：支持很多种模式`conservative userspace powersave ondemand performance`多种模式；
+
+
+**频率范围**：
+- intel_pstate驱动支持CPU的动态频率调整，包括Turbo Boost。
+CPU频率范围为1.20GHz至3.00GHz(尽管CPU规格为2.00GHz)，如果我们检查CPU规格页面，它显示2.00GHz是基本频率，而Max Turbo频率为3.00GHz。
+
+- acpi-cpufreq驱动通常只使用基本频率
+acpi-cpufreq频率为了实现更好的能效，会控制在1.20 GHz和2.00 GHz以内。
+
+
 
 # 其他
 ## CPU性能和CPU的频率关系
