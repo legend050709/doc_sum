@@ -1024,6 +1024,33 @@ Mellanox PMD 可以理解为 使用 Mellnaox 网卡的 DPDK 应用程序；
 
 ![](attachments/Pasted%20image%2020240620163219.png)
 
+
+#### DPDK 使用 Mellanox 网卡的特殊之处
+
+DPDK通过 `-w/-a PCIe` 来使用  Mellanox 网卡，存在一些特殊的地方。
+
+**（0）不需要安装类似于igb_uio这样的驱动**
+DPDK程序 通过 `-w/-a PCIe`来使用 Mellanox网卡，不像使用 intel 等其他网卡，需要解绑原始的网卡驱动，然后将网卡绑定到 igb_uio 驱动上。
+
+
+**（1）mellanox物理网卡内核可见、linux工具可用**
+DPDK程序 通过 `-w/-a PCIe`来使用 Mellanox网卡之后，物理网卡依然在内核中可见，通过 `ip a` 依然可以看到。另外，ethtool/ ifconfig 等命令依然可见。
+
+
+**（2）流量分叉**
+可以在DPDK程序中通过 rte_flow_isolate + 下发指定的 RSS/FDIR 规则，将匹配到规则的流量导流到 DPDK程序，其他的控制流量还是PASS 给内核，进而做到了流量分叉，这样即使DPDK程序挂掉，也不会导致系统的不可用。
+
+注：在 DPDK中通过 rte_flow 创建的规则，通过 ethtool -n ethx 也是无法看到的。感觉 Mellanox 网卡实现流量分叉，驱动里可能也是封装了PF/VF，DPDK绑定Mellanox网卡，可能就是在内层新建了 VF，DPDK中设置的rte_flow 作用于这个VF，这个VF又不对外暴漏。DPDK程序退出时，这样的VF及其规则都自动销毁了。
+
+**（3）抓包**
+DPDK 使用 Mellnaox 网卡，Mellanox 网卡使能 sniffer 特性，那么就可以在Linux中使用 tcpdump 抓到 DPDK程序收到的 数据包。
+
+![](attachments/Pasted%20image%2020240912131700.png)
+
+> 注：低版本的 MLNX_OFED（5.1以下），要用ethtool --set-priv-flags ethxx sniffer on开启dump报文，之后就可以正常用tcpdump抓包了；
+>  对于高版本的 MLNX_OFED，没有sniffer选项了。需要高版本的tcpdump才能抓包。使用方式是./tcpdump -i mlx5_xx -nnn需要将xx替换成自己要抓包的网卡序号。
+
+
 ### 博通系列网卡
 参考：[# DPDK-22.11-BNXT Poll Mode Driver](https://doc.dpdk.org/guides-19.11/nics/bnxt.html)
 

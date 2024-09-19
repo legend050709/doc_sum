@@ -51,8 +51,6 @@ XDP驱动钩子：网卡驱动中XDP程序的一个hook，XDP程序可以对数�
 
 ![](attachments/Pasted%20image%2020240709195334.png)
 
-==如上所示，无论是哪种模式的 XDP，都是在TC之前的。即：native XDP--->申请skb--->gro --> gxdp----> tcpdump--->TC--->netfilter==
-
 - Native XDP（默认xdp，驱动xdp、原生xdp）：即驱动模式，在这种模式中，XDP BPF 程序直接运行在网络驱动的早期接收路径上，需要驱动支持。
     
 - Offloaded XDP（卸载xdp）：在该模式下XDP BPF程序直接offload到网卡，相较于Native，具有更高的性能，需要网卡支持。
@@ -220,6 +218,53 @@ XDP程序对于报文的处理有如下几种方式：
 - XDP_REDIRECT：将包重定向到其他网络接口（包括虚拟机的虚拟网卡），或者其他的CPU、或者通过AF_XDP socket重定向到用户空间。
     
 - XDP_ABORTED：表示程序产生了异常，其行为和XDP_DROP相同，但XDP_ABORTED会经过trace_xdp_exception tracepoint，因此可以通过tracing工具来监控这种非正常行为。
+
+### XDP_REDIRECT
+#### 支持的map 类型
+```bash
+XDP_REDIRECT works with the following map types:
+
+- `BPF_MAP_TYPE_DEVMAP`
+- `BPF_MAP_TYPE_DEVMAP_HASH`
+- `BPF_MAP_TYPE_CPUMAP`
+- `BPF_MAP_TYPE_XSKMAP`
+```
+
+#### xdp redirect 的 流程
+
+![](attachments/Pasted%20image%2020240821164639.png)
+
+#### Mellanox驱动的 XDP_REDIRECT 的问题
+**问题**
+在Mellanox网卡上，执行xdp程序，使用 XDP_REDIRECT 动作 redirect 到其他网卡，发现存在丢包。
+
+
+**分析**
+
+![](attachments/Pasted%20image%2020240821164138.png)
+
+可以通过 bpftrace 来 获取 xdp_redirect 动作的 返回值 。参考: [## XDP_REDIRECT](https://docs.kernel.org/bpf/redirect.html)
+```bash
+sudo bpftrace -e \ 
+'tracepoint:xdp:xdp_redirect*_err {@redir_errno[-args->err] = count();}
+tracepoint:xdp:xdp_devmap_xmit {@devmap_errno[-args->err] = count();}'
+
+如上，可以得到 ENXIO 返回值.
+```
+代码分析：
+![](attachments/image%20(12).png)
+
+官方文档：
+[# Understanding the eBPF networking features in RHEL 8](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/8/html/configuring_and_managing_networking/assembly_understanding-the-ebpf-features-in-rhel-8_configuring-and-managing-networking#ref_overview-of-xdp-features-in-rhel-8-by-network-cards_assembly_understanding-the-ebpf-features-in-rhel-8)
+
+如上所示，mellanox 驱动 mlx5-core 要求使用 xdp的 XDP_REDIRECT 动作时，要求处于该数据包的core-id，必须小于网卡的队列数(ethtool -l xxx查看)，否则会给丢弃。
+```bash
+Requires several XDP TX queues allocated that is larger or equal to the largest CPU index.
+```
+
+
+**解决**
+将 Mellanox 网卡的 网卡队列的中断 绑定到 CPU-ID 较小的 CPU-core上。
 
 
 ## 流程
@@ -411,6 +456,43 @@ ip link set dev ens192 xdp off  之后，ping # 之后，恢复正常。
 ![](attachments/Pasted%20image%2020240715173522.png)
 
 ebpf_map ，可用于 在内核和用户态之间传递数据，例如通过一个特殊的系统从用户态向 map 里插入数据。
+
+# XDP在内核中的位置
+
+![](attachments/Pasted%20image%2020240709195334.png)
+
+==如上所示，无论是哪种模式的 XDP，都是在TC之前的。即：native XDP--->申请skb--->gro --> gxdp----> tcpdump--->TC--->netfilter==
+
+## native xdp 和  bonding
+
+### 先后关系
+
+在数据包接收过程中，Bond 接口和 Native XDP 的先后关系如下：
+
+1. **数据包到达物理接口**：数据包首先到达与 Bond 接口相关联的物理网络接口。
+    
+2. **XDP 处理**：如果物理接口支持 XDP，并且已经配置了 XDP 程序，那么数据包会在进入 Bond 接口之前被 XDP 处理。此时，可以对数据包进行快速处理（例如，丢弃或修改）。
+    
+3. **Bond 接口处理**：
+    
+    - 如果数据包在 XDP 中被丢弃，则不会被 Bond 接口接收。
+    - 如果数据包通过了 XDP 处理，它将被传递到 Bond 接口，Bond 驱动程序会对其进行负载均衡和转发。
+4. **上层协议栈**：最后，Bond 接口将经过处理的数据包传递到上层协议栈，进行进一步的处理。
+    
+### bonding支持xdp的实现
+
+![](attachments/Pasted%20image%2020240904121417.png)
+
+XDP 在绑定驱动中通过透明地将 XDP 程序的加载、移除和发送操作委托给绑定从设备来实现。这项工作的总体目标是使 XDP 程序能够附加到绑定设备上，而无需对程序本身进行任何进一步的更改（或意识），这意味着相同的 XDP 程序可以附加到原生设备，也可以附加到绑定设备。
+这样的话，bond口上绑定xdp，那么收包时，其实是先是slave 成员口上执行 xdp程序，xdp程序继续上送包时，才会经过bonding模块的处理。
+
+如果xdp程序是 XDP_TX动作，如果不处理，就是原进原出，即哪个slave进入，那个slave出去，那么这就和 bond模块选择出口相违背。
+即对于xdp的 XDP_TX动作，需求是 根据bond的配置来选择出口，而不是原进原出。XDP_TX 的处理通过在 `bpf_prog_run_xdp` 中重写 BPF 程序的返回值来实现，以使用bond的 配置来进行发包，这种方法是为了避免对实现 XDP 的驱动程序进行更改。
+
+### 总结
+
+如果是物理接口(slave 口)上配置了xdp程序，那么就是先执行物理接口上的xdp程序，然后再进入到 bond 接口处理。
+如果是 bond 接口上配置了 xdp程序，实际上也是先执行成员物理口的xdp程序，然后再是bond收包，但是底层实现上兼容了bond。就可以理解为 先执行 bond 接口收包，然后执行 bond口上的 xdp程序。
 
 
 # XDP应用

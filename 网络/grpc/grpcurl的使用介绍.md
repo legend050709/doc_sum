@@ -27,6 +27,7 @@ Protobuf 本身具有反射功能，可以在运行时获取对象的 Proto 文�
 https://github.com/fullstorydev/grpcurl/issues/154
 
 ```go
+yum install -y golang 
 export GOPROXY=https://mirrors.aliyun.com/goproxy/
 go get github.com/fullstorydev/grpcurl
 go install github.com/fullstorydev/grpcurl/cmd/grpcurl

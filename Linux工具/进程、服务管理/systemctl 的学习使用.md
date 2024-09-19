@@ -147,6 +147,8 @@ systemd-analyze可使用的命令：
 ```
 使用`systemd-analyze plot > boot.svg`生成一张启动详细信息矢量图，然后用图像浏览器或者网页浏览器打开查看 。
 ![](attachments/Pasted%20image%2020240102141221.png)
+
+
 # systemd的Unit
 Systemd 可以管理所有系统资源。不同的资源统称为 Unit（单位）。
 简单说，单元就是 Systemd 的最小功能单位，是单个进程的描述。一个个小的单元互相调用和依赖，组成一个庞大的任务管理系统，这就是 Systemd 的基本思想。
@@ -928,8 +930,8 @@ $ sudo journalctl --vacuum-time=1years
 
 # systemd 的 path
 ## 介绍
-systemd 的 path工具提供了监控文件、目录变化并触发执行指定操作的功能。
-有时候这种监控功能是非常实用的，比如监控到`/etc/nginx/nginx.conf`或`/etc/nginx/conf.d/`发生变化后，立即reload nginx。虽然，用户也可以使用inotify类的工具来监控，但远不如systemd path更方便、更简单且更易于观察监控效果和调试。
+systemd 的 path工具提供了**监控文件、目录变化并触发执行指定操作**的功能。
+有时候这种监控功能是非常实用的，比如监控到`/etc/nginx/nginx.conf`或`/etc/nginx/conf.d/`发生变化后，立即 reload nginx。虽然，用户也可以使用**inotify**类的工具来监控，但远不如**systemd path**更方便、更简单且更易于观察监控效果和调试。
 > 注意：其实，systemd path的底层使用的是inotify，所以受限于inotify的缺陷，systemd path只能监控本地文件系统，而无法监控网络文件系统。
 
 ## 监控项
@@ -1095,18 +1097,136 @@ $ touch /tmp/foo/a && sleep 0.1 && rm -rf /tmp/foo/a
 
 systemd path的这个『bug』也有好处，因为可以让**瞬间产生的多个有关联关系的事件只执行单次任务**，从而避免了中间过程产生的事件也重复触发相关操作。
 
+# Systemd服务环境变量缺失的问题
+## 问题
+在Linux系统运维中，我们可能会遇到在使用systemd管理的服务时无法获取系统环境变量，尤其是`PATH`变量，从而导致无法正确找到命令路径。这确实是一个常见的挑战。
+
+参考：[# Linux: 解决Systemd服务环境变量缺失的问题](https://blog.csdn.net/qq_14829643/article/details/135613395)
+
+## 原因
+因为systemd启动的服务通常不会加载用户的环境变量。
+
+
+## 解决方案
+1. **通过systemd服务文件设置环境变量**
+2. **使用脚本来设置环境并启动服务**
+3. **全局设置环境变量**
+
+### 服务文件中设置环境变量
+
+1. 在 xxx.service 通过 `Environment="MY_VAR_1=VAR_1_VALUE"` 设置变量
+2. 在 xxx.service 通过 `EnvironmentFile=/opt/workspace/my_env` 指定配置文件
+
+**Environment方式**
+
+编辑 systemd 的 service 文件，添加 `Environment=` 形如下：
+```bash
+[Service]
+Environment="MY_VAR_1=VAR_1_VALUE"
+Environment="MY_VAR_2=VAR_2_VALUE"
+```
+上述添加了两个环境变量：`MY_VAR_1=VAR_1_VALUE` 和 `MY_VAR_2=VAR_2_VALUE`
+如需修改环境变量，即修改 service 文件，需要重新 reload， `systemctl daemon-reload`。
+例如，如果我们知道需要的命令路径，可以直接在服务文件中设置`PATH`。
+```bash
+[Service]
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+```
+
+这种方法的优点是直接且易于配置，但缺点是需要硬编码路径，这在路径不固定的情况下可能不理想。
+
+**EnvironmentFile方式**
+编辑 systemd 的 service 文件，添加 `EnvironmentFile=` 如下：
+```bash
+[Service]
+EnvironmentFile=/opt/workspace/env_test.env
+EnvironmentFile=-/opt/workspace/env_test_not_exist.env
+```
+上述指定了两个设置环境变量的文件：/opt/workspace/env_test.env 和 /opt/workspace/env_test_not_exist.env。
+需要注意的是，第二个 EnvironmentFile 的路径前使用-，作用是忽略文件不存在。
+
+创建 /opt/workspace/env_test.env 格式如下
+```bash
+MY_VAR_1=VAR_1_VALUE
+MY_VAR_2=VAR_2_VALUE
+```
+
+### 使用脚本来设置环境并启动服务
+
+另一种方法是编写一个包装脚本，在该脚本中设置所需的环境变量，然后启动服务。这样，当systemd启动服务时，它实际上是启动脚本。
+
+创建一个脚本，例如`start-service.sh`：
+```bash
+#!/bin/bash
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# 启动您的服务
+exec /path/to/your/service
+```
+
+然后在systemd服务文件中引用这个脚本：
+```bash
+[Service]
+ExecStart=/path/to/start-service.sh
+```
+
+### 全局设置环境变量
+
+我们也可以考虑在系统级别设置环境变量，这样所有的服务和用户都可以访问这些变量。例如，可以在`/etc/environment`中设置`PATH`。
+```bash
+PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+```
+这种方法的好处是它为整个系统提供了一致的环境，但可能会影响到所有用户和服务，有时这并不是所期望的。
+
+### 加载/etc/profile合适吗
+
+加载 /etc/profile 来为 systemd 服务设置环境变量是一个可行的解决方案，但需要小心处理。
+**/etc/profile 是为交互式登录shell设计的，而不是为系统服务或非交互式shell环境设计的，是对于用户的SHELL初始化而言。因此，直接在 systemd 服务文件中加载 /etc/profile 可能不会按预期工作，也可能引入不必要的副作用**。
+
+然而，如果我们确实需要从 /etc/profile 中提取特定的环境变量设置，可以创建一个包装脚本，该脚本首先加载 /etc/profile，然后启动我们的服务。这样做可以确保在启动服务之前设置了正确的环境变量。
+
+
+#### 创建包装脚本
+1. **创建脚本**：创建一个脚本，比如 `start-my-service.sh`。
+2. **加载 `/etc/profile`**：在脚本中，首先执行 `source /etc/profile` 以加载环境变量。
+3. **启动服务**：然后，执行服务启动命令。
+
+```bash
+#!/bin/bash
+# 加载/etc/profile
+source /etc/profile
+
+# 启动您的服务
+exec /path/to/your/service
+```
+
+#### 修改 systemd 服务文件
+在systemd 服务文件中，将 `ExecStart` 指向前面的包装脚本。
+```bash
+[Service]
+ExecStart=/path/to/start-my-service.sh
+```
+
+#### 注意事项
+
+- 这种方法可能会比直接在服务文件中设置环境变量更复杂。
+- 需要确保 `/etc/profile` 中的设置适用于我们的服务，并且不会干扰服务的正常运行。
+- 某些在 `/etc/profile` 中设置的环境变量可能是为用户交互式会话设计的，不一定适合在后台服务中使用。
+
+
 # chkconfig和systemctl命令对比
 
-|任务|旧指令|新指令|
-|---|---|---|
-|使某服务自动启动|chkconfig --level 3 httpd on|systemctl enable httpd.service|
-|使某服务不自动启动|chkconfig --level 3 httpd off|systemctl disable httpd.service|
-|检查服务状态|service httpd status|systemctl status httpd.service （服务详细信息） systemctl is-active httpd.service （仅显示是否 Active)|
-|显示所有已启动的服务|chkconfig --list|systemctl list-units --type=service|
-|启动服务|service httpd start|systemctl start httpd.service|
-|停止服务|service httpd stop|systemctl stop httpd.service|
-|重启服务|service httpd restart|systemctl restart httpd.service|
-|重载服务|service httpd reload|systemctl reload httpd.service|
+## systemctl 和 service、chkconfig的关系
+**systemctl命令是系统服务管理器指令，它实际上将 service 和 chkconfig 这两个命令组合到一起。**
+**systemctl是RHEL 7 的服务管理工具中主要的工具，它融合之前service和chkconfig的功能于一体。可以使用它永久性或只在当前会话中启用/禁用服务。**
+**所以systemctl命令是service命令和chkconfig命令的集合和代替。**
+
+例如：使用service启动服务实际上也是调用systemctl命令。
+```c
+[root@localhost ~]# service httpd start
+Redirecting to /bin/systemctl start  httpd.service
+```
+![](attachments/Pasted%20image%2020230627121521.png)
 
 # 参考
 ```c

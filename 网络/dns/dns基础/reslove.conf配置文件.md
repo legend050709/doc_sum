@@ -606,6 +606,7 @@ listening on eth1, link-type EN10MB (Ethernet), capture size 65535 bytes
 
 ### rotate
 为了避免 DNS 查询每次都从第一个 `nameserver` 开始，来均衡各个 `nameserver` 的压力。如果第一个 `nameserver` 失效时，使用这个选项就可以提高解析的效率。
+
 ![](attachments/Pasted%20image%2020231107192403.png)
 
 >注：要注意很多云主机上都有自己分配好的 DNS ，如果此时用了 `rotate` 将会在一定程度上影响效率，因为对于云主机来说，自家的 DNS 肯定比公共的响应要快。

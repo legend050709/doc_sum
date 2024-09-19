@@ -16,6 +16,10 @@
 ### /etc/rsyslog.conf 配置文件格式
 ### /etc/rsyslog.conf 配置文件的内容
 
+## 应用
+### 无限速的syslog日志
+### syslog日志切割
+
 # 参考
 ```c
 https://mp.weixin.qq.com/s/INaTXTixsafjPWVr35b81Q

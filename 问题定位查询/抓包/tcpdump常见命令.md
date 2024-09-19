@@ -420,7 +420,7 @@ tcpdump -nni eth3 -s0 -G 60 -Z root -w %Y_%m%d_%H%M_%S.pcap
 
 ## pcap包的分割和合并
 主要是使用了Linux下的 wireshark  包中的 editcap 与 mergecap 工具。
-具体参考：**Linux下的wireshark工具包**
+具体参考：**Linux下的其他pcap包工具**
 
 ## 指定抓包长度
 我们给tcpdump 加上 -s 参数，指定抓取的每个报文的最大长度，就节省抓包文件的大小。

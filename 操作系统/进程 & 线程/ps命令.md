@@ -301,6 +301,31 @@ Linux ps命令这种字段组合类选项一共15个。其中6个选项用途比
 - 选项 h：选中时可以隐藏输出结果的标题栏信息，在一些自动化脚本中使用此参数可以去除页头信息。
 - 选项 - e：显示所有进程的记录，记住这个参数就可以保证把当前系统的所有进程都输出。需要筛选进程时，可以结合 grep 等文本处理命令实现目的
 
+## 应用场景
+### 查看进程的启动时间
+一个进程启动的精确时间和进程启动后所流逝的时间。
+```bash
+       lstart      STARTED   time the command started.  See also bsdstart, start, start_time, and stime.
+       etime       ELAPSED   elapsed time since the process was started, in the form [[DD-]hh:]mm:ss.
+```
+
+![](attachments/Pasted%20image%2020240903145759.png)
+
+
+查看 nginx 进程启动的精确时间和启动后所流逝的时间：
+```bash
+ps -eo pid,lstart,etime,cmd | grep nginx
+```
+
+![](attachments/Pasted%20image%2020240903145619.png)
+
+```bash
+# ps -eo pid,start,lstart,%cpu,start_time,etime,cmd | head -n 1 && ps -eo pid,start,lstart,%cpu,start_time,etime,cmd  | grep nginx
+```
+
+![](attachments/Pasted%20image%2020240903145954.png)
+
+
 # 常用字段
 
  linux ps 一共最多可以输出 168 个字段，通过 `ps L` 命令可获取详情。通过字段相关选项可以获取符合用途的字段组合。

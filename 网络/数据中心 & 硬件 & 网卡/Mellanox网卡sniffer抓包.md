@@ -30,9 +30,11 @@ ethtool --set-priv-flags eth03 sniffer off
 目前看 就是Mellanox网卡天然支持流量分叉；其他系列的网卡，比如Intel，博通的网卡不是天然的流量分叉，需要配置SO-IOV或者 FDIR 规则来实现流量分叉。
 
 # 注意
+
 正常情况下，通过Mellanox 的 sniffer功能进行tcpdump抓包，可以抓取从该物理网卡发出，以及该物理网卡收到的数据包（并且不影响原始流量到达DPDK应用程序）。
 
 但是如果该Mellanox物理网卡开启了 txq_inline 以及  txq_mpw_en 功能，则很可能是抓取不到发出的数据包的。
+
 ```c
 Mellanox Cx4网卡的 txq_inline 参数的原理详解：
 
@@ -54,7 +56,9 @@ Mellanox Cx4网卡的txq_inline参数用于启用内联数据（Inline Data）�
 即单个PCIe事务中包含了多个包，这样相比每个包的发送都是一个TLP，可以减少TLP的数量。
 因为每个TLP都有各种overhead。减少了TLP的数量，进而提升了PCIe的效率。
 ```
+
 ![](attachments/image%20(9).png)
+
 参考: [dpdk 20.11 mlx5 doc](https://doc.dpdk.org/guides-20.11/nics/mlx5.html)
 ```c
 如下所示：
@@ -75,8 +79,11 @@ DPDK 官方 的 Mellanox Cx4 25G网卡的性能调优：
 
 > 注：**实际在测试过程中，发现使能了 txq_inline=200,txq_mpw_en=1，即使在client发送超过了800B的数据包，在DPVS上通过sniffer抓包，也是没抓取到物理网卡发出去的包的**。
 
+
 # 影响
-开启sniffer，对于网卡的收包性能会存在影响。经过测试DPVS使用sniffer网卡，大概存在40-50%的影响。比如 25G Mellanox网卡，未开启的情况下，256B的数据包的转发能力达到了 23Gbps。 开启了Sniffer之后，可能就只有10Gbps。
+开启sniffer，对于网卡的收包性能会存在影响。经过测试DPVS使用sniffer网卡，大概存在40-50%的影响。
+比如 25G Mellanox网卡，未开启的情况下，256B的数据包的转发能力达到了 23Gbps。 开启了Sniffer之后，可能就只有10Gbps。
+
 ![](attachments/Pasted%20image%2020230911201214.png)
 
 # 补充说明

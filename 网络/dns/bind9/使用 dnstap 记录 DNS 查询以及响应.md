@@ -3,9 +3,10 @@
 # 介绍
 DNSTAP是一种DNS报文日志格式协议，可以被用于诊断DNS服务器上异常解析问题。
 
-
 多款DNS程序，支持了dnstap， 比如 bind9, coredns 等。
 ![](attachments/Pasted%20image%2020240304102335.png)
+
+
 
 ## 前提条件
 `bind-9.11.26-2` 及其以上的版本软件才开始支持`dnstap`。
@@ -31,6 +32,9 @@ configure
 make; make install
 ```
 
+## 作用
+利用dnstap 可以查询 来自dns clinet的dns查询，经过 reslover， 转发到 dns forwarder，从dns forwarder 收到请求，以及响应给 dns client的 报文的流程。
+
 
 # 原理
 
@@ -44,7 +48,8 @@ DNSTap 是一个非常有意思的插件。DNSTap 本身是一种灵活的二进
 3. 上游 DNS 服务器响应 CoreDNS
 4. CoreDNS 响应客户端
 
-这四条报文均可以被 CoreDNS dnstap 插件以该二进制日志的方式投递到远程的 dnstap server 中，dnstap server 可以完成存储、分析、上报异常等动作。dnstap 在发送这些报文的过程中采用了异步 IO 设计，避免了本地磁盘日志写入和后续处理过程中报文反序列化流程，可以实现低性能开销、高效的报文采集和异常诊断流程。
+这四条报文均可以被 CoreDNS dnstap 插件以该二进制日志的方式投递到远程的 dnstap server 中，dnstap server 可以完成存储、分析、上报异常等动作。
+dnstap 在发送这些报文的过程中采用了异步 IO 设计，**避免了本地磁盘日志写入和后续处理过程中报文反序列化流程**，可以实现低性能开销、高效的**报文采集**和异常诊断流程。
 
 那么我们如何在 dnstap server 中实现报文的异常诊断呢？
 dnstap server 是可以解析出原始的 DNS 报文的，从图中的 DNS 报文的 RCODE 状态码字段可以提取出 DNS 解析请求的响应状态码。不同的状态码体现了不同的异常类型，在实际问题排查过程中可以根据下表进行问题定位。

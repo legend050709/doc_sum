@@ -349,10 +349,20 @@ delzone  zone  [class [view]]                   #删除一个zone
 ![](attachments/Pasted%20image%2020240626162241.png)
 
 ```bash
+# 查看本机的某个view的某个zone的SN信息：
 rndc zonestatus blacklist. IN bjzey
 
 blacklist.：zone的名称；
 bjzey: view信息；
+
+
+# 查看 某个server的 的 某个view下某个zone的 SN：
+dig  @127.0.0.1 <zone name> SOA -t SOA  +norecurse +noadflag +aaflag +opcode=notify -y hmac-sha256:<view key name>:<view key>
+
++norecurse: 没有递归flag
++noadflag: noad flag(Non-authenticated data)
++aaflag: Set AA flag in query
++opcode=notify: 设置 opcode 为 notify
 ```
 
 可以利用上诉命令，获取到如下内容：

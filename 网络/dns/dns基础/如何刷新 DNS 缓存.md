@@ -44,6 +44,52 @@ DNS缓存中的记录的TTL是一直在变少的，直到超时，才会再次�
 如果缓存中一个域名的Cname和Cname的A记录的TTL不一致时。
 比如：cname的缓存时间较短，那么缓存中的cname超时之后，再次发起请求，查询不到Cname，就会再次向权威发起请求，不用等待A记录超时才向权威发起请求。
 
+
+## 指定域名(qtype, qname)带有不同TTL值的记录的返回结果
+
+配置如下所示：
+```
+# cat 20_ip_of_domain.out
+server 127.0.0.1
+key hmac-sha256:default_key xxxxx
+zone internal
+update add a.b.t66666rr.dhb.yyyy.internal 10000 A 2.2.2.11
+update add a.b.t66666rr.dhb.yyyy.internal 3000 A 2.2.2.33
+update add a.b.t66666rr.dhb.yyyy.internal 4000 A 2.2.2.44
+update add a.b.t66666rr.dhb.yyyy.internal 500 A 2.2.2.55
+update add a.b.t66666rr.dhb.yyyy.internal 60 A 2.2.2.66
+update add a.b.t66666rr.dhb.yyyy.internal 10000 AAAA 2002::2:2:2:2
+send
+quit
+```
+
+```bash
+# nsupdate < 20_ip_of_domain.out
+
+# dig @127.0.0.1 a.b.t66666rr.dhb.yyyy.internal -y hmac-sha256:default_key:"xxxxx"
+...
+;; ANSWER SECTION:
+a.b.t66666rr.dhb.yyyy.internal. 60 IN A	2.2.2.55
+a.b.t66666rr.dhb.yyyy.internal. 60 IN A	2.2.2.66
+a.b.t66666rr.dhb.yyyy.internal. 60 IN A	2.2.2.44
+a.b.t66666rr.dhb.yyyy.internal. 60 IN A	2.2.2.33
+a.b.t66666rr.dhb.yyyy.internal. 60 IN A	2.2.2.11
+...
+```
+如上所示，并不是每个记录都有一个自己的TTL，**==相同的域名(qtype, qname)的多个A记录响应时存在相同的TTL值==**。
+
+**原因解析**：
+
+正常情况下，一个域名存在多个A记录，每次返回的时候多个A记录的顺序是  round-robin，Clinet一般选择的是第一个A记录，这样可以做到服务在多个A记录上的负载均衡。
+
+多个A记录，返回相同的TTL，这样可以确保在互联网上的某个解析 DNS 服务器（reslover dns）上，多个记录同时被清除缓存，并且在下次请求该 A 记录时可以重新获取多个记录。
+
+如果不这样做，那么较短的记录 TTL 会先被清除，较长的 TTL 记录则会留在缓存中, 这样一来，你在远方的服务就失去了冗余，也无法做到多个IP的负载均衡，这最终会导致不稳定的行为，可能很难进行故障排除。
+
+![](attachments/Pasted%20image%2020240913111701.png)
+
+
+
 # 为什么要刷新 DNS 缓存
 有几个主要原因可能会需要清空 DNS 缓存，这些原因可能与安全、技术问题或数据隐私有关。
 ## 防止 DNS 欺骗

@@ -361,7 +361,7 @@ ethtool -X eth03 default // 恢复为默认配置；
 ![](attachments/Pasted%20image%2020240711110449.png)
 
 ```bash
-(1) 创建
+(1) 创建 queue-group
 ethtool -X eth0 start 2 equeal 8 hfunc toeplitz context new
 
 创建一个新的RSS context：起始的队列是2， 一共8个队列。
@@ -371,7 +371,7 @@ ethtool -X eth0 start 2 equeal 8 hfunc toeplitz context new
 ethtool -x eth0 context 1
 
 
-（3）设置FDIR 匹配规则：
+（3）设置FDIR 匹配规则 导流到 group
 ethtool -N eth0 flow-type tcp6 dst-port 22 context 1
 
 （4）删除 fdir规则和 RSS context 规则：
@@ -531,6 +531,15 @@ ethtool --set-priv-flags enp130s0f0 sniffer on
 ```
  在要监听的以太网接口上设置`sniffer` 标志后，运行tcpdump捕获该接口上的bypass kernel 流量。
 注意：使能Offloaded Traffic Sniffer会降低bypass kernel数据流的速度。
+
+
+DPDK 使用 Mellnaox 网卡，Mellanox 网卡使能 sniffer 特性，那么就可以在Linux中使用 tcpdump 抓到 DPDK程序收到的 数据包。
+
+![](attachments/Pasted%20image%2020240912131700.png)
+
+> 注：低版本的 MLNX_OFED（5.1以下），要用ethtool --set-priv-flags ethxx sniffer on开启dump报文，之后就可以正常用tcpdump抓包了；
+>  对于高版本的 MLNX_OFED，没有sniffer选项了。需要高版本的tcpdump才能抓包。使用方式是./tcpdump -i mlx5_xx -nnn需要将xx替换成自己要抓包的网卡序号。
+
 
 ## 范例
 ### 查看 RX 队列数量

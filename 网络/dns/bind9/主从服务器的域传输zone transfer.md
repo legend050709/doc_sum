@@ -207,12 +207,19 @@ master 服务器会定时(SOA中的 refresh time)向主域名服务器进行查�
 
 
 #### 变更的同步过程
+
+![](attachments/Pasted%20image%2020240826201532.png)
+```bash
+10.16.128.209: master ip;
+10.16.131.18: slave ip;
+```
+
 主从权威的同步过程如下：
 （1）主节点 Zone 配置变更，向从节点发送 NOTIFY 通知（基于UDP）
 （2）从节点返回 NOTIFY Respons
 （3）slave向master发起 SOA 查询（基于UDP），主节点返回 SOA Respons
-（4）从节点对比 SOA Respons 中的序列号是否比自身序列号大，仅当 SOA Respons 序列号大于自身序列号时才发起 `Zone transfer request`，并利用 **TCP 53 端口**进行数据传输。
-（5）主节点收到 `Zone transfer request`，进行响应。
+（4）从节点对比 SOA Respons 中的序列号是否比自身序列号大，仅当 SOA Respons 序列号大于自身序列号时才发起 `Zone transfer request(IXFR)`，并利用 **TCP 53 端口**进行数据传输。
+（5）主节点收到 `Zone transfer request(IXFR)`，进行响应。
 
 因此 Zone 配置变更后必须增大序列号，否则会导致主从节点数据不一致。
 
@@ -1644,13 +1651,13 @@ view "tisg"{
 ## 潜在问题总结
 ![](attachments/Pasted%20image%2020231225161101.png)
 如果存在大量的zone transfer，则可能导致其他的潜在问题：
-1. 当前海量zone的更新在salve生效慢，导致slave继续使用旧数据对外服务。
+1. 当前海量zone的更新在slave生效慢，导致slave继续使用旧数据对外服务。
 2. 当前海量zone的传输，影响后续增量的zone的更新；
 3. zone更新的同时影响对于client的dns请求；
 4. zone的 refresh 或者 transfer 失败，导致master和slave的zone配置不一致。
 
 
-# zone transfer的异常日志
+## zone transfer的异常日志
 日志传输相关的日志类别主要有：
 **general**、**xfer-in** 、 **xfer-out**、**client**、**notify**等。
 
@@ -1661,8 +1668,8 @@ Some messages are logged from category **general** , and others from categorie
 注：**xfer-in** 代表收到xfer，一般代表的是 slave 机器；
 **xfer-out** 代表发送xfer，一般代表的是 master 机器；
 
-## slave中的异常日志
-### connect time out 日志
+### slave中的异常日志
+#### connect time out 日志
 
 ![](attachments/Pasted%20image%2020240408140632.png)
 
@@ -1682,7 +1689,7 @@ Some messages are logged from category **general** , and others from categorie
 
 
 **影响**
-（1）zone refresh失败，知道下次 retry 到期 或 收到 master的 notify 才会再次尝试 zone refresh。
+（1）zone refresh失败，直到下次 retry 到期 或 收到 master的 notify 才会再次尝试 zone refresh。
 
 （2）master 被标记为 `unreachable`, 10min之后或者再次从master 收到 notify，否则不会再次进行 refresh 。
 > 收到master的notify消息，就可以将master 的 `unreachable` 标记去除。
@@ -1695,7 +1702,7 @@ Some messages are logged from category **general** , and others from categorie
 (2) UDP的SOA请求失败，TCP的 Zone transfer 失败。
 
 
-### connection reset日志
+#### connection reset日志
 **日志**
 日志一：
 ```bash
@@ -1723,12 +1730,40 @@ Some messages are logged from category **general** , and others from categorie
 **原因**
 ```bash
 (1) tcp-listen-queue
-
+server的半连接/全连接队列小了。
 
 (2) tcp-clients：tcp 连接个数达到设置的阈值，则出现 no more TCP clients: quota reached。
 使用tcp连接的情况：
 1》client的tcp的dns请求
 2》zone transfer
+```
+
+#### `refresh: retry limit for master  x.x.x.x#53 exceeded`
+
+**范例日志**
+如下所示：
+```text
+26-Aug-2024 17:30:11.454 notify: info: client @0x7f2d4070b390 10.16.128.209#10510/key kwai_base_key: view base: received notify for zone '94.10.in-addr.arpa': TSIG 'kwai_base_key'
+26-Aug-2024 17:30:11.454 general: info: zone 94.10.in-addr.arpa/IN/base: notify from 10.16.128.209#10510: serial 1720604391
+26-Aug-2024 17:30:11.461 notify: info: client @0x7f2d4070b390 10.16.128.209#10510/key kwai_base_key: view base: received notify for zone 'kwaidc.com': TSIG 'kwai_base_key'
+26-Aug-2024 17:30:11.461 general: info: zone kwaidc.com/IN/base: notify from 10.16.128.209#10510: serial 1720608895
+26-Aug-2024 17:30:11.864 general: info: zone 4.10.in-addr.arpa/IN/base: refresh: retry limit for master 10.16.128.209#53 exceeded (source 0.0.0.0#0)
+26-Aug-2024 17:30:11.864 general: info: zone 4.10.in-addr.arpa/IN/base: Transfer started.
+26-Aug-2024 17:30:11.864 xfer-in: info: transfer of '4.10.in-addr.arpa/IN/base' from 10.16.128.209#53: connected using 10.16.131.81#53097 TSIG kwai_base_key
+26-Aug-2024 17:30:11.865 xfer-in: info: transfer of '4.10.in-addr.arpa/IN/base' from 10.16.128.209#53: Transfer status: up to date
+26-Aug-2024 17:30:11.865 xfer-in: info: transfer of '4.10.in-addr.arpa/IN/base' from 10.16.128.209#53: Transfer completed: 0 messages, 1 records, 0 bytes, 0.001 secs (0 bytes/sec)
+```
+
+
+**影响**
+有可能出现master存在配置更新，给slave发送notify，正常情况下，slave需要给master发送SOA(即  zone refresh 动作)，如果SN不一致，则会有后续的向master的IXFR请求。
+但是，由于上诉的`# Zone refresh error: refresh: retry limit for master a.b.c.d#53 exceeded` 错误，有可能是 slave 给 master 发送 soa请求，但是无法收到 soa响应。这样会影响master的zone变更时， master 和 slave 之间的 zone的同步。
+
+**怀疑点**
+可能是 slave 和 master 之间的 refresh(SOA请求) 存在防火墙、存在限速、存在丢包 等。
+
+```bash
+try-tcp-refresh：is a compatibility setting that defaults to yes.  When set, if all prior attempts to obtain the SOA record over UDP have failed, then before giving up, there will be one more try, this time using TCP.  It would be unusual to change this setting.
 ```
 
 ## 其他日志
@@ -1818,7 +1853,7 @@ rndc status 可以查看 tcp连接的个数。
 ### tcp-listen-queue
 
 **含义**
-即： 影响tcp 全连接队列的最大值，用在了 `listen()`函数中了。
+即： 影响tcp ==全连接队列==的最大值，用在了 `listen()`函数中了。
 ```bash
 int listen(int sockfd, int backlog);
 ```
@@ -1844,7 +1879,7 @@ Note that older versions of BIND managed notifies and SOA refresh queries in a s
 
 To ensure that notifies and refreshes were not competing with each other, in BIND versions 9.6-ESV-R11, 9.8.7, 9.9.5 and 9.10.0 we introduced independent queues - both still with serial-query-rate controlling them.
 
-即：在 9.10.0 中，使用不同的queue来分区处理 notifies 和 soa请求(refresh)，  但是这些队列还是使用 serial-query-rate  来控制；
+即：在 9.10.0 中，使用不同的queue来分区处理 notifies 和 soa请求(refresh)，如果slave不再是另外slave的master，也不会出现notify和soa请求公用queue的情况，  但是这些队列还是使用 serial-query-rate  来控制；
 
 ```
 从bind9.11.1之后，使用**serial-query-rate** 、**notify-rate** 、**startup-notify-rate** 来控制。
@@ -1964,7 +1999,7 @@ per-ns:  即 per primary server.  即其实可以配置多个 primary server（�
 ![](attachments/Pasted%20image%2020240409114632.png)
 
 **含义**
-serial-query-rate 控制 slave 给 master 发送 SOA请求(zone refresh)的频率。其控制的是发送zone refresh的 动作的个数，而不是包的个数。比如，一个zone refresh 可能存在多个包，比如没有收到 soa请求的响应，进行了重传，则认为还是一个 动作。
+serial-query-rate 控制 slave 给 master 发送 SOA请求(zone refresh)的频率。其控制的是发送zone refresh的 动作的个数(zone refresh：发送SOA请求，以及后续的IXFR请求)，而不是包的个数。比如，一个zone refresh 可能存在多个包，比如没有收到 soa请求的响应，进行了重传，则认为还是一个 动作。
 在slave进行重启之后，即使已经从zone文件中读取了配置，也会给master发送 大量的soa请求。
 
 
@@ -2013,10 +2048,32 @@ master每隔一段时间，都发送notify。无论zone是否发生变更，都�
 
 **说明**
 通过slave上的监控脚本，监控master和slave的zone是否一致。如果不一致，则slave给自身发送一个notify消息，促使自身给master发送soa请求，进而继续后续的zone 传输来保证同步。
+```bash
+# 本机配置，允许自身给自身发送notify消息：
+options {
+    ######省略了一些配置######
+    allow-notify { 127.0.0.1; };
+    ######省略了一些配置######
+};
+
+# 自身给自身发送notify消息的命令；
+dig  @127.0.0.1 <zone name> SOA -t SOA  +norecurse +noadflag +aaflag +opcode=notify -y hmac-sha256:<view key name>:<view key>
+
++norecurse: 没有递归flag
++noadflag: noad flag(Non-authenticated data)
++aaflag: Set AA flag in query
++opcode=notify: 设置 opcode 为 notify
+
+比如：
+dig  @127.0.0.1 internal SOA +norecurse +noadflag +aaflag +opcode=notify  -y hmac-sha256:default_key:"default_view_key"
+
+```
+
 
 **缺点**
 相比 master的 heartbeat-interval，可以减轻master的压力。
 因为 slave给master发送 soa请求，是各个slave独自发送的，可以大概给打散了。防止master集中收到各个slave的大量的 soa请求。
+
 
 ### zone传输影响slave的dns查询处理
 **背景**

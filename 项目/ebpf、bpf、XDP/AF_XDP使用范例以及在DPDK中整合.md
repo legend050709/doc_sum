@@ -2444,7 +2444,8 @@ https://hal.science/hal-04458274v1/document
 
 ![](attachments/Pasted%20image%2020240719110156.png)
 
-
+注：PMD zero-copy 指的是 AF_XDP umem 空间都 dpdk 用户态 通过 rx_pkt_burst 收到的 rte_mbuf 数组空间 是否存在拷贝。
+至于 DMA 到 Umem 内存是否存在拷贝，则是网卡的驱动是否支持。
 
 ## AF_XDP PMD
 
@@ -2455,11 +2456,159 @@ https://hal.science/hal-04458274v1/document
 ![](attachments/Pasted%20image%2020240710161552.png)
 
 
+### af-xdp pmd 和物理网卡驱动 pmd 的对比
+
+
 ## zero-copy
 
 ![](attachments/Pasted%20image%2020240710161952.png)
 
 ![](attachments/Pasted%20image%2020240710162034.png)
+
+### 涉及zc的地方
+
+使用af-xdp，如果存在拷贝，则在以下的几个地方可能存在拷贝：
+
+**1> DMA将数据送到 Umem 内存**
+如果不支持DMA数据到 umem对应的内存空间，那么就涉及到 DMA 对应的 内存空间到 umem的内存拷贝。
+
+**2> Umem内存到 af-xdp应用程序的 rte_mbuf**
+```c
+// dpdk 封装的 af-xdp pmd的收发包接口
+eth_dev->rx_pkt_burst = eth_af_xdp_rx;    // af_xdp pmd 对应的 vdev 的 收包函数;
+eth_dev->tx_pkt_burst = eth_af_xdp_tx;    // af_xdp pmd 对应的 vdev 的 发包函数;
+
+// af-xdp 的收包实现
+static uint16_t eth_af_xdp_rx(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts)
+{   // af xdp pmd 的 vdev的收包函数，对外暴漏的是 rte_eth_rx_burst, 对于af xdp pmd 而言，rte_eth_rx_burst 内部调用的就是 eth_af_xdp_rx;
+    uint16_t nb_rx;
+
+    if (likely(nb_pkts <= ETH_AF_XDP_RX_BATCH_SIZE))
+        return af_xdp_rx(queue, bufs, nb_pkts);
+
+    /* Split larger batch into smaller batches of size
+     * ETH_AF_XDP_RX_BATCH_SIZE or less.
+     */
+    nb_rx = 0;
+    while (nb_pkts) {
+        uint16_t ret, n;
+
+        n = (uint16_t)RTE_MIN(nb_pkts, ETH_AF_XDP_RX_BATCH_SIZE);
+        ret = af_xdp_rx(queue, &bufs[nb_rx], n);
+        nb_rx = (uint16_t)(nb_rx + ret);
+        nb_pkts = (uint16_t)(nb_pkts - ret);
+        if (ret < n)
+            break;
+    }
+    return nb_rx;
+}
+
+static uint16_t af_xdp_rx(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts)
+{
+#if defined(XDP_UMEM_UNALIGNED_CHUNK_FLAG)
+    return af_xdp_rx_zc(queue, bufs, nb_pkts);
+#else
+    return af_xdp_rx_cp(queue, bufs, nb_pkts);
+#endif
+}
+
+static const struct eth_dev_ops ops = {
+    .dev_start = eth_dev_start,
+    .dev_stop = eth_dev_stop,
+    .dev_close = eth_dev_close,
+    .dev_configure = eth_dev_configure,
+    .dev_infos_get = eth_dev_info,
+    .mtu_set = eth_dev_mtu_set,
+    .promiscuous_enable = eth_dev_promiscuous_enable,
+    .promiscuous_disable = eth_dev_promiscuous_disable,
+    .rx_queue_setup = eth_rx_queue_setup,
+    .tx_queue_setup = eth_tx_queue_setup,
+    .link_update = eth_link_update,
+    .stats_get = eth_stats_get,
+    .stats_reset = eth_stats_reset,
+    .get_monitor_addr = eth_get_monitor_addr,
+};
+
+通过 rx_queue_setup 设置 某个接受队列 使用的 mempool。
+对于物理网卡而言，正常就可以将用户态的 mempool的内存空间，用来网卡DMA到这个内存空间。
+```
+
+**3> af-xdp应用程序的 rte_mbuf 到 应用程序的收发数据空间**
+
+收包：为了零拷贝，应用程序需要获取数据包的tcp payload的地址，在调用完收取完数据包的API(比如：rx_pkt_burst)之后，然后不可以立马释放数据包，只有应用程序完成payload的读取之后，不再访问该地址空间，才可以释放数据包(rte_mbuf)。
+
+发包：为了零拷贝，应用程序将自身数据的地址 赋值给 rte_mbuf的 虚拟地址、物理地址(物理地址是为了 DMA 从该地址取数据到网卡)。在调用完发包的API之后(比如：tx_pkt_burst)之后，不可以立马释放应用程序的自身数据所在的空间。因为，比如可能涉及到超时重传。只有收到了对方发送的ACK包之后，才可以进行释放该数据空间。
+
+
+## af-xdp socket和 tcp socket 的关系
+
+af-xdp中，正常情况下，一个物理网卡的一个队列，对应着一个 af-xdp socket，该 af-xdp socket 只在一个线程中创建。即始终保证每个af-xdp socket的 4个ring（rx/tx/fill/complete）都是SPSC。
+
+如果是bonding模式，则是每个slave物理口的每个队列，在一个worker中都存在一个 af-xdp socket。
+
+一个af-xdp socket有可以对应着许多的tcp socket, 具体就是xdp驱动程序导流到 af-xdp socket之后，在用户态线程中基于报文的信息，查询对应的 tcp socket即可（用户态实现tcp协议栈）。
+
+## 用户态协议栈libtpa使用af-xdp的适配
+### 流分叉
+存在2个地方的流分叉：
+**1> 硬件的 offload 规则**：
+可以在程序中C语言实现类似于ethtool的规则下发（目前内核中应该存在这样的接口，可以通过chatgpt简单查看实现）。
+保证 用户态协议栈关注的流量，肯定可以导流给指定的物理网卡的队列，不会导流到其他的用户态协议栈不关注的队列中去。但是不保证，这些队列只接收了用户态协议栈关注的流量，也有可能存在杂包。
+
+**2> xdp驱动程序的流量分叉**：
+主要是将某个队列中收到的包再次进行流分叉。主要是一些杂包pass给内核。
+比如：某个非用户态协议栈的流量无法匹配到 FDIR规则，被RSS到多个队列；如果刚好是分给了用户态协议栈的队列，那么就需要xdp驱动程序再次过滤出杂包给内核协议栈，其他的包保证都是用户态协议栈的流量。
+
+通过上面的软件以及硬件的分流的结合，保证了用户态协议栈的流量都可以完全的送给用户态协议栈，送往内核的杂包不会送给用户态协议栈。
+
+### tcp 连接的处理流程
+#### TCP 被动连接
+**规则下发**:
+如果是 af-xdp可以使用物理网卡的所有队列，那么：
+（1）下发给硬件网卡的 offload rule
+listen sock的 rule的match 的dip,dport 是 listen local-ip, local-port ；action 可以是 RSS。
+
+（2）下发给xdp驱动程序的信息：
+local-ip 以及 local-port 的map 中添加信息。
+如果是ipv6的话，ipv4和ipv6使用不同的map？
+port使用一个map。
+
+
+**流量匹配过程**：
+收到syn包，RSS到任意的一个物理网卡的队列，xdp驱动程序收到包之后，基于dstport在对应得的map中查找，基于dstip在对应的map中查找，两者都查找到之后，则将流量redirect到这个硬件队列对应的af-xdp socket；
+对应的worker收到syn包之后，通过 slow path查到对应的 listen sock（此时的收包worker可能和创建listen sock的 worker不同）。然后回复syn-ack，设置  new 新建的 sock 为 syn-recv 状态。后续的同样五元组的三次握手的ack继续被RSS到这个队列，慢路径可以继续查找到 new 的 sock。
+
+
+**如果 af-xdp 只能使用部分的 网卡队列**
+那么给网卡硬件下发rule就不可以是RSS action，此时下发给硬件的 rule的 action 就是 worker 的idx（即queue idx）。
+收到syn，匹配到 offload rule, 将syn包 分流到 指定的  listen port 所在的 worker。
+这样，就存在一个问题，只有一个worker线程处理所有的 该  listen port 上的所有的连接。
+
+**libtpa内worker之间软rss的可能性**
+Q：此时是否适合通过 soft rss 将  listen port 所在的 worker 接受的syn包再次 rss 到多个其他 的 worekr呢？这个会不会影响 af-xdp的 ring的SPSC操作？
+A：可能也是可以的。需要看下比如释放 rte_mbuf是否需要更改af-xdp的ring中的信息
+
+
+#### TCP 主动连接
+
+**规则下发**:
+主动连接，知道了 remote_ip, remote_port, local_ip（本机ip），需要分配 local_port，这个 local-port 属于一个port-block块（一个块还有64个port），每个线程的 port-block不重叠。
+
+（1）下发给硬件网卡的 offload rule
+rule 的 match的 dstip为本机ip，dstport = block的start_port，dstport-mask = 63, action = worker id， 即queue id。
+
+> 注：libtpa保证了每个worker分配的port-block 不重叠。一个port-block大概有64个port，都只会分配给一个worker。下发给硬件的规则，都是指定了queue id，因此就不涉及到 libtpa能否使用全部的硬件队列还是部分的硬件队列。
+
+（2）下发给xdp驱动程序的信息：
+向ip以及port的map中添加：
+ port map中添加 port_block 的start_port 
+ ip map中添加 本机的ip。
+额外加一个port-mask的map呢？
+如果是被动连接，port-mask就是0xffff. 
+如果是主动连接，那么port-mask应该就是63.
+
+**流量匹配过程**：
+主队对外 发起连接，发送syn，收到syn-ack，首先匹配到 网卡的硬件的 offload 规则，导流到指定的 队列；然后经过xdp驱动程序，基于dip查找map，基于dport & port-mask 的结果，在 port-map中 查找。两者都可以查找到的流量 redirect 到 该硬件队列对应的 af-xdp socket中。
 
 
 # DPDK AF_XDP 调优
@@ -2716,10 +2865,23 @@ rx_xsk_xdp_redirect : 0
 ```
 
 ### 物理网卡的 imiss or rx_out_of_buffer
-### af-xdp的 RX-missed
-### af-xdp的 TX-errors
-### af-xdp的 RX-packets 和 Tx-packets
 
+### af-xdp的 RX-missed 和 TX-errors
+
+testpmd使用af-xdp，然后 show port stats all 时，可能出现imiss，以及tx-error。那么他们是什么呢？
+
+需要注意的是， af-xdp pmd是虚拟口，是在软件模拟的硬件的统计，即imiss、tx-error，其实是af-xdp中的rx/tx/fil/compelte 以及 umem 没有可用实体时候的统计。并不是 之前物理网络队列的 ring-buffer 满了的imiss等统计。
+
+imiss: 即xdp驱动程序从rx ring中获取一个描述符失败的情况；
+一般出现在：rx-ring满了的情况，比如 af-xdp应用程序取的慢，xdp驱动程序放的快的情况。
+
+tx-error: 即 af-xdp应用程序发包时，无法从 tx-ring中获取的情况。
+一般出现在：tx-ring 满了情况。
+
+![](attachments/image%20(13).png)
+
+### af-xdp的 RX-packets 和 Tx-packets
+首先这2个值都是累计值，应该是af-xdp应用程序成功接收，以及成功发送的数据包的累计值。因此，RX-packets 是不包含 Rx-imissed的。
 
 
 # 相关问题
@@ -2741,9 +2903,15 @@ xdp驱动程序 redirct 到 用户态程序的 umem的 是  raw frame帧，对�
 **（2）可能的拷贝二**：
 
 ### rte_mbuf 中的metedata无法利用硬件特性
+
+![](attachments/Pasted%20image%2020240904210833.png)
+
 dpdk收包都是从网卡设备dev收包，对于一些虚拟的pmd，比如，af-xdp pmd 是通过创建虚拟的 vdev设备，然后将各种 af-xdp的处理封装为 dev的 ops。
 
-由于 需要将 umem中收到的数据 拷贝封装到 rte_mbuf中，此时应该无法利用硬件的 offload 特性 以及 GRO 特性，因此 rte_mbuf 中的一些元数据 比如 ol_flags （offload features） 就无法赋值。
+由于 需要将 umem中收到的数据 拷贝封装到 rte_mbuf中，此时应该无法利用硬件的 offload 特性 以及 GRO 特性，因此 rte_mbuf 中的一些元数据 比如 ol_flags （offload features）以及  rss/fdir hash 就无法赋值。
+我的理解是，rte_mbuf 只能被PMD看到 并赋值其元数据，如果DPDK使用的是物理网卡，物理网卡可以 利用 offload 能力为 rte_mbuf 的 元数据赋值；但是如果dpdk 使用 af-xdp pmd，此时物理网卡应该看不到 rte_mbuf，只能看到 data。
+
+**注: AF_XDP PMD 不支持 RX/TX Offload & Link Status Interrupt.**
 
 
 ## 如何理解af-xdp驱动代码只在收包的时候执行？

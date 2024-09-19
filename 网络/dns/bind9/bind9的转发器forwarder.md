@@ -60,15 +60,36 @@ IT 和安全团队可以遵循一些最佳实践，以防止发生无效授权�
 
 ![](attachments/Pasted%20image%2020240702203239.png)
 
-lame server 的 判定：
+lame server（糟糕的服务器） 的 判定：
 （1）referral 过程中（即迭代过程中），某个NS无法给出下一步迭代的信息，则该NS被标记为 lame server。
 
 （2）迭代过程中，reslover和某个NS之间的网络出现问题，这个NS可能被标记为 Lame。
 （3）迭代过程中，某个NS负责该zone，但是没配置要查询的域名，则这个NS被标记为 Lame。
 
-在 BIND中，以上的几种情况，只有情况1才被标记为 Lame Server。在Bind 中，lame nameservers 和 valid nameservers 是分开缓存的，lame nameservers 的缓存被用来避免reslover 在一段时间内（`lame-ttl`）向这些Server进行后续的同类型域名(Qname/Type)的查询。
 
-> 注：`lame-ttl` 在 9.11中默认值为600s，在 9.18版本中，默认中为0，且无法配置为其他的非0的值。这个是因为 lame server 的 缓存存在bug，非0值，可能导致  lame server 的 缓存无限制的增长，导致clinet查询经过reslover时查询时间过长进而超时。如下所示，通过设置 `lame-ttl = 0` 来规避该问题。
+在 BIND中，以上的几种情况，只有情况1才被标记为 Lame Server。
+
+因此，lame server 指的是 迭代查询过程中，不可以提供下一步信息的NS。lame server 能否用来标识  forwarder 呢?? 应该也是可以标识的。如下所示：
+
+![](attachments/Pasted%20image%2020240905121159.png)
+
+###  lame cache
+
+在Bind 中，lame nameservers 和 valid nameservers 是分开缓存的，lame nameservers 的缓存被用来避免reslover 在一段时间内（`lame-ttl`）向这些Server进行后续的同类型域名(Qname/Type)的查询。
+
+lame cache的作用是：如果权威服务器以特定的破损方式（比如 time out 或者 ServeFail ）响应解析器(reslover)的查询，则来自于客户端的对于同一 <QNAME, QTYPE> 的查询，在可配置的时间内不会触发对同一forwarder的进一步查询。
+通过在 named.conf 中将 lame-ttl 选项设置为大于 0 的值来启用 lame cache。默认配置中该选项设置为 lame-ttl 600，这意味着脆弱缓存默认是启用的。
+
+> 理解：我的理解是：lame cache 以 <QNAME, QTYPE> 为key，以 server-ip 为value；在对于某个域名的查询 选择 forwarder的时候，可能会先排除掉 lame cache中该域名对应的 sever。
+
+
+#### lame cache 的问题
+
+![](attachments/Pasted%20image%2020240906165334.png)
+
+![](attachments/Pasted%20image%2020240906165915.png)
+
+> 注：`lame-ttl` 在 9.11.4中默认值为600s，在 9.18.3版本中，默认中为0，且无法配置为其他的非0的值。这个是因为 lame server 的 缓存存在bug，非0值，可能导致  lame server 的 缓存无限制的增长，导致clinet查询经过reslover时查询时间过长进而超时。如下所示，通过设置 `lame-ttl = 0` 来规避该问题。
 
 ![](attachments/Pasted%20image%2020240703102516.png)
 
@@ -93,7 +114,7 @@ channel query-errors_log {
 	severity dynamic;
 };
 
-# 注：severity 最好不要设置为 dynamic，设置为 可能更好呢。
+# 注：severity 最好不要设置为 dynamic，设置为 xxx 可能更好呢。
 
 ```
 
@@ -144,13 +165,55 @@ channel default_debug {
    
 ```
 
+## 选择更优的 forwarder
 
-# `SRTT` DNS服务器选择算法
+### 问题
+经常会遇到这种问题：
+在 bind9 的配置文件中配置了 多个 forwarder，防止单点问题。常见的forwarder有 ：
+```bash
+223.5.5.5:   阿里的public pod;
+119.29.29.29: 腾讯的public pod;
+```
+### 原因
+但是不同的 forwarder 对于不同的域名其服务质量不一样。比如，在实际的线上环境中，发现 `119.29.29.29`的服务质量并不太好，比如，对于阿里系的域名的服务质量就不太好，也有可能是对于某个域名存在限速配置，导致服务质量不好。
+目前看，223.5.5.5 和 223.6.6.6 对于dns请求还没有限速，后期就会有限速。
+
+![](attachments/Pasted%20image%2020240906174501.png)
+
+
+### 思路
+对于这种问题的常见的解决思路：
+1》不同的 forwarder 设置不同的优先级、权重
+2》forwarder 设置 active-backup模式
+3》针对特定的zone，设置特定的forwarder
+4》某个forwarder对于某个zone查询失败，则设置标记，且存在一定的缓存时间
+5》提前预取 + cache中过期的记录继续保存并返回
+> 提前预取：比如某个cache 中的记录即将过期，还有1s就过期，此时收到一个client的查询，那么解析器继续向转发器发送请求，提前预取更新cache中的记录。
+> 过期记录继续缓存：某个过期的记录可以继续返回给client，然后向forwarder发送请求更新。
+
+注：在bind9的实现功能中，目前看着好像只有 3和5 有这样的 功能，其他的目前看着还没有该功能。
+至于设置标记，应该就是lame-ttl 这个，但是看着新版本9.18及其以上，甚至当下最新的 9.21.0 也是强制设置 lame-ttl = 0.
+
+### 解决
+
+#### 转发区域
+参见：下面的forward zone
+#### 预取+老化记录缓存与返回
+参考：stale cache 。
+
+
+# 多个forwarder的选择策略
+
+## `SRTT` DNS服务器选择算法
 大家都知道BIND在作为递归服务器时在向权威DNS请求时会使用优选策略. 
 无论是 多个`forwarder`的选择，还是某个域存在多个 NS服务器时NS服务器的选择，都使用 `SRTT` 算法。
 下面介绍下这个优选策略。
 ![](attachments/Pasted%20image%2020240313160646.png)
 
+
+BIND 使用了一种名为“平滑往返时间”（SRTT）的机制。基本上，它会选择响应最快的服务器，并优先使用该服务器。BIND 会定期查询其他服务器，以更新 SRTT 值，这样可以让服务器“赶上”，但也降低了较慢服务器成为主要转发器的机会。**这也意味着，无论如何，您的一小部分查询将会使用到最慢的服务器**。
+
+如果某个服务器没有响应，BIND 会尝试另一个服务器，并且未响应服务器的 SRTT 值会被递增。
 
 
 ## BIND9.8及之前版本的SRTT策略
@@ -300,7 +363,7 @@ SRTT从设计上来说即兼顾了DNS异常依赖的优选以及容灾措施，�
 # 配置
 当设置了`forwarders`转发器后，所有非本域的和在缓存中无法找到的域名查询都将转发到设置的`DNS`转发器上，由DNS转发器来完成解析工作并做缓存。
 
-在`/etc/named.conf`中配置，可以在`options`中做全局配置，在`zone`语句中可以为特定`zone`设置特定的`forwarder`。
+在`/etc/named.conf`中配置，可以在`options`中做全局配置，**在`zone`语句中可以为特定`zone`设置特定的`forwarder`**。
 
 ## 全局配置
 
@@ -318,18 +381,26 @@ options {
 # forwarders：全局配置的转发器
 ```
 
-## 转发区
+## 转发区 forward zone
+
+![](attachments/Pasted%20image%2020240905115231.png)
+
+type为 forward 的 zone 来改变options中配置的 全局转发forwarder 的行为（比如，从“优先转发（forward first）”更改为“仅转发（forward only）”，或反之）。
 
 **针对特定域名配置的转发器**：
 ```bash
-zone zone_name [class] {
-    type forward;
-    [ forward (only|first) ; ]
-    [ forwarders { [ ip_addr [port ip_port] ; ... ] }; ]
-    [ delegation-only yes_or_no ; ]
-};
+在 某个view的 zone配置中，设置如下：
+
+zone <string> [ <class> ] {
+		type forward;
+		forward ( first | only );
+		forwarders [ port <integer> ] [ tls <string> ] { ( <ipv4_address> | <ipv6_address> ) [ port <integer> ] [ tls <string> ]; ... };
+	};
 ```
-在BIND8.2以后引入了一个新的特性：**转发区（forward zone）**，它允许把DNS配置成只有查找特定域名的时候才使用转发器。（ BIND 9从9.1.0才开始有转发区功能 ）。
+
+在BIND8.2以后引入了一个新的特性：**转发区（forward zone）**，它允许把DNS配置成只有查找特定域名的时候才使用转发器。
+
+（ BIND 9从9.1.0才开始有转发区功能 ）。
 例如，你可以使你的服务器将所有对 kevin.cn 结尾的域名查询都转发给 kevin.cn 的两台名字服务器：
 ```bash
 zone "kevin.cn" {  

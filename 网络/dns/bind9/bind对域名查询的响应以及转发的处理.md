@@ -62,11 +62,30 @@ fetch-quota-params
 
 clients-per-query： 设置 对于特定外网域名（指定 type，name）的请求的 client的数量的**初始最大值**，该值是自我调节(self-tune)的，而 max-clients-per-query 是 可以自我调节到的最大值。clients-per-query 的 每次调节都会打印日志。
 
-clients-per-query 的 值反应了在特定的域名从转发到外网到获取解析之前的这段时间内，dns迭代服务器收到了多少个这个域名的请求。
+**clients-per-query 的 值反应了在特定的域名从转发到外网到获取解析之前的这段时间内，dns迭代服务器收到了多少个这个域名的请求**。
 
 如果在获取特定域名的解析结果之前，client 对于这个特定域名的查询请求数量超过了 设定的 `clients-per-query`，那么 named 就认为是在查询一个没有响应的 zone 下的域名，因此会 丢弃掉额外对于这个特定域名的查询。
 在丢弃了额外的查询之后，named又收到了这个特定域名的响应，其就会增加 估计值，即增加 `clients-per-query`（每次增加 5），最大只能到  `max-clients-per-query`。
 如果  `clients-per-query` 20 分钟后保持不变，则降低估计值（每次减少1），最低值是最初设置的默认的10（即 减低 到 10 之后， `clients-per-query` 不会再继续减少）。
+
+```bash
+12-Sep-2024 14:18:38.837 resolver: notice: clients-per-query decreased to 12
+12-Sep-2024 14:38:38.881 resolver: notice: clients-per-query decreased to 11
+12-Sep-2024 14:54:28.842 resolver: notice: clients-per-query increased to 16
+12-Sep-2024 14:54:38.823 resolver: notice: clients-per-query increased to 21
+12-Sep-2024 14:54:48.404 resolver: notice: clients-per-query increased to 26
+12-Sep-2024 14:54:49.436 resolver: notice: clients-per-query increased to 31
+12-Sep-2024 14:54:55.402 resolver: notice: clients-per-query increased to 36
+12-Sep-2024 14:54:58.912 resolver: notice: clients-per-query increased to 41
+12-Sep-2024 14:55:05.928 resolver: notice: clients-per-query increased to 46
+12-Sep-2024 14:55:08.498 resolver: notice: clients-per-query increased to 51
+12-Sep-2024 14:55:18.908 resolver: notice: clients-per-query increased to 56
+12-Sep-2024 14:55:20.194 resolver: notice: clients-per-query increased to 61
+12-Sep-2024 14:55:21.840 resolver: notice: clients-per-query increased to 66
+12-Sep-2024 14:55:28.865 resolver: notice: clients-per-query increased to 71
+12-Sep-2024 14:55:50.858 resolver: notice: clients-per-query increased to 76
+12-Sep-2024 15:15:50.858 resolver: notice: clients-per-query decreased to 75
+```
 
 ![](attachments/Pasted%20image%2020240607193053.png)
 
@@ -87,11 +106,25 @@ clients-per-query 的 值反应了在特定的域名从转发到外网到获取�
 
 参考：[# How does clients-per-query work](https://kb.isc.org/docs/aa-00463)
 
+#### 默认配置
+
+![](attachments/Pasted%20image%2020240912175239.png)
+
+`clients-per-query`的起始默认值为10，是自我调节的。
+`max-clients-per-query`的默认值为100，
+
+#### 异常统计计数
+
+![](attachments/Pasted%20image%2020240912174659.png)
+
+如上所示，超过了设置的 clients-per-query，会存在 quryDROP 统计计数。
+
+
 ### clients-per-query 和 recursive-clients 的区别
 
 ![](attachments/Pasted%20image%2020240607200037.png)
 
-recursive-clients: 限制的是 迭代服务器向外转发的 外网查询的个数。如果多个client 并发请求相同的外网域名，那么只对外发送一个迭代请求，占用一个 recursive-clients 限额。
+recursive-clients: **限制的是 迭代服务器向外转发的 外网查询的个数。如果多个client 并发请求相同的外网域名，那么只对外发送一个迭代请求，占用一个 recursive-clients 限额**。
 
 
 max-clients-per-query 和 clients-per-query 限制的是对于特定的外网域名(同样的name，同样的type的查询) 的递归查询的并发client的请求个数，而 recursive-clients 针对的 迭代服务器向 外网转发的 任意外网域名的的并发请求个数。
@@ -290,16 +323,19 @@ options {
 ![](attachments/Pasted%20image%2020240618144445.png)
 
 
-
-
 ```bash
-
+（0）serve-stale
+标识在 解析失败后是否使用 stale answer.
+开启：rndc serve-stale on
 
 （1）stale-cache-enable: 
 缓存过期的cache记录。默认为no。
 
 （2）stale-answer-enable： 
-指定时间（stale-answer-client-timeout）内，收不到转发器的响应时，返回cache中过期的记录；可通过  rndc serve-stale on/off 开启和关闭；默认值为no；
+指定时间（stale-answer-client-timeout）内，收不到转发器的响应时，返回cache中过期的记录；
+
+动态配置：可通过  rndc serve-stale on/off 开启和关闭；默认值为no；
+静态配置：在 配置文件中通过使用 stale-answer-enable
 
 （3）stale-answer-client-timeout：
 收到clinet的请求，如果在 stale cache中查询到记录，依然会向转发器转发请求，在 指定时间（stale-answer-client-timeout）内获取到转发器的响应，则更新缓存中的记录，否则则向client回复 stale-cache 中的记录。推荐值为1.8s；如果该值配置为0，则立刻向client返回过期的缓存记录，同时也会向转发器发送请求。
@@ -323,6 +359,12 @@ SERVFAIL 响应的 缓存时间。如果设置为0，则不缓存  SERVFAIL 结�
 ```
 
 ![](attachments/Pasted%20image%2020240618144435.png)
+
+### 问题
+
+![](attachments/Pasted%20image%2020240912192838.png)
+
+参见：[# Problem with stale-answer-enable true and clients-per-query increased](https://gitlab.isc.org/isc-projects/bind9/-/issues/4074)
 
 
 
