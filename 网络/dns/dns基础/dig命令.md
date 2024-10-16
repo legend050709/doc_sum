@@ -117,10 +117,10 @@ Where:  domain	  is in the Domain Name System
 ### `dig +trace www.baidu.com`流程解析
 
 ### 其他
-![](attachments/Pasted%20image%2020240116203202.png)
+![](../attachments/Pasted%20image%2020240116203202.png)
 # 常见方法
 ## dig命名查询的内容解析
-![](attachments/Pasted%20image%2020231108103907.png)
+![](../attachments/Pasted%20image%2020231108103907.png)
 
 例如，解析longshuai.com域中的主机www的A记录。
 ```bash
@@ -153,7 +153,7 @@ dnsserver.longshuai.com. 21600  IN      A       172.16.10.15
 
 在结果中：
 **第一行**
-![](attachments/Pasted%20image%2020240116204408.png)
+![](../attachments/Pasted%20image%2020240116204408.png)
 dig的版本以及查询的目标。
 如果不希望在输出中包括这些行，请使用+nocmd参数。 （此参数必须是 dig 命令后的第一个参数。）比如：
 ```bash
@@ -165,7 +165,7 @@ dig www.baidu.com +nocmd
 **HEADER部分**
 `HEADER`部分显示从被请求机构（DNS 服务器）收到响应的详细技术信息。
 标题显示由 dig 执行操作的「操作码」和「操作状态」的「标头」，上述示例中的「操作状态」是NOERROR，这意味着被请求的 DNS 服务器可以没有任何阻碍地提供查询。
-![](attachments/Pasted%20image%2020240116204417.png)
+![](../attachments/Pasted%20image%2020240116204417.png)
 > 可以用+comments参数隐藏本部分输出，使用此参数时还会禁用一些其它部分输出的标题。
 
 **OPT PSEUDOSECTION部分**
@@ -175,7 +175,7 @@ dig www.baidu.com +nocmd
 - Flags未指定标志时为空
 - UDPUDP 数据包大小
 
-![](attachments/Pasted%20image%2020240116204733.png)
+![](../attachments/Pasted%20image%2020240116204733.png)
 > 要隐藏此部分输出可以使用+noedns参数。
 
 **QUESTION SECTION**
@@ -184,7 +184,7 @@ dig www.baidu.com +nocmd
 - 第二列是查询的类型（IN 表示互联网）
 - 第三列指定了记录类型（如果未指定则默查询 A 记录）
 
-![](attachments/Pasted%20image%2020240116204827.png)
+![](../attachments/Pasted%20image%2020240116204827.png)
 > 可以使用+noquestion参数禁用此部分输出。
 
 **ANSWER SECTION**
@@ -203,7 +203,7 @@ dig www.baidu.com +nocmd
 - `WHEN`命令运行的时间戳
 - `MSG SIZE rcvd`从 DNS 服务器收到的回复大小
 
-![](attachments/Pasted%20image%2020240116205004.png)
+![](../attachments/Pasted%20image%2020240116205004.png)
 > 可以使用+nostats参数禁用此部分输出。
 
 **其他**
@@ -255,13 +255,13 @@ dig 域名 +[no]nsid
 ```
 
 范例如下所示：
-![](attachments/Pasted%20image%2020240115193615.png)
+![](../attachments/Pasted%20image%2020240115193615.png)
 
 报文解析如下所示：
 请求报文：
-![](attachments/Pasted%20image%2020240115193703.png)
+![](../attachments/Pasted%20image%2020240115193703.png)
 响应报文：
-![](attachments/Pasted%20image%2020240115193743.png)
+![](../attachments/Pasted%20image%2020240115193743.png)
 
 
 ## 设置查询的超时时间和重试次数
@@ -305,10 +305,10 @@ dig -x IP 实际发出的请求 为 逆序的IP + in-addr.arpa。
 dig www.baidu.com +tcp
 ```
 **查询报文如下**：
-![](attachments/Pasted%20image%2020240112145330.png)
+![](../attachments/Pasted%20image%2020240112145330.png)
 
 **响应报文如下**：
-![](attachments/Pasted%20image%2020240112145420.png)
+![](../attachments/Pasted%20image%2020240112145420.png)
 ## `+norecursive`非递归查询
 `+[no]recursive`：查询中的 RD（要求递归）位设置。在缺省情况下设置该位，也就是说 dig 正常情形下发送递归查询。当使用查询选项 `+nssearch` 或 `+trace` 时，递归自动禁用。
 ## `+trace`从根域开始逐级追踪解析过程
@@ -472,25 +472,25 @@ reading from file sysgeek_trace.pcap, link-type EN10MB (Ethernet)
 ```
 
 **1>查询根的NS以及对应的A记录**
-![](attachments/Pasted%20image%2020240116200038.png)
+![](../attachments/Pasted%20image%2020240116200038.png)
 
 **2>查询一级域的NS以及对应的A记录**
-![](attachments/Pasted%20image%2020240116200248.png)
+![](../attachments/Pasted%20image%2020240116200248.png)
 
 **3>查询二级域的NS以及对应的A记录**
-![](attachments/Pasted%20image%2020240116200603.png)
+![](../attachments/Pasted%20image%2020240116200603.png)
 
 **4>查询权威记录**
-![](attachments/Pasted%20image%2020240116200754.png)
+![](../attachments/Pasted%20image%2020240116200754.png)
 >注：为什么此中查询到Cname之后就结束了，并没有后续的A记录的查询。如下所示。
 > 访问别名只会返回规范名，不会返回规范名的A记录？？？
 
-![](attachments/Pasted%20image%2020240116200920.png)
+![](../attachments/Pasted%20image%2020240116200920.png)
 ## 查询某个域名的zone的SOA记录
 ```bash
 dig -t SOA 域名
 ```
-![](attachments/Pasted%20image%2020240116203517.png)
+![](../attachments/Pasted%20image%2020240116203517.png)
 
 ## 输出简化
 ```bash

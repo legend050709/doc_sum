@@ -45,6 +45,37 @@ echo "1" > /proc/sys/net/ipv4/conf/all/arp_ignore
 echo "0" > /proc/sys/net/ipv4/conf/all/rp_filter
 echo "0" > /proc/sys/net/ipv4/conf/tunl0/rp_filter
 ```
+
+
+设置 tunnel 的arp信息。
+**arp_announce**：
+如果client ip和  RS IP 同网段，那么在RS上回包时，在VIP--->CIP的响应包发出时，需要获取到 CIP的arp表项，并且RS上大概率没有CIP的arp表项「大概率存在RIP的gw的arp表项」。如果是 arp_announce=0，那么会发送vip-->CIP的arp请求，此时也应该无法收到arp响应，因为arp相应的dst为VIP，会被LB收到。
+设置 arp_announce，就可以在发送ARP请求的时候，使用RSip，那么就可以收到arp响应了。
+
+**arp_ignore**:
+arp_ignore 参数的作用是控制系统在收到外部的 ARP 请求时，是否要返回 ARP 响应。参数常用到的有 0，1，2 三个值，3 ~ 8 较少用到：
+0：响应任意网卡上接收到的对本机IP地址的 ARP 请求（包括环回网卡上的地址），而不管该目的 IP 是否在接收网卡上。
+1：只响应目的IP地址为接收网卡上的本地地址的 ARP 请求。
+2：只响应目的IP地址为接收网卡上的本地地址的 ARP 请求，并且发送 ARP 请求的源IP必须和接收网卡同网段。
+
+```bash
+#!/usr/bin/env bash
+# 设置当前的配置
+echo 2 > /proc/sys/net/ipv4/conf/all/arp_announce
+echo 1 > /proc/sys/net/ipv4/conf/all/arp_ignore
+
+# 设置sysctl.conf或sysctl.d下的配置，防止机器重启失效
+if [[ -f /etc/sysctl.d/arp_announce.conf ]]; then
+	echo "net.ipv4.conf.all.arp_announce = 2" > /etc/sysctl.d/arp_announce.conf
+else
+	sed -i '/^net\.ipv4\.conf\.all\.arp_announce/d' /etc/sysctl.conf
+  echo "net.ipv4.conf.all.arp_announce = 2" >> /etc/sysctl.conf
+fi
+
+sed -i '/^net\.ipv4\.conf\.all\.arp_ignore/d' /etc/sysctl.conf
+echo "net.ipv4.conf.all.arp_ignore = 1" >> /etc/sysctl.conf
+```
+
 #### arp_ignore
 **背景**
 默认 情况下，`/proc/sys/net/ipv4/conf/all/arp_ignore = 0`，即：响应任意网卡上接收到的对本机IP地址的 ARP 请求（包括环回网卡上的地址），而不管该目的 IP 是否在接收网卡上。

@@ -2,12 +2,22 @@
 ```
 # SOC
 ## 介绍
+**SoC**： 片上系统，集成了CPU核，内存单元，以及其他外设。亦即集成了许多不同模块的芯片。
+
 ## 特点
 ### SOC的执行
 SoC的执行：是由CPU控制的，即程序是由执行单元顺序执行的。
 
 ## 应用
 ### 英伟达的DPU之BlueField
+
+![](attachments/Pasted%20image%2020240924135107.png)
+
+参考：[NVIDIA BlueField DPU BSP v4.6.0](https://docs.nvidia.com/networking/display/bluefielddpuosv460/functional+diagram)
+
+如上所示，NVIDIA的 bule-field2的 DPU就是一个SOC，包含了 转发芯片，ARM核，以及片上的内存。
+
+
 # ASIC
 ## 介绍
 ## 特点

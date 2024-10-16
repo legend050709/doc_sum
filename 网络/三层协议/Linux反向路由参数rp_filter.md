@@ -79,6 +79,21 @@ ip_nonlocal_bind： 是否运行服务绑定一个本机不存在的IP地址。
 ### 使用场景
 有些服务需要依赖一个VIP才可以启动，但是可能正常情况下，此VIP并不在本机上，当VIP漂移到本机上时才存在；但是服务又需要提前启动。例如，haproxy、nginx 等代理需要绑定VIP时。
 
+#### arp欺骗
+
+比如，arping 使用一个本机不存在的ip 进行arp欺骗，将二层流量引流到本机。
+```bash
+echo 1 > /proc/sys/net/ipv4/ip_nonlocal_bind
+
+arping -s 192.21.8.133 192.21.8.133 -I eth03 -A
+
+如上所示，使用本机不存在的IP发送免费ARP。
+
+-s: 指定sip
+-I： 设置发送接口
+-A: 发送的是arp响应包
+
+```
 
 ## ip_forward 和 forwarding
 linux服务器经常被用来提供防火墙、路由器、NAT、负载均衡等功能。

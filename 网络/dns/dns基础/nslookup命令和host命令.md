@@ -9,11 +9,11 @@ host [参数] [主机名或IP] [server]
 ```
 
 常用参数：
-![](attachments/Pasted%20image%2020240112143745.png)
+![](../attachments/Pasted%20image%2020240112143745.png)
 
 ## 范例
-![](attachments/Pasted%20image%2020240112143847.png)
-![](attachments/Pasted%20image%2020240112143850.png)
+![](../attachments/Pasted%20image%2020240112143847.png)
+![](../attachments/Pasted%20image%2020240112143850.png)
 # nslookup
 ## 介绍
 nslookup属于`bind-utils`包下一个命令
@@ -26,10 +26,10 @@ nslookup [参数] [域名]
 ```
 
 ## 范例
-![](attachments/Pasted%20image%2020240112143959.png)
+![](../attachments/Pasted%20image%2020240112143959.png)
 
-![](attachments/Pasted%20image%2020240112144040.png)
-![](attachments/Pasted%20image%2020240112144047.png)
+![](../attachments/Pasted%20image%2020240112144040.png)
+![](../attachments/Pasted%20image%2020240112144047.png)
 # 参考
 ```c
 

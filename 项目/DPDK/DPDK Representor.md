@@ -87,10 +87,12 @@ VF接口就是个实打实的接口了，可以把它理解为一个轻量的PCI
 # VF Representor
 其实最开始我是觉得它应该归属到SR-IOV的范畴，但是之所以拆出来讲，是随着了解的深入，我觉得它更多算是SR-IOV的副产物，**它并不算是SR-IOV这个硬件体系下的概念，只是各家软件系统在为了对齐标准的网络栈因而创造的概念**。
 
-VF Representor（后文简称VF Rep，VF代表），在DPDK中也叫做Port Representor，是DPDK在管理PF时由DPDK PMD驱动创建的接口，本质是个ethdev。
+VF Representor（后文简称VF Rep，VF代表），在DPDK中也叫做**Port Representor**，是DPDK在管理PF时由DPDK PMD驱动创建的接口，本质是个 ethdev（即DPDK中的接口）。
+
 **在大多数情况下，switching rule（在DPDK中叫做traffic steering rule）是没有办法预先确定的，因此快速路径必须要慢速路径告知，通过rte_flow接口将整一条flow下发到快速路径，才能完成所谓的硬件加速**。
 
-那么实现这样的协同处理，网卡就必须要提供switch rule的other end选项，能够**将失配规则的流通过某一种方式送回软件处理**，这就是Representor诞生的意义，翻译成中文就是“代表”，也就可以理解成VF转不动的包，就让VF代表来，还是挺有意思的。
+那么实现这样的协同处理，网卡就必须要提供switch rule的other end选项，能够**将失配规则的流通过某一种方式送回软件处理**，这就是Representor诞生的意义，翻译成中文就是“代表”，也就可以理解成VF转不动的包(硬件中没有规则匹配)，就让VF代表来，还是挺有意思的。
+> 注：我的理解是，某个口收到了一个包，在硬件中（e-switch）中没有规则匹配，就将包送到这个口的 resp,  这个口的 resp 被 DPDK 应用程序接管。
 
 在有的智能网卡中，这个VF Rep也会被驱动支持，在Linux中呈现单独的接口，其目的和DPDK中的一样，都是为了能够实现标准的网络栈，能够通过VF Rep上送fallback的流量而已。
 
@@ -114,7 +116,8 @@ VF Representor（后文简称VF Rep，VF代表），在DPDK中也叫做Port Repr
 
 ```
 
-起初，我以为网卡会为每个数据包在头端中添加额外的字段来标识这个数据包来自于哪个VF，随着分析DPDK的代码发现，其实并没有这些逻辑，网卡本身只需要匹配switching rule然后丢到合适的队列就好了，失配的就成other end，丢到VF Rep的队列，等慢速路径的PMD拿走处理就好，整个环节似乎没有理由再去添加专用的头端域。
+起初，我以为网卡会为每个数据包在头端中添加额外的字段来标识这个数据包来自于哪个VF，随着分析DPDK的代码发现，其实并没有这些逻辑；
+> **网卡本身只需要匹配switching rule然后丢到合适的队列就好了，失配的就成other end，丢到VF Rep的队列，等慢速路径的PMD拿走处理就好，整个环节似乎没有理由再去添加专用的头端域**。
 
 在这个过程中，网卡非常依赖大量的队列，然而这些队列又都是通过DMA映射的物理内存，考虑到VF与VF间的隔离，我相信这里投递的disc，其内部的data也一定是从一个buf中复制到了另外的buf，应该不太可能能全部ZeroCpoy（吧？）。
 
@@ -151,11 +154,59 @@ VF Representor（后文简称VF Rep，VF代表），在DPDK中也叫做Port Repr
 
 ## Representor 的理解
 
+### 背景
+
+参考：[switchdev_sriov_offloads.](https://netdevconf.info//1.2/slides/oct6/04_gerlitz_efraim_introduction_to_switchdev_sriov_offloads.pdf)
+
+SRIOV 模型，需要单独的管理
+
+![](attachments/Pasted%20image%2020240924162356.png)
+
+
+**存在的问题：**  
+
+![](attachments/Pasted%20image%2020240924162654.png)
+
+1. 无论kernel状态下还是dpdk情况下，SRIOV 口没有通过bridge直接进行管理，而是直接嵌入了eswitch 。
+2. eswitch只能基于mac/vlan转发，无法基于其他的比如四元组等规则转发。
+
+
+### VF 的 representor 口的路径
+存在 VF representor 时：
+（1）**VF 的 representor口控制路径**
+![](attachments/Pasted%20image%2020240924162736.png)
+
+
+（2）**VF representor口数据路径**
+![](attachments/Pasted%20image%2020240924162839.png)
+
+
+（3）**VF representor口作用**
+![](attachments/Pasted%20image%2020240924163243.png)
+
+每个net-device或者eth_dev都 represents 了 eswitch上的一个vport，包括了vf口和uplink口。
+数据报文可以通过host上的VF representor口上送到host中并到达vm（慢速路径）；
+vm中发送的报文，通过VF representor口发送到host上。
+
+representor net-device 挂接到现有的switch结构上（Bridge, TC, OVS等），并且通过现有接口，就可以控制VF的数据流量。
+> 比如可以通过管理VF representor的链接状态管理VF的链接状态，可以通过VF representor查看VF的统计。
+
+
+### VF representor 的 实现
+
+在kernel中是一个net-device ，每个vendor都有自己的实现方式，所有VF representor 都在 e-switch management port 上运行，使用硬件队列queue pair，有rule 进行pair设定。
+
+
+
+### 理解
+
 在DPDK中，representor是一种抽象的设备，用于表示 物理或虚拟设备的逻辑端口。
 在DPDK中，使用者可以通过抽象的representor来访问和操作底层设备，而不需要关心底层硬件细节。这些底层设备可以是物理网卡、虚拟机或者容器等。
 
-dpdk中的 vf representor，简单理解，是**给控制面准备的vf的分身**。
-DPDK representor提供了一套统一的接口和抽象，使得开发者可以方便地管理和操作底层设备的逻辑端口。通过DPDK representor，开发者可以进行逻辑端口的配置、状态查询、数据包收发等操作，从而满足不同应用场景的需求。
+比如 OVS-DPDK + VF直通虚机场景：
+在Host上其实是无法看到这个虚机的接口的；给虚机的数据包到达物理口之后，由于是首包，在物理口上不存在这个VF对应的  offload 规则，那么无法直接导流给虚机对应的VF，那么首包就会交给 `OVS-DPDK`处理，`OVS-DPDK`基于规则进行处理（比如修改报文）+ 转发，转发到`vf-representor`口 ，然后虚机就会收到包。
+`OVS-DPDK`绑定的就是`vf-representor`, 即 VF的代表，也就是无法在硬件匹配到规则，流量就会交给OVS-DPDK处理，基于规则转发给 `vf-representor`，对应的虚机收到包。然后需要给物理网卡硬件下发规则，该流后续的包直接匹配规则，导流给对应的VF，到达某个虚机即可。
+
 
 
 ## Representor 的 优点
@@ -163,7 +214,9 @@ DPDK representor提供了一套统一的接口和抽象，使得开发者可以�
 
 1.数据平面性能得到显著提升：绕过vSwitch的处理，减少了数据包在处理链路上的延迟，提高了数据传输的速度和效率。
 
-2.减少CPU开销：将数据平面的处理工作从主机CPU转移到专用的网卡硬件上，释放了CPU的计算资源，提高了主机的整体性能。3.简化虚拟网卡的操作：虚拟机直接连接到物理网卡上，不再需要复杂的虚拟化网络配置，降低了管理成本和配置复杂度。
+2.减少CPU开销：将数据平面的处理工作从主机CPU转移到专用的网卡硬件上，释放了CPU的计算资源，提高了主机的整体性能。
+
+3.简化虚拟网卡的操作：虚拟机直接连接到物理网卡上，不再需要复杂的虚拟化网络配置，降低了管理成本和配置复杂度。
 
 然而，需要注意的是，使用DPDK Representor需要支持SR—IOV技术的硬件和驱动，同时还需要进行适当的配置和优化。此外，DPDKRepresentor在一些特定场景下可能会降低虚拟化环境的灵活性和可管理性。因此，在实际应用中，需要综合考虑系统需求和实际情况，权衡利弊。
 

@@ -64,7 +64,7 @@ RRSet 是 Resource Record Set 的简称，在这个资源集里面包含了在�
 **RRSIG(RRset的数字签名)**
 获得的数字签名将被存储到 RRSIG（resource record signature） 类型的 DNS 记录中。
 RRSIG资源记录存储的是对资源记录集合（RRSets）的数字签名。如下：
-![](attachments/Pasted%20image%2020240108144615.png)
+![](../attachments/Pasted%20image%2020240108144615.png)
 
 #### DNSKEY资源记录
 **DNSKEY(RR签名的公钥)**
@@ -72,10 +72,10 @@ RRSIG资源记录存储的是对资源记录集合（RRSets）的数字签名。
 ZSK 的公钥将被存储在一个叫做 DNSKEY 的新类型 DNS 记录中。当 DNS Resolver 查询到包含 RRSIG 的记录时，就可以访问 Authorized NS（权威服务器） 的 DNSKEY 记录，从中获取 ZSK 的公钥，用以验证签名。
 
 DNSKEY资源记录存储的是公开密钥，下面是一个DNSKEY的资源记录的例子：
-![](attachments/Pasted%20image%2020240108144747.png)
+![](../attachments/Pasted%20image%2020240108144747.png)
 
 下面是当我查询 init.blog 域的 MX 记录时给出的响应，可以看到，相同类型的 MX 资源组成的 RRSet 被签名，并随响应一同返回了 RRSIG：
-![](attachments/Pasted%20image%2020240108120104.png)
+![](../attachments/Pasted%20image%2020240108120104.png)
 
 ### Key-Singing Key
 在实践中，权威域的管理员通常用两个密钥配合完成对区数据的签名。一个是Zone-Signing Key(ZSK)，另一个是Key-Signing Key(KSK)。**ZSK用于签名区数据，而KSK用于对ZSK进行签名。**
@@ -86,7 +86,7 @@ DNSKEY资源记录存储的是公开密钥，下面是一个DNSKEY的资源记�
 为了防止ZSK被修改，DNSSEC还使用了一对叫做**Key-Signing Key**（KSK）的公私钥对。KSK 的私钥被用来对在 DNSKEY 记录中的 ZSK 公钥进行签名，并单独为 DNSKEY 记录创建一个 RRSIG。在DNSKEY记录中，会同时包含ZSK和KSK。所以，在一个zone中，除DNSKEY记录外，其他的记录均由ZSK签名。
 
 下面是一个完整的 DNSKEY 查询响应，可以看到包含了 KSK 以及 ZSK：
-![](attachments/Pasted%20image%2020240108142612.png)
+![](../attachments/Pasted%20image%2020240108142612.png)
 
 ### DS 记录 和 DNSSEC信任链
 如果攻击者完全伪造了一套 KSK 与 ZSK，那我们的验证手段就依然失效了吗？
@@ -94,7 +94,7 @@ DNSKEY资源记录存储的是公开密钥，下面是一个DNSKEY的资源记�
 这里 DNSSEC 引入了最后一个概念，**DS** 记录（Delegation Signer）：
 DS（Delegation Signer）记录存储DNSKEY的hash值，用于验证DNSKEY的真实性，从而建立一个信任链。
 DNSKEY存储在资源记录所有者所在的权威域的区文件中，但是DS记录存储在上级权威域名服务器中，比如`paypal.com`的`DS RR`存储在`.com`的区中。
-![](attachments/Pasted%20image%2020240108145942.png)
+![](../attachments/Pasted%20image%2020240108145942.png)
 通过每一级的 DS 记录，就可以对下一级 DNSKEY 的 RRSIG 进行验证，这样就可以构成一条信任链。
 
 
@@ -109,7 +109,7 @@ ZSK用于签名区数据，而KSK用于对ZSK进行签名。这样做的好处�
 
 
 ## DNSSEC的原理
-![](attachments/Pasted%20image%2020240108150041.png)
+![](../attachments/Pasted%20image%2020240108150041.png)
 
 ### 范例
 我们自上而下的重新梳理一遍 DNSSEC 的工作流程，假设我们需要获取 init.blog 的 A 记录地址，并且该域已经启用了 DNSSEC：
@@ -123,7 +123,7 @@ ZSK用于签名区数据，而KSK用于对ZSK进行签名。这样做的好处�
 注：在实际的递归查询过程中，该过程是自顶向下的，这里为了方便理解，我将整个过程倒过来叙述。
 
 当我们从根域名开始查询 init.blog 的 A 记录响应时，就可以发现除根域、本域之外的任意父域都包含了子域的 DS Record，这样就可以形成一个信任链：
-![](attachments/Pasted%20image%2020240108143934.png)
+![](../attachments/Pasted%20image%2020240108143934.png)
 
 ## DNSSEC的优缺点
 ### 优点
@@ -218,6 +218,17 @@ DoH 目前还只有 RFC 的草案，尚未正式发布。
 
 
 ## DoT 和 DoH 对比
+
+近几年对DNS解析防劫持的要求越来越高， 关于dns加密查询，主要分为DOT， DOH 两种方式，含义如下：
+```bash
+DOT: DNS over TLS
+DOH: DNS over HTTPS
+```
+
+**两者的目的一致，都是为了加密DNS的请求内容，防止伪造、劫持攻击**。
+区别在于 HTTPS是TLS上的HTTP协议， 更通用些。
+
+
 DoH默认端口是443，即HTTPS的默认端口（DNS over TLS有自己的端口853）
 
 DoT 因为协议栈少了一层，性能会比 DoH 更好。但是前面也说了，域名查询的频度是比较低的，而且还可以利用客户端软件的 DNS 缓存，进一步减少域名查询的频度。所以 DoT 虽然性能更好，但优势不明显。

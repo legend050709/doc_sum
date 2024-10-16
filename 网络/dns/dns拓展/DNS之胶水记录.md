@@ -5,9 +5,9 @@
 ## 背景
 ### 循环依赖范例
 我们使用 `dig` 命令来查询`weread.qq.com` 域名。
-![](attachments/Pasted%20image%2020240123110356.png)
+![](../attachments/Pasted%20image%2020240123110356.png)
 整个解析过程大致的流程图如下，接下来我们对整个流程涉及到的步骤做详细解释。
-![](attachments/Pasted%20image%2020240123110404.png)
+![](../attachments/Pasted%20image%2020240123110404.png)
 
 详细流程如下所示：
 1. 客户端先去指定的 DNS 服务器（`8.8.8.8`，如果不指定，则使用系统配置的localdns）获取根服务器，`8.8.8.8`返回根服务器的域名列表（`a.root-servers.net`、`b.root-servers.net`等13个域名）。上图中的 1、2 步骤分别是获取根服务器的请求和响应。
@@ -21,10 +21,10 @@
 
 #### 解决死循环的胶水记录
 我们先看一下第 6 步中，`c.gtld-servers.net` 的响应内容。
-![](attachments/Pasted%20image%2020240123111258.png)
+![](../attachments/Pasted%20image%2020240123111258.png)
 
 从抓包中可以看到响应中还返回了`Additional records`，这些响应是对`Authoritative nameservers` 中的域名做补充，主要是补充了这些域名的IP地址，这样在第 7 步发起之前，就不需要再次解析 `ns4.qq.com` 的获取IP，从而避免了死循环的发生，而这些记录就是胶水记录。
-![](attachments/Pasted%20image%2020240123111347.png)
+![](../attachments/Pasted%20image%2020240123111347.png)
 
 ### 自建DNS时域名的注册
 在讲这个概念之前，我们先理清一下域名的注册。
@@ -48,7 +48,7 @@
 这样，即使我们自有DNS服务器还未生效，外界也知道`ns.example.com.cn`指向的地址是`111.1.1.1`。胶水记录的名字也由此而来：相当于是用胶水把这个关联关系粘起来。
 
 ## 定义
-![](attachments/Pasted%20image%2020240123103914.png)
+![](../attachments/Pasted%20image%2020240123103914.png)
 胶水记录的英文叫`Glue Record`。当前，大多数企业使用云解析，无需自建DNS服务器，很少会碰到这个概念。但如果你是自建DNS，那就必须掌握这个概念。
 胶水记录是指在为域名配置NS记录时，**如果使用本zone下的域名来做解析服务器，必须在上级域指示出这个服务器对应的ip，如果使用其他地方的，则只要保证那个域名可以正常解析就好了。**
 
@@ -346,7 +346,7 @@ laona.dev.              10800   IN      NS      f1g1ns2.dnspod.net.
 ```shell
 dig @m.gtld-servers.net. qq.com
 ```
-![](attachments/Pasted%20image%2020240123112813.png)
+![](../attachments/Pasted%20image%2020240123112813.png)
 
 因为胶水记录是由上一级 DNS 服务器返回的，因此 `dig` 时使用的 DNS 服务器需要是上一级的。`qq.com` 的上一级是注册局是`m.gtld-servers.net`，因此需要指定注册局的 DNS 服务器地址`m.gtld-servers.net`。
 

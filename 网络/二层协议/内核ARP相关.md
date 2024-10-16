@@ -195,11 +195,27 @@ arp_ignore=1开销小，可实现各网卡响应各自ip的arp请求。 arp_filt
 
 
 ## arp_notify
+
+![](attachments/Pasted%20image%2020241010115859.png)
+
 ARP 通知链操作
 - 0：不做任何操作    
 - 1：当设备up/down或硬件地址(mac地址)改变时自动产生一个 ARP 请求。
 
 ## arp_accept
+
+![](attachments/Pasted%20image%2020241010115835.png)
+
+默认对不在ARP表中的IP地址发出的APR包的处理方式  
+0：不在ARP表中创建对应IP地址的表项  
+1：在ARP表中创建对应IP地址的表项
+
+比如：收到`GARP`时是否创建`ARP`缓存, `0`不创建, `1`表示创建；
+(如果`ARP`缓存已经包含了`GARP`包的IP地址, 不管是否开启该选项, 都会更新`ARP`缓存）
+
+比如，如果本机没有发送ARP请求，但是收到了一个ARP响应，是否基于arp响应中的sip和smac添加或者更新表项。
+
+
 
 ## proxy_arp
 

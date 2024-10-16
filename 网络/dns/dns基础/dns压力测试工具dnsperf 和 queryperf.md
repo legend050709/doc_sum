@@ -55,7 +55,7 @@ dnsperf -s 10.3.3.3 -d ./dns.test -n 1000000 -S 1 -Q 100000  -T 16 -c 1000 -t 1
 
 **结果说明**：
 
-![](attachments/Pasted%20image%2020240126103844.png)
+![](../attachments/Pasted%20image%2020240126103844.png)
 
 标准输出中:
 ```bash
@@ -92,16 +92,16 @@ dnsperf -d domain.txt -s 192.168.2.10 -l 120
 #### 性能分析
 下图是压测结果，一个`dnsperf`进程压测**缓存应答(缓存解析性能)**，在关闭bind日志的情况下是7.8万 QPS左右。
 
-![](attachments/Pasted%20image%2020240126103844.png)
+![](../attachments/Pasted%20image%2020240126103844.png)
 
 
 下图是压测过程中DNS服务器的top查看截图，
 可见1个CPU线程已经完全占用，但并没有使用其他的CPU。
 ==原因是`dnsperf`压测的时候，它发出来的请求源IP是固定的，源端口也是固定==，那么`bind`软件接到这个请求后就只能`HASH`到固定的1个`CPU`上。
-![](attachments/Pasted%20image%2020240126104012.png)
+![](../attachments/Pasted%20image%2020240126104012.png)
 
 下面是同时启动2个`dnsperf`压测时DNS服务器的`top`查看截图，可见这个时候有2个CPU被完全占用，`named`的进程使用CPU是`200%`。
-![](attachments/Pasted%20image%2020240126104200.png)
+![](../attachments/Pasted%20image%2020240126104200.png)
 
 ### 测试动态更新的性能
 

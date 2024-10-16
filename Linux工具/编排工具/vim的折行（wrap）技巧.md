@@ -30,6 +30,7 @@ cat /proc/interrupts > /tmp/interrupts
 ```
 
 ![](attachments/Pasted%20image%2020230810133703.png)
+
 ## 方法二: less -S 不换行显示
 cat输出时，一行往往过长而换行显示，就会显得很乱。
 加上“**-S**”参数可以强制不换行显示，及屏幕的一行只显示文件的一行，当屏幕不够时可以按左右键来左右移动显示内容。

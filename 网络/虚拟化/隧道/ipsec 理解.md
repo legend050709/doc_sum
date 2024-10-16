@@ -206,6 +206,80 @@ IPsec报头与原始IP分组中的IP报头是一致的，原始IP报文中的协
 ## 两种模式适用场景
 隧道模式和传输模式相比，更加具有优势，建议重点看隧道模式。
 
+# IPsec 感兴趣的流
+参考：[# IPSEC的实现方式](https://zhuanlan.zhihu.com/p/416612361)
+## 概述
+在IPSEC通信中涉及到一个重要方面，那就是如何定义要保护的数据流（又称为感兴趣流）。这不仅涉及到IPSEC最终要保护哪部分数据，还关系到IPSEC的实现方式，因此有必要把感兴趣流的定义方式进行详细说明。
+
+## 感兴趣流的定义方式
+
+“感兴趣流”指的是哪些数据可以进入IPsec隧道进行传输，哪些数据不能进入IPsec隧道传输。在现有的IPsec 实现过程中，最常用的实现方式有两种：**“基于ACL”**、**“基于虚拟隧道接口”**。下面我们对这两中方式进行详细的介绍。
+
+### 基于ACL(访问控制)方式
+
+#### 原理
+​ 我们知道，高级IP ACL可以基于源/目的IP地址、源/目的端口、协议等信息对数据报文进行过滤， 而这IPsec正好可以使用ACL的方式来确定哪些数据报文需要隧道保护。
+
+​ 当使用当采用ACL的方式来定义“感兴趣流”时，手动方式和IKE协商方式建立的IPsec 隧道是由高级ACL来指定需要保护的数据流范围，从众多报文中过滤出需要进行IPsec隧道的报文。ACL规则允许的报文(permit)将被保护；ACL规则拒绝的报文(deny)将不会被保护。
+
+​ 因为这里的ACL为**高级IP ACL**, 所以可以明确的指定数据报文中的源/目的IP地址、**源/目的端口**、协议类型等参数。但是这里的源、目的IP地址指数据发送方和接收方的主机IP地址，通常是两端内部网络中的私网地址（内网地址）。
+
+
+#### 优点
+可以利用ACL配置的灵活性，根据IP地址、端口信息、协议类型(TCP, UDP, ICMP, IP等)等信息对报文进行过滤从而指定灵活的IPSec保护方法。
+
+###  基于虚拟隧道接口方式
+#### 原理
+
+基于虚拟隧道接口来定义需要保护的数据流，首先需要在两端的IPsec设备**创建一个虚拟的隧道接口Tunnel**, 然后通过配置以该Tunnel接口为出接口的静态路由，以此来将到达某一个子网的数据流量通过IPSec隧道进行转发。 
+
+#### 特点
+​ IPsec虚拟隧道接口是一种三层逻辑接口，采用这种方式时，**所有路由到IPsec虚拟隧道接口上的报文都将进行IPSec保护，而不再对数据流类型进行细分**。
+
+#### 优点
+**（1）简化配置**
+只需要将IPSec保护的数据流引到虚拟隧道接口上，无需再通过ACL来定义加解密流量的特征。这使得IPSec的配置不会受到网络规划的影响，增加了网络规划的可扩展性，降低了网络维护的成本。
+
+**（2）较小开销**
+在保护远程接入用户流量的组网中，只需要在IPSec虚拟隧道接口处进行IPSec报文封装，与IPSec over GRE 或者 IPSec over L2TP方式的隧道封装相比，较少了封装层次，节省了带宽。
+
+**（3）支持范围更广**
+因为Tunnel接口为点对点类型的接口，因此以该接口为出接口的静态路由是可以不指定下一跳IP地址的。
+点对点IPSec虚拟隧道接口可以支持==动态路由协议==，同时还可以支持对==组播==流量的报文。
+
+另外，IPSec虚拟隧道接口在实施过程中明确的区分出“加密前”和“加密后”两个阶段，用户可以根据不同的组网需求灵活的选择其他业务(例如NAT, QoS)实施的阶段。 例如用户希望对加密前的报文进行QoS，则可以在IPSec虚拟隧道接口上应用QoS策略；如果希望对IPSec封装后的报文应用QoS，则可以在报文发送的物理接口上应用QoS策略。
+
+
+## 虚拟隧道接口的详细处理
+
+​ IPSec 虚拟隧道接口(即Tunnel接口)，是一种支持路由的三层逻辑接口，它可以支持动态路由协议、所有路由到IPSec虚拟隧道接口的报文都将进行IPSec保护，同时可以支持对组播流量的保护。
+
+ 下面简单介绍下IPSec隧道两端的虚拟隧道接口上报文处理流程：
+
+### IPSec虚拟隧道接口上封装和加密流程
+
+用户数据到达IPSec设备(如路由器)，需要被IPSec保护的报文(感兴趣流)会被转发到IPSec虚拟隧道接口上进行封装和加密。如下图所示：
+![](attachments/Pasted%20image%2020240928221955.png)
+
+#### 流程
+
+- （1）Router将从入接口上收到的明文IP报文后发送到转发模块进行处理
+- （2）转发模块依据路由表查询结果进行转发，如果为相应的感兴趣流，会被引到IPSec虚拟隧道接口上进行AH或ESP封装;
+- （3）IPSec虚拟隧道接口完成对明文的封装处理后，根据建立的IPSec SA安全策略再将封装后的报文进行加密，然后再将加密后的报文交由转发模块进行处理
+- （4）转发模块通过第二次转发查询后，将已经封装完毕的加密IPSec报文**通过相应的物理接口发送出去，最终密文到达对端的IPSec设备的虚拟隧道接口上**。
+
+###  IPSec虚拟隧道接口上解封装和解密流程
+
+数据经过IPSec隧道传输到达对端IPSec设备时，需要对数据包进行解密、解封装处理。它的处理流程如下所示:
+
+![](attachments/Pasted%20image%2020240928222130.png)
+
+#### 流程
+- （1）Router将从入接口上收到的加密的IP报文发送到转发模块进行处理
+- （2）转发模块识别到此密文的目的IP地址为本设备的隧道接口IP地址，且IP报文协议号为ESP、AH、UDP时，会将此报文发送到相应的虚拟隧道接口上进行解密和解封装处理;
+- （3）IPSec虚拟隧道接口完成对密文的解封装处理后，再将解封装后的报文交由转发模块进行处理
+- （4）转发模块通过第二次转发查询后，将IP明文通过相应的物理接口发送出去，最终明文到达相应的主机上。
+
 # IPSEC建立阶段
 ## IKE协商阶段
 ### IKE的产生背景
@@ -242,10 +316,7 @@ IPsec密钥更新期间是否丢包取决于密钥更新的处理方式和时机
 
 # IPsec 报文
 
-# Linux下的IPsec的配置以及测试
-# 其他
-## IPSec协商为什么要分为2个阶段
-## TSL 和 IPSec对比
+# TLS/SSL 和 IPSec对比
 IPSec和SSL都是用于网络安全的协议，它们的作用都是确保通信过程中数据的保密性、完整性和源认证。下面是它们的区别：
 
 **1. 工作层次不同**：
@@ -266,6 +337,54 @@ IPSec通常用于企业内部网络的安全通信，例如跨部门的通信或
 
 综上所述，IPSec和SSL都是用于网络安全的协议，它们各有优缺点，应根据实际情况选择使用。
 
+# wireshark 解密IPSec加密后的报文
+## 概述
+对于加密的网络报文，wireshark由于缺乏密钥信息导致无法解析。幸运的时，新版的wireshark工具在存在密钥信息的情况下，提供了解析加密报文的功能。
+
+## 查看
+### 正常抓取报文
+正常抓取的报文，wireshark无法解密。
+![](attachments/Pasted%20image%2020240928215539.png)
+
+
+### 使用wireshark解密加密报文
+（1）选中加密报文，右键选择 “**协议首选项**”
+
+![](attachments/Pasted%20image%2020240928215645.png)
+
+（2）选择报文所属协议
+因为我的是IPsec协商报文，采用的IKEv2协议，因此我使用了“IKEv2 Decryption Table…”，效果图如下：
+
+![](attachments/Pasted%20image%2020240928215714.png)
+
+然后根据需求填充上自己的密钥参数信息：
+
+![](attachments/Pasted%20image%2020240928215749.png)
+
+
+（3）密钥的来源
+
+我使用的是Ipsec报文，他的密钥再协商过程中产生，因此我将pluto协商过程中的密钥信息记录下来，然后根据需求依次填充到wireshark中即可。密钥信息如下:
+```text
+------------------------------------------------------------------
+ KEY length: skd_bytes=16  ska_bytes=16  ske_bytes=24  skp_bytes=16 
+ SK_d:  ce 21 6c af  e3 6c 34 93  0f fc 86 21  e8 bf e7 22
+ SK_ai:  6ebfc1b41d90e0ea50a5124b75657839
+ SK_ar:  26a3a2f1fa014ec600a9d38b43ad1ec0
+ SK_ei:  a91e5a67fdb998421fd9d31f46055be40e49aa5ba2468b00
+ SK_er:  8aef98774979227dd7f46a747adcfab19128a68cb35c8b1d
+ SK_pi:  93 04 47 7e  45 16 c6 2b  84 a6 37 bb  0f 03 f1 7e
+ SK_pr:  da 9f 5b 47  4e b4 25 3e  47 dd 3e e8  82 c5 7f e1
+
+ ICOOKIE:  ffd40d496cdd6ba6
+ RCOOKIE:  265f96692df83750
+ ------------------------------------------------------------------
+```
+
+(4) 解密后的报文
+
+![](attachments/Pasted%20image%2020240928215926.png)
+
 # 实验范例
 # 参考
 ```c
@@ -273,10 +392,11 @@ IPSec通常用于企业内部网络的安全通信，例如跨部门的通信或
 https://zhuanlan.zhihu.com/p/532300682
 
 # IPSec介绍
-https://blog.csdn.net/NEUChords/article/details/92968314
+https://blog.csdn.net/hhd1988/article/details/123185101
 
 # SSL/TLS 与 IPSec 对比
 https://zhuanlan.zhihu.com/p/416587205
+https://www.zhihu.com/column/c_1379525410078650368 (ipsec 系列专栏；)
 
 # 图解 IPSec
 https://mp.weixin.qq.com/s/Ln2bJOwTSlArQ53tExwtEg
@@ -286,16 +406,12 @@ https://www.cnblogs.com/ivanlee717/p/16830126.html
 # IPSec IKE协商（图解协议+包分析）
 https://blog.csdn.net/qq_42183414/article/details/116026527
 
-# XFRM -- IPsec协议的内核实现框架
-https://switch-router.gitee.io/blog/IPsec-xfrm/
-https://switch-router.gitee.io/blog/IPsec-nat-t/
-
 # IPSec VPN 原理介绍
 https://xie.infoq.cn/article/14ff7b185426f5fe01d1e2497
 
-# 图解ipsec
-https://mp.weixin.qq.com/s/Ln2bJOwTSlArQ53tExwtEg
-
 # 官方 （图不错）
 http://www.unixwiz.net/techtips/iguide-ipsec.html
+
+# ipsec与openswan （系统文章）
+https://blog.csdn.net/bytxl/category_1680023.html
 ```

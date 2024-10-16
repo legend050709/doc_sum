@@ -11,7 +11,7 @@
 ```c
 man 5 resolv.conf
 ```
-![](attachments/Pasted%20image%2020231107170900.png)
+![](../attachments/Pasted%20image%2020231107170900.png)
 ## nameserver
 这个参数会指定系统使用的 DNS 的 IP 地址，在生产环境中，经常会看到 `/etc/resolv.conf` 中配置了一个或多个 `nameserver` 。
 
@@ -176,7 +176,7 @@ listening on eth1, link-type EN10MB (Ethernet), capture size 65535 bytes
 于是**不存在**这种情况：虽然第一个 nameserver 已经超时了，系统在向第二个 `nameserver` 请求解析时，就会有可能这时第一个 `nameserver` 将解析结果返回给系统了。
 ## domain
 ### 特性
-![](attachments/Pasted%20image%2020231107173004.png)
+![](../attachments/Pasted%20image%2020231107173004.png)
 当请求解析的内容不包含有域时，不管请求的内容是不是合法的，系统都直接填充 `domain` 参数，并且最后还会添加一个根域（即.）。
 当请求解析的内容包含有域时，不管请求的内容是不是合法的，系统都会先直接解析而不是直接填充 `domain` 参数。
 
@@ -264,7 +264,7 @@ listening on eth1, link-type EN10MB (Ethernet), capture size 65535 bytes
 ```
 ## search
 search的说明如下，此中的search应该是包含了 domain的特性。
-![](attachments/Pasted%20image%2020231107174422.png)
+![](../attachments/Pasted%20image%2020231107174422.png)
 
 ### 特性
 指定一组域名（用空格分割），当请求解析的内容仅写出主机名（没有点），就依次添加search里的每一项依次组成FQDN（完全合格域名）来查询，直到匹配完所有列出的域名，给出最终的结果。
@@ -607,7 +607,7 @@ listening on eth1, link-type EN10MB (Ethernet), capture size 65535 bytes
 ### rotate
 为了避免 DNS 查询每次都从第一个 `nameserver` 开始，来均衡各个 `nameserver` 的压力。如果第一个 `nameserver` 失效时，使用这个选项就可以提高解析的效率。
 
-![](attachments/Pasted%20image%2020231107192403.png)
+![](../attachments/Pasted%20image%2020231107192403.png)
 
 >注：要注意很多云主机上都有自己分配好的 DNS ，如果此时用了 `rotate` 将会在一定程度上影响效率，因为对于云主机来说，自家的 DNS 肯定比公共的响应要快。
 
@@ -642,13 +642,13 @@ listening on eth1, link-type EN10MB (Ethernet), capture size 65535 bytes
 ```
 
 ### edns0
-![](attachments/Pasted%20image%2020231107193204.png)
+![](../attachments/Pasted%20image%2020231107193204.png)
 修改原来的 DNS 协议，让其可以传输超过 512 字节的报文限制，但是必须客户端和服务端同时支持 edns0 才能使用该协议。glibc 2.6 及以上可以支持。
 
 ### single-request-reopen
-![](attachments/Pasted%20image%2020231107192906.png)
+![](../attachments/Pasted%20image%2020231107192906.png)
 自从 CentOS6 之后，准确的说是 glibc >= 2.9 之后，Linux 系统 DNS 解析器（resolver）会使用相同的 socket 去请求 A(for IPv4) & AAAA(for IPv6) 记录解析。比如在存在防火墙等机制的网络环境中，同样源目的 ip，同样源目的 port，同样的第4层协议的连接，会被防火墙看成是同一个会话，因此会存在返回包被丢弃现象，过程如下：
-![](attachments/Pasted%20image%2020231107192938.png)
+![](../attachments/Pasted%20image%2020231107192938.png)
 
 默认的 DNS 解析过程是这样的：
 
@@ -659,7 +659,7 @@ listening on eth1, link-type EN10MB (Ethernet), capture size 65535 bytes
 - 剩下的 DNS 服务器返回的 A 记录响应包被防火墙丢弃
 
 如果我们启用参数 `single-request-reopen` （默认未启用），一旦出现同一个 socket 发送的两次请求处理，解析端发送第一次请求后会关闭 socket，并在发送第二次请求前打开新的 socket 对 DNS server 端进行发送解析请求
-![](attachments/Pasted%20image%2020231107193101.png)
+![](../attachments/Pasted%20image%2020231107193101.png)
 
 生产环境中发现在阿里云的主机上可能会出现上述问题，因此如果主机使用了 IPv6 建议启用该参数。
 
@@ -756,7 +756,7 @@ nameserver 8.8.8.8
 NetworkManager 是用于便携式计算机和其他可移动计算机的理想解决方案。提供了完善而直观的用户界面，可使用户轻松地切换其网络环境。也就是说 NetworkManager 更适用于桌面环境的 PC 电脑，服务器上一般都是命令行界面，我们完全可以不需要使用 NetworkManager ，而且 NetworkManager 服务和 network 服务有可能会起冲突，因此我们可以将此服务禁掉。
 
 查看了 `NetworkManager` 的服务配置文件 `/etc/NetworkManager/NetworkManager.conf` 之后，给出了 `See "man 5 NetworkManager.conf" for details.` 的提示，通过查看 man 手册发现了与 DNS 相关的配置：
-![](attachments/Pasted%20image%2020231107195204.png)
+![](../attachments/Pasted%20image%2020231107195204.png)
 
 ## 小结
 

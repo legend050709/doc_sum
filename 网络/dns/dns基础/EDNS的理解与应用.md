@@ -22,7 +22,7 @@ RFC2671中指出EDNS被提出来的几个理由：
 OPT被放在DNS通信双方（`requestor`和`responsor`）DNS消息的`Additional data`区域中。
 ### OPT伪资源记录中的内容
 OPT pseudo-RR中的内容包含固定部分和可变部分。它的结构如下：
-![](attachments/Pasted%20image%2020240108160233.png)
+![](../attachments/Pasted%20image%2020240108160233.png)
 图1中最下面的RDATA是可变部分，其余的部分都是固定部分。
 > Name字段目前为空；
 > TYPE字段是OPT RR的类型编号，IANA为其分配的是41（0x29）.
@@ -32,7 +32,7 @@ OPT pseudo-RR中的内容包含固定部分和可变部分。它的结构如下�
 
 #### TTL字段
 TTL字段被用来存储扩展消息头部中的RCODE和flags，一共是4B。它的格式如下：
-![](attachments/Pasted%20image%2020240108160405.png)
+![](../attachments/Pasted%20image%2020240108160405.png)
 
 图2中高位8个bit是扩展RCODE（返回状态码），这8个bit加上DNS头部的4bit总共有12bit（8bit在高位），这样就可以表示更多的返回类型；
 VERSOION字段表示EDNS的版本（EDNS根据支持不同的扩展内容会有很多版本）。
@@ -40,18 +40,18 @@ RFC2671中Z一般情况下被发送者设置为0，接收方可以忽略它。�
 
 #### 可变部分RDATA
 OPT RR中可变部分RDATA的结构如下图所示：
-![](attachments/Pasted%20image%2020240108160647.png)
+![](../attachments/Pasted%20image%2020240108160647.png)
 
 OPTION-CODE由IANA分配；OPTION-LENGTH是OPTION-DATA的长度；OPTION-DATA是具体长度。
-![](attachments/Pasted%20image%2020240108160708.png)
+![](../attachments/Pasted%20image%2020240108160708.png)
 
 
 #### 注意
 每个DNS 消息中只能有一个OPT伪资源记录。
 当有多种EDNS扩展协议时，各个Option 对一个紧接一个存储在RDATA中。类似于TCP中的Option。
 如下图所示：
-![](attachments/Pasted%20image%2020240108161114.png)
-![](attachments/Pasted%20image%2020240108161118.png)
+![](../attachments/Pasted%20image%2020240108161114.png)
+![](../attachments/Pasted%20image%2020240108161118.png)
 当有NSID和CSUBNET的时候，两个RDATA紧密排列在OPT的RDATA字段中，它们两的总长度由Data length指定。
 
 
@@ -62,13 +62,13 @@ OPTION-CODE由IANA分配；OPTION-LENGTH是OPTION-DATA的长度；OPTION-DATA是
 ```
 
 **请求包**：
-![](attachments/Pasted%20image%2020240108162608.png)
+![](../attachments/Pasted%20image%2020240108162608.png)
 上面抓包内容中：
 1）TTL字段中的extended RCODE、VERSION和Z被ethereal拆分来显示了；
 2）RDATA length为0说明没有可变消息RDATA，从下面的消息中可以看到确实没有RDATA。
 
 **响应消息**：
-![](attachments/Pasted%20image%2020240108163326.png)
+![](../attachments/Pasted%20image%2020240108163326.png)
 # Client Subnet in DNS Queries
 ## 背景
 DNS系统默认使用明文UDP协议通信，所以用户的查询内容很容易受到监控，而服务器返回的解析结果是可以被轻易篡改。为了解决这个问题，人们引入了 DNS over HTTPS/TLS/QUIC 之类的技术，希望通过加密的方式传输DNS查询。
@@ -162,7 +162,7 @@ yum install -y  GeoIP
 
 ### EDNS中ACL配置
 目前bind的ACL中是把ECS 带的Client地址作为一个独立的特征做匹配
-![](attachments/Pasted%20image%2020240120114451.png)
+![](../attachments/Pasted%20image%2020240120114451.png)
 如上所示，EDNS的ECS配置和报文IP层的SIP的配置不同。
 
 范例：
@@ -222,10 +222,10 @@ ns.zhxfei.com. 86400 IN A 172.16.130.129
 ```
 
 查询如下所示：
-![](attachments/Pasted%20image%2020240108162316.png)
+![](../attachments/Pasted%20image%2020240108162316.png)
 
 应答如下所示：
-![](attachments/Pasted%20image%2020240108162029.png)
+![](../attachments/Pasted%20image%2020240108162029.png)
 
 
 用120.0.0.1/24作为用户所在的网段
@@ -260,10 +260,10 @@ ns.zhxfei.com. 86400 IN A 172.16.130.129
 ```
 
 查询如下所示：
-![](attachments/Pasted%20image%2020240108162401.png)
+![](../attachments/Pasted%20image%2020240108162401.png)
 
 应答如下所示：
-![](attachments/Pasted%20image%2020240108162406.png)
+![](../attachments/Pasted%20image%2020240108162406.png)
 
 # udp palload size
 ## client通告的  udp payload size 

@@ -1,16 +1,16 @@
 ```table-of-contents
 ```
 # DNS介绍
-![](attachments/Pasted%20image%2020240104113047.png)
+![](../attachments/Pasted%20image%2020240104113047.png)
 DNS 的全称是 `Domain Name Systems`，DNS是一个分层级 （hierarchical ），分布式（decentralized）的网络数据库，完成主机名称和IP地址之间的相互映射。DNS 协议运行在 UDP 协议上，使用 53 端口。
 DNS配置中，几个重要的概念：**View、Zone、记录(Record)**；
 
 与 HTTP、FTP 和 SMTP 一样，DNS 协议也是一种应用层的协议，DNS 采用 client/server 模式，DNS client 发出查询请求，DNS server 响应请求，并通过 UDP 协议来传输 DNS 报文。
-![](attachments/Pasted%20image%2020240104121432.png)
+![](../attachments/Pasted%20image%2020240104121432.png)
 
 
 DNS名称空间包含一个树状结构，如下所示：
-![](attachments/Pasted%20image%2020240110160858.png)
+![](../attachments/Pasted%20image%2020240110160858.png)
 
 除了提供主机名到 IP 地址的转换，DNS 还支持了下面几种重要的功能：
 - `主机别名(host aliasing)`，有着复杂主机名的主机能够拥有一个或多个其他别名，比如说一台名为 relay1.west-coast.enterprise.com 的主机，同时会拥有 enterprise.com 和 [www.enterprise.com](http://www.enterprise.com/) 的两个主机别名，在这种情况下，relay1.west-coast.enterprise.com 也称为**规范主机名**，而主机别名要比规范主机名更加容易记忆。应用程序可以调用 DNS 来获得主机别名对应的规范主机名以及主机的 IP地址。
@@ -32,7 +32,7 @@ DNS名称空间包含一个树状结构，如下所示：
 
 其他：
 dns解析器（resolver）、dns权威服务器；
-![](attachments/Pasted%20image%2020240304123409.png)
+![](../attachments/Pasted%20image%2020240304123409.png)
 
 ## DNS 解析器
 一般指本地域名服务器(Local DNS Server)，它是DNS查找中的第一站，是负责处理发出初始请求的DNS服务器。
@@ -43,7 +43,7 @@ dns解析器（resolver）、dns权威服务器；
 
 
 ## 主从服务器的关系
-![](attachments/Pasted%20image%2020240104121221.png)
+![](../attachments/Pasted%20image%2020240104121221.png)
 
 设置域名服务器时，服务器管理员可以选择将域名服务器指定为主服务器还是辅助服务器(也称为从服务器)。
 
@@ -61,16 +61,16 @@ dns解析器（resolver）、dns权威服务器；
 ## 域名结构
 **DNS 域**的本质是一种管理范围的划分，最大的域是根域 ，向下可以划分为顶级域 、二级域 、三级域 、四级域 等。相对应的域名是根域名 、顶级域名 、二级域名 、三级域名 等。不同等级的域名使用**点号**分隔，级别最低的域名写在最左边，而级别最高的域名写在最右边。
 
-![](attachments/Pasted%20image%2020231225195047.png)
+![](../attachments/Pasted%20image%2020231225195047.png)
 
 举个栗子：网站域名 `www.tsinghua.edu.cn`中，从右到左开始，cn 是顶级域名，代表中国，edu 是二级域名，代表教育机构，tsinghua 是三级域名，表示清华大学，www 则表示三级域名中的主机，并提供了 web 服务。
-![](attachments/Pasted%20image%2020240104121647.png)
+![](../attachments/Pasted%20image%2020240104121647.png)
 
 ### 根域
 ​ 根（root）域就是`.`；它是由Inetnet名字注册授权机构管理，该机构把域名空间各部分的管理责任分配连接到Internet的各个组织 。
 
 **域名空间**结构像是一棵倒过来的树，也叫做树形结构 。**根域名**就是树根（ root ），用点号 表示，往下是这棵树的各层枝叶。
-![](attachments/Pasted%20image%2020240104122016.png)
+![](../attachments/Pasted%20image%2020240104122016.png)
 
 ### 一级域
 根域名的下一层叫**顶级域名**。顶级域(TLD：Top Level Domain）又称一级域。
@@ -90,13 +90,13 @@ dns解析器（resolver）、dns权威服务器；
 顶级域名下面是**二级域名**。
 二级域（SLD：Second Level Domain）注册到个人、组织或公司的名称。这些名称基于相应的顶级域，二级域下可以包括主机和子域。
 
-![](attachments/Pasted%20image%2020240104122344.png)
+![](../attachments/Pasted%20image%2020240104122344.png)
 
 二级域名下面是**三级域名**、**四级域名**等。**命名树上任何一个节点的域名就是从这个节点到最高层的域名串起来，中间以 “ . ” 分隔。**
-![](attachments/Pasted%20image%2020240104122452.png)
+![](../attachments/Pasted%20image%2020240104122452.png)
 
 在域名结构中，节点在所属域中的**主机名**标识可以相同 ，但是**域名必须不同**。比如：清华大学和新浪公司下都有一台主机的标识是 mail ，但是两者的域名却是不同的，前者为 **mail.tsinghua.edu.cn**，而后者为 **mail.sina.com.cn**。
-![](attachments/Pasted%20image%2020240104122631.png)
+![](../attachments/Pasted%20image%2020240104122631.png)
 ## 域的分层授权
 域是从上到下授权的，每一层都只负责自己的直辖下层，而不负责下下层。
 例如根域给顶级域授权，顶级域给普通域授权，但是根域不会给普通域授权。和现实中的行政管理不一样，域的授权和管理绝对不会向下越级，因为它根本不知道下下级的域名是否存在。
@@ -211,7 +211,7 @@ bj-dns                  A       192.168.4.204               # 对应子域权威
 子域的区域数据文件中是可以没有SOA记录的，只不过此时子域没有得到父域授权，也就没有自主权，无法提供解析功能。这意味着这不是一个子域，而是父域的一部分，就相当于在父域的区域数据文件中使用`$INCLUDE`一样。
 
 可以认为授权了的子域是父域将自己的孩子送到了它们该到的地方，它们自己能够独挡一面，没有授权的子域实际上只是住在了父域的隔壁，它没有独立解析的能力，一切问题仍然需要父域来负责解答。如下图：
-![](attachments/Pasted%20image%2020240117164324.png)
+![](../attachments/Pasted%20image%2020240117164324.png)
 
 ### 小结
 根据上述分析，应该就能明白在互联网上申请域名并向外界提供解析时，实际上是向申请机构的区域数据文件中添加NS记录和NS对应的A记录，仅此而已。
@@ -228,7 +228,7 @@ FQDN(Fully Qualified Domain Name)：**完全合格域名/全程域名**/完全�
 FQDN是指包含了所有域的主机名，其中包括根域。FQDN可以说是主机名的一种完全表示形式，它从逻辑上准确地表示出主机在什么地方。例如`www.baidu.com`的FQDN是`www.baidu.com.`，com后面还有个点，这是根域。
 #### PQDN
 与 FQDN 对应的，系统中的默认域名是**非合格域名/部分限定域名**(PQDN: Partially Qualified Domain Name)，会把当前的区域域名添加到尾部。例如，tsinghua 域内的主机上查找 mail ，本地解析器就会将这个名称转换为 FQDN ，即 `mail.tsinghua.edu.cn.`，然后解析出 IP 地址。
-![](attachments/Pasted%20image%2020240104121831.png)
+![](../attachments/Pasted%20image%2020240104121831.png)
 
 **FQDN**的完整格式是以点结尾的域名。
 > DNS 系统中的域名可以是相对的，所以可能是模糊的。FQDN 是一个绝对名称，表示了它相对于域名系统中绝对根目录的位置。
@@ -294,7 +294,7 @@ secondary       IN  A       192.168.10.201
 域名是分层结构，域名服务器也是对应的层级结构。有了域名结构，还需要遍及全世界的域名服务器去解析域名。
 
 每一级域都有对应的服务器负责，如下所示：
-![](attachments/Pasted%20image%2020240104113557.png)
+![](../attachments/Pasted%20image%2020240104113557.png)
 还有一种 DNS 服务器是`本地域名服务器(local name server)`，本地域名服务器并不属于上图要求的域名服务器层次，但是它对域名系统非常重要。当我们在使用 DNS 查询请求时，我们发出的查询请求并不会直接传输到权威域 DNS 服务器，而是会发送给本地域名服务器。本地域名服务器然后查询本地是否有资源记录，如果没有，再进行递归查询。
 
 ### 特征
@@ -317,11 +317,11 @@ DNS 服务器可以分成四种：
 
 
 它们的关系如下图。
-![](attachments/Pasted%20image%2020240129114310.png)
+![](../attachments/Pasted%20image%2020240129114310.png)
 
 #### 根域名服务器
 根域名服务器全世界一共有13台（都是服务器集群）。它们的域名和 IP 地址如下。
-![](attachments/Pasted%20image%2020240129114513.png)
+![](../attachments/Pasted%20image%2020240129114513.png)
 
 根域名服务器的 IP 地址是不变的，集成在操作系统里面。
 操作系统会选其中一台，查询 TLD 服务器的 IP 地址。
@@ -330,7 +330,7 @@ dig @192.33.4.12 es6.ruanyifeng.com
 ```
 上面示例中，我们选择`192.33.4.12`，向它发出查询，询问`es6.ruanyifeng.com`的 TLD 服务器的 IP 地址。
 dig 命令的输出结果如下。
-![](attachments/Pasted%20image%2020240129114600.png)
+![](../attachments/Pasted%20image%2020240129114600.png)
 因为它给不了 `es6.ruanyifeng.com` 的 IP 地址，所以输出结果中没有 `ANSWER SECTION`，只有一个 `AUTHORITY SECTION`，给出了`com.`的13台 TLD 服务器的域名。
 
 下面还有一个 `ADDITIONAL SECTION`，给出了这13台 TLD 服务器的 IP 地址（包含 IPv4 和 IPv6 两个地址）。
@@ -341,7 +341,7 @@ dig 命令的输出结果如下。
 dig @192.41.162.30 es6.ruanyifeng.com
 ```
 上面示例中，192.41.162.30 是随便选的一台 .com 的 TLD 服务器，我们向它询问 `es6.ruanyifeng.com` 的 IP 地址。
-![](attachments/Pasted%20image%2020240129114657.png)
+![](../attachments/Pasted%20image%2020240129114657.png)
 
 它依然没有 `ANSWER SECTION` 的部分，只有 `AUTHORITY SECTION`，给出了一级域名 `ruanyifeng.com` 的两台 DNS 服务器。
 
@@ -353,7 +353,7 @@ dig @192.41.162.30 es6.ruanyifeng.com
 dig @172.64.32.123 es6.ruanyifeng.com
 ```
 返回结果如下。
-![](attachments/Pasted%20image%2020240129114802.png)
+![](../attachments/Pasted%20image%2020240129114802.png)
 
 ### 范例
 **根域的域名服务器**：
@@ -395,13 +395,13 @@ dig @172.64.32.123 es6.ruanyifeng.com
 
 # DNS解析流程
 将域名转换为对应的 IP 地址 的过程叫做**域名解析**。在域名解析过程中，DNS client 的主机调用解析器 （ Resolver ），向 DNS server 发出请求，DNS server 完成域名解析。
-![](attachments/Pasted%20image%2020240112144506.png)
+![](../attachments/Pasted%20image%2020240112144506.png)
 
 
 **域名解析**是按照 DNS 分层结构的特点，自顶向下进行的。但是如果每一个域名解析都从根域名服务器开始，那么根域名服务器有可能无法承载海量的流量。在实际应用中，大多数域名解析都是在**本地域名服务器**完成。通过合理设置本地域名服务器，由本地域名服务器负责大部分的域名解析请求，提高域名解析效率。
 
 范例如下：
-![](attachments/Pasted%20image%2020240104123104.png)
+![](../attachments/Pasted%20image%2020240104123104.png)
 DNS 客户端进行域名 www.tsinghua.edu.cn的解析过程如下：
 
 1. DNS 客户端 向本地域名服务器发送请求，查询 www.tsinghua.edu.cn 主机的 IP 地址；
@@ -417,17 +417,17 @@ DNS 客户端进行域名 www.tsinghua.edu.cn的解析过程如下：
 
 ## DNS 解析器
 从应用程序的角度看，访问 DNS 是通过一个叫**解析器**（ Resolver ）的应用程序来完成的。发送一个 TCP 或 UDP 数据包之前，解析器必须将域名（主机名）转换为 IP 地址。一个解析器至少要注册一个域名服务器的 IP 地址。通常，它至少包括本地域名服务器的 IP 地址。
-![](attachments/Pasted%20image%2020240104122945.png)
+![](../attachments/Pasted%20image%2020240104122945.png)
 
 ## DNS 域名服务器
 DNS 域名空间的层次结构，允许不同的域名服务器管理域名空间的不同部分。**域名服务器**是指管理域名的主机及软件，它可以管理所在分层的域。其所管理的分层叫做**区域**（ zone ）。一个 zone 是 DNS 域名空间的一棵子树，它可以单独管理而不受其它 zone 影响。**每层都设有一个域名服务器。**
-![](attachments/Pasted%20image%2020240104123022.png)
+![](../attachments/Pasted%20image%2020240104123022.png)
 
 ## 解析分类
 域名解析分为**动态域名解析**和**静态域名解析**。在解析域名时，首先采用静态域名解析，如果静态解析不成功，再采用动态域名解析。
 ### 静态域名解析
 **静态域名解析**是通过静态域名解析表进行的，手动建立域名和 IP 地址之间的对应关系表，该表的作用类似于 Windows 操作系统下的 hosts 文件 ，可以将一些常用的域名放入表中。当 DNS client 需要域名所对应的 IP 地址时，即到静态域名解析表中去查找指定的域名，从而获得所对应的 IP 地址，提高域名解析的效率。
-![](attachments/Pasted%20image%2020240104134946.png)
+![](../attachments/Pasted%20image%2020240104134946.png)
 
 ### 动态域名解析
 **动态域名解析**需要专用的域名服务器（ DNS server ）运行域名解析服务器程序，提供从域名到 IP 地址的映射关系，负责接收客户端（ DNS client）提出的域名解析请求。
@@ -438,10 +438,10 @@ DNS解析流程分为**递归查询**和**迭代查询**。
 迭代查询是以DNS客户端，也就是客户机器为中心查询。
 **其实DNS客户端到本地名称服务器是递归，而本地名称服务器和其他名称服务器之间是迭代。**
 
-![](attachments/Pasted%20image%2020240122190915.png)
+![](../attachments/Pasted%20image%2020240122190915.png)
 
 ##  递归查询（recursion）
-![](attachments/Pasted%20image%2020231225120053.png)
+![](../attachments/Pasted%20image%2020231225120053.png)
 ### 定义
 “递归解析”（或叫“递归查询”，其实意思是一样的）是最常见，**也是默认的解析方式**。在这种解析方式中，如果客户端配置的本地名称服务器，**（又称Local DNS， 可以是默认的运营商提供的Local DNS 或者自己设置的DNS）** 不能解析的话，则后面的查询全由本地名称服务器代替DNS客户端进行查询，直到本地名称服务器从权威名称服务器得到了正确的解析结果，然后由本地名称服务器告诉DNS客户端查询的结果。
 
@@ -452,7 +452,7 @@ DNS解析流程分为**递归查询**和**迭代查询**。
 
 ### 流程
 完整的递归DNS 查询流程需要 DNS 服务器从根域名 “.” 服务器，顶级域名服务器（例如“.com”），一级域名服务器（例如“example.com”）等一级一级递归查询，直到最终找到权威服务器取得结果，并返回给客户。同时，递归服务器根据域名 TTL，缓存查询结果，便于相同域名重复查询。  
-![](attachments/Pasted%20image%2020231225200009.png)
+![](../attachments/Pasted%20image%2020231225200009.png)
 递归解析的基本流程如下：
 （1）客户端向本机配置的本地名称服务器（在此仅以首选DNS服务器为例进行介绍，所配置其它备用DNS服务器的解析流程完全一样）发出DNS域名查询请求。
 
@@ -468,10 +468,10 @@ DNS解析流程分为**递归查询**和**迭代查询**。
 ### 应用
 **递归 DNS 服务器大多数在运营商端，负责网络接入终端的 DNS 查询，即网络访问设备上配置的 DNS 服务器 IP。**
 递归 DNS 的访问过程如下图所示（递归 DNS 在图中表示为 Local DNS）：
-![](attachments/Pasted%20image%2020231225140931.png)
+![](../attachments/Pasted%20image%2020231225140931.png)
 
 ## 迭代查询（iteration）
-![](attachments/Pasted%20image%2020231225120103.png)
+![](../attachments/Pasted%20image%2020231225120103.png)
 ### 定义
 客户端(下级服务器)发起DNS解析请求后，若上级DNS服务器并不能直接提供该DNS的解析结果，则该上级DNS服务器会告知客户端(下级服务器)另一个可能查询到该DNS解析结果的DNS服务器IP。客户端(下级服务器)再次请求这个DNS服务器，如此类推，直到查询到对应的结果为止。
 
@@ -490,7 +490,7 @@ DNS解析流程分为**递归查询**和**迭代查询**。
 
 ### 递归查询和迭代查询对比
 **一般情况下，DNS客户端和本地名称服务器是递归，而本地名称服务器和其他名称服务器之间是迭代**。
-![](attachments/Pasted%20image%2020240104134248.png)
+![](../attachments/Pasted%20image%2020240104134248.png)
 **递归**：客户端只发一次请求，要求对方给出最终结果。
 **迭代**：客户端发出一次请求，对方如果没有授权回答（权威回答），它就会返回一个能解答这个查询的其它名称服务器列表，客户端会再向返回的列表中发出请求，直到找到最终负责所查域名的名称服务器，从它得到最终结果。
 
@@ -513,12 +513,12 @@ The term referral indicates a response to a query which does not contain an answ
 ## 反向查询
 ### 定义
 在 DNS 查询中，客户端希望知道域名对应的 IP 地址，这种查询称为**正向查询**。大部分的 DNS 查询都是正向查询。与正向查询对应的，是**反向查询**。它允许 DNS 客户端通过 IP 地址查找对应的域名。
-![](attachments/Pasted%20image%2020240104134440.png)
+![](../attachments/Pasted%20image%2020240104134440.png)
 
 ### 原理
 为实现反向查询，在 DNS 标准中定义了特色域 in-addr.arpa 域，并保留在域名空间中，以便执行反向查询。为创建反向域名空间，in-addr.arpa 域中的子域是按照 IP 地址相反的顺序 构造的。
 举个栗子：`www.tsinghua.edu.cn`的 IP 地址是 `166.111.4.100` ，那么在 in-addr.arpa 域中对应的节点就是 `100.4.111.166` 。
-![](attachments/Pasted%20image%2020240104134548.png)
+![](../attachments/Pasted%20image%2020240104134548.png)
 
 
 ## 非递归查询
@@ -569,10 +569,10 @@ DNS服务器未负责的域，由缓存或者查询到的记录返回的答案
 
 当您需要解析的多个子域名对应为同一个 IP 时，可通过以下两种方式进行添加：
 - 普通添加方式：当您有多个子域名时，需添加多条记录进行解析。如下图所示：
-![](attachments/Pasted%20image%2020240122104808.png)
+![](../attachments/Pasted%20image%2020240122104808.png)
 
 - 泛解析添加方式：当您有多个子域名时，只需添加一条记录，即可对多个子域名进行解析。如下图所示：
-![](attachments/Pasted%20image%2020240122104820.png)
+![](../attachments/Pasted%20image%2020240122104820.png)
 ```bash
 333.demo.com	A	6.6.6.6
 *.demo.com		A	6.6.6.6
@@ -1042,7 +1042,7 @@ ALIAS 记录与 CNAME 一样，也将一个主机名映射到另一个主机名�
 
 **URL隐式转发**
 隐性转发：用的是`iframe`框架技术，非重定向技术;效果为浏览器地址栏输入`http://a.com`回车，打开网站内容是目标地址`http://www.dnspod.cn`的网站内容，但地址栏显示当前地址`http://a.com`。
-![](attachments/Pasted%20image%2020240122154239.png)
+![](../attachments/Pasted%20image%2020240122154239.png)
 
 **URL显性转发**
 用的是301重定向技术;效果为浏览器地址栏输入`http://a.com`回车，打开网站内容是目标地址`http://www.dnspod.cn`的网站内容，且地址栏显示目标地址`http://www.dnspod.cn`。
@@ -1074,7 +1074,7 @@ SPF格式的TXT记录的作用跟MX记录相反，它向收信者表明，哪些
 
 
 - 范例
-![](attachments/Pasted%20image%2020240120130944.png)
+![](../attachments/Pasted%20image%2020240120130944.png)
 
 大部分时间，TXT 记录是用来做 SPF 反垃圾邮件的。
 最典型的 SPF 格式的 TXT 记录例子为 “v=spf1 a mx ~all”，表示只有这个域名的 A 记录和 MX 记录中的 IP 地址有权限使用这个域名发送邮件。
@@ -1096,7 +1096,7 @@ DKIM（DomainKeys Identified Mail） 是另一种电子邮件验证技术，它�
 每个 TXT 记录可以包含一个或多个文本字符串，每个字符串之间用空格或分号分隔。
 
 **检测TXT记录**
-![](attachments/Pasted%20image%2020240120130145.png)
+![](../attachments/Pasted%20image%2020240120130145.png)
 ## SRV类型
 SRV (Service)记录是从 RFC2052 中对 SRV资源进行了定义。SRV 被用来记录服务器提供什么样的服务。
 
@@ -1127,7 +1127,7 @@ NS记录说明了有两个DNS服务器（`ns1.hexun.com` 和 `ns2.hexun.com`）�
 **优先级**
 - 单独设置的域名解析优先级高于泛域名解析
 
-![](attachments/Pasted%20image%2020240122104226.png)
+![](../attachments/Pasted%20image%2020240122104226.png)
 以上示例，访问主机记录为 `blog` 时，将解析至 `2.2.2.2` 主机记录。其他未指定的主机记录将解析至 `1.1.1.1` 主机记录。
 
 
@@ -1143,7 +1143,7 @@ NS记录说明了有两个DNS服务器（`ns1.hexun.com` 和 `ns2.hexun.com`）�
 
 # DNS代理
 在使用了 **DNS 代理**（ DNS proxy ）功能的组网中，DNS client 将 DNS 请求报文直接发送给 DNS proxy 。DNS proxy 会先查找本地域名解析表，如果未查询到对应的解析表项，会将 DNS 请求报文转发给 DNS Server ，并在收到 DNS server 的应答报文后将其返回给 DNS client ，从而实现域名解析。
-![](attachments/Pasted%20image%2020240104135118.png)
+![](../attachments/Pasted%20image%2020240104135118.png)
 因此，当 DNS server 的地址发生变化时，只需改变 DNS proxy 上的配置，无需逐一改变局域网内每个 DNS client 的配置，从而简化了网络管理。
 
 # DNS缓存
@@ -1157,10 +1157,10 @@ NS记录说明了有两个DNS服务器（`ns1.hexun.com` 和 `ns2.hexun.com`）�
 DNS 数据可缓存到各种不同的位置上，每个位置均将存储 DNS 记录，它的生存时间由 TTL(DNS 字段) 来决定。
 
 从在浏览器的搜索框中输入URL。它会先后访问**浏览器缓存**、**操作系统的缓存**`/etc/hosts`、**最近的DNS服务器缓存**。如果都找不到，才是到根域，顶级（一级）域，二级域等DNS服务器进行查询请求。
-![](attachments/Pasted%20image%2020240122191032.png)
+![](../attachments/Pasted%20image%2020240122191032.png)
 
 于是请求过程就成了下图这样。可以看到上面提到的好几有缓存的地方我都加了个绿色的小文件图标，优先在缓存里做查询。
-![](attachments/Pasted%20image%2020240122191110.png)
+![](../attachments/Pasted%20image%2020240122191110.png)
 
 由于缓存了上面树状结构的信息，最近的DNS服务器也**不再需要每次都从根域开始查起**。比如在缓存里能找到`baidu.com`的服务器IP，就直接跳到二级域服务器上做查找就好了。
 正因为**多级缓存**的存在，每一层实际接收到的请求都大大减少了。并且每个人日常访问的网站也就那么几个，所以大部分时候都能命中缓存直接返回IP地址。
@@ -1169,7 +1169,7 @@ DNS 数据可缓存到各种不同的位置上，每个位置均将存储 DNS �
 现如今的 Web 浏览器设计默认将 DNS 记录缓存一段时间。因为越靠近 Web 浏览器进行 DNS 缓存，为检查缓存并向 IP 地址发出请求的次数就越少。发出对 DNS 记录的请求时，浏览器缓存是针对所请求的记录而检查的第一个位置。
 
 在 `chrome` 浏览器中，你可以使用 `chrome://net-internals/#dns` 查看 DNS 缓存的状态。这是基于 `Windows` 下查询的，我的 Mac 电脑输入上面 url 后无法查看 DNS ，只能 `clear host cache`。
-![](attachments/Pasted%20image%2020231222105944.png)
+![](../attachments/Pasted%20image%2020231222105944.png)
 
 ### 操作系统内核缓存
 在浏览器缓存查询后，会进行操作系统级 DNS 解析器的查询，操作系统级 DNS 解析器是 DNS 查询离开你的计算机前的第二站，也是本地查询的最后一个步骤。
@@ -1327,7 +1327,7 @@ AnyCast主要应用于大范围的DNS部署，CDN数据缓存，数据中心等�
 
 **负载均衡**
 通过AnyCast技术，无需要借助任何第三方负载均衡器，就可以轻松达到负载均衡的效果，同时还提供了冗余和高可靠性。
-![](attachments/Pasted%20image%2020240110203003.png)
+![](../attachments/Pasted%20image%2020240110203003.png)
 通过配置三个DNS站点的服务器IP为相同IP，例如1.1.1.1/32。然后通过各个站点的BGP对互联网宣告1.1.1.0/24的网段。
 以上步骤完成以后，互联网路由表针对1.1.1.1/24会有三个不同的出口路由器，分别是北京，上海，广州。
 
@@ -1362,12 +1362,12 @@ DDOS攻击最关键是需要把所有地理位置分散的小流量最终汇集�
 
 ### 大型服务的CDN部署
 AnyCast在大型企业中也常用于CDN部署，采用了Anycast技术为用户提供距离用户最近的Cache服务器，可大大提高了用户的服务体验。在全球建设了多个数据中心，凭借于AnyCast的高冗余性，任何一个数据中心出现网络、系统故障。均不会影响客户体验度，所有当地的客户流量会自动路由到其他就近的数据中心。相对传统企业网络面对网络节点故障的脆弱性，Anycast具有很强的优势。
-![](attachments/Pasted%20image%2020240110203709.png)
+![](../attachments/Pasted%20image%2020240110203709.png)
 
 
 ## IPv6 和 Anycast
 在网一个接口上配置了一个IPv6地址之后，会进行DAD 检测，如果发现IPv6地址冲突，则 通过`ip addr`可以看到 `dadfailed` 的标记，后续主动发起请求内核无法使用该地址。
-![](attachments/Pasted%20image%2020240110202524.png)
+![](../attachments/Pasted%20image%2020240110202524.png)
 但是对于IPv4而言，发送免费ARP，即使存在冲突，也不会有任何影响。
 
 ### 约束
@@ -1450,13 +1450,13 @@ sysctl -w net.ipv6.conf.all.forwarding=1
 将Anycast地址作为默认网关的下一跳发送数据，最终邻居解析的时候，只要发送到组播地址 `ff02::1:FF00::` 就可以解析出该网段上的Anycast地址的MAC地址信息。
 
 ## LB后端挂载多个DNS服务器
-![](attachments/Pasted%20image%2020240110191937.png)
+![](../attachments/Pasted%20image%2020240110191937.png)
 
 LB后端挂载DNS服务器，本身只是实现了负载均衡；没有实现就近访问。
 
 # CDN 和 DNS
 下图是加入了CDN节点的资源请求过程图。
-![](attachments/Pasted%20image%2020240117165204.png)
+![](../attachments/Pasted%20image%2020240117165204.png)
 
 大致过程如下：
 (1).客户端向A公司总部的DNS服务器发起`www.a.com`的查询请求。
@@ -1468,7 +1468,7 @@ LB后端挂载DNS服务器，本身只是实现了负载均衡；没有实现就
 (4).客户端根据CDN-DNS返回的A记录IP地址，直接进行访问。这时访问的一般是缓存服务器，如果缓存未命中，则缓存服务器负责从总部服务器中请求数据并返回给客户端，同时缓存下来。
 
 甚至，A公司总部的DNS服务器上，还可以直接智能选择，并CNAME到不同区域的的服务器节点上，如下图，注意区域配置文件的设置内容包括CNAME和A记录。这时就无需向服务商购买CDN服务。
-![](attachments/Pasted%20image%2020240117165348.png)
+![](../attachments/Pasted%20image%2020240117165348.png)
 
 # DNS安全
 几乎所有的网络请求都会经过 DNS 查询，而且 DNS 和许多其他的 Internet 协议一样，系统设计时并未考虑到安全性，并且存在一些设计限制，这为 DNS 攻击创造了机会。
@@ -1512,7 +1512,7 @@ UDP是DNS的Internet标准查询的推荐方式，但不包括区域传输。使
 
 #### 为什么使用TCP
 因为 DNS 响应报文中有一个**截断标志位**，用 TC 表示。当响应报文使用 **UDP 封装**，且报文长度大于 **512 字节**(其中不包括IP首部或UDP首部)时，那么服务器只返回前 512 字节，同时 TC 标志位置位，表示报文进行了截断。当客户端收到 TC 置位的响应报文后，将采用 **TCP 封装**查询请求。DNS 服务器返回的响应报文长度大于 512 字节。
-![](attachments/Pasted%20image%2020240104133159.png)
+![](../attachments/Pasted%20image%2020240104133159.png)
 
 当请求体和响应的大小比较小时，通过 TCP 协议进行传输不仅需要传输更多的数据，还会消耗更多的资源，多次通信以及信息传输带来的时间成本在 DNS 查询较小时是无法被忽视的，TCP 连接带来的可靠性在 DNS 的场景中没能发挥太大的作用。
 在 DNS 中存储较多的内容时，TCP 三次握手以及协议头带来的额外开销就不是关键因素了。不过我们 TCP 三次握手带来的三次网络传输耗时还是没有办法避免的，这也是我们在目前的场景下不得不接受的问题。
@@ -1542,7 +1542,7 @@ UDP是DNS的Internet标准查询的推荐方式，但不包括区域传输。使
 参考：[为什么 DNS 使用 UDP 协议](https://draveness.me/whys-the-design-dns-udp-tcp/)
 ## 什么时候用TCP进行传送
 DNS使用的通信方式，有UDP和TCP两种。一般情况下使用的是UDP进行DNS域名查询。但是，在以下两种情况会使用TCP进行域名查询：
-![](attachments/Pasted%20image%2020231107195700.png)
+![](../attachments/Pasted%20image%2020231107195700.png)
 
 1. 若客户端事先知道 DNS 响应报文的长度会大于 512 字节（其中不包括IP首部或UDP首部），则应当直接使用 TCP 建立连接
 2. 若客户端事先不知道 DNS 响应报文的长度，一般会先使用 UDP 协议发送 DNS 查询报文，若 DNS 服务器发现 DNS 响应报文的长度大于 512 字节，则多出来的部分会被 UDP 抛弃(截断 TrunCation)，那么服务器会把这个部分被抛弃的 DNS 报文首部中的 TC 标志位置为 1，以通知客户端该 DNS 报文已经被截断。客户端收到之后会重新发起一次 TCP 请求，从而使得它将来能够从 DNS 服务器收到完整的响应报文。
@@ -1599,7 +1599,7 @@ DNS协议从UDP切换到TCP的过程如下：
 ### 范例
 利用dig发送  
 `dig @127.0.0.1 www.test.com +bufsize=4096 AAAA`
-![](attachments/Pasted%20image%2020231108103519.png)
+![](../attachments/Pasted%20image%2020231108103519.png)
 
 ## DNS为什么查询根域名服务器只返回13个IP地址
 

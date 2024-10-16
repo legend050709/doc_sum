@@ -5,13 +5,23 @@ arping命令是用于发送arp请求到一个相邻主机的工具；使用ARP�
 
 # 参数
 
+![](attachments/Pasted%20image%2020241010114143.png)
+
 ![](attachments/Pasted%20image%2020240626202915.png)
 
 ```bash
 -A     The same as -U, but ARP REPLY packets used instead of ARP REQUEST.
 		更新邻近主机的ARP缓存（使用ARP应答数据包代替ARP请求数据包）
 		
--U     Unsolicited ARP mode to update neighbours' ARP caches.  No replies are expected.
+-U     Unsolicited ARP mode to update neighbours' ARP caches.  No replies are expected. 
+
+
+-I： 指定发送出口
+
+-s: 指定sip
+
+-b : 通常，_arping_首先将 ARP 请求作为 MAC 广播发送。但是，当它收到对广播 ARP 请求的回复时，它会切换到单播。它开始仅向目标主机发送以下 ARP 请求。
+使用 -b选项，可以更改此行为并仅发送广播。
 
 
 ```
@@ -25,6 +35,151 @@ arping -f 192.168.100.70
 这将会发送广播报文，直到收到192.168.100.70的回复才退出。
 
 同时，192.168.100.70也会缓存本机的IP和MAC对应条目，由于此处没有指定请求报文的发送接口和源地址，所以发送报文时是根据路由表来选择接口和对应该接口地址的。
+
+## 主动提供的 ARP
+
+-U 选项在未经请求的 ARP 模式下运行arping;
+主动提供的 ARP 也称为无偿 ARP（未经请求的 ARP）。
+**未经请求的 ARP 在相邻主机请求之前 通过发送免费arp请求（ip为本机的ip）来更新相邻主机的 ARP 表**。
+
+### 使用场景
+这可能很有用，例如，当本地主机的 MAC 或 IP 地址因故障转移而发生更新时。未经请求的 ARP 将此更改传播到其他主机。
+在这种情况下，不需要 ARP 回复。让我们使用带有-U选项的arping来更新目标主机的 ARP 表：
+```bash
+arping –U -c 1 192.39.59.17
+ARPING 192.39.59.17 from 192.39.59.17 eth0
+Sent 1 probes (1 broadcast(s))
+Received 0 response(s)
+```
+
+作为上述命令执行的结果，如果目标主机的 ARP 表中没有本地主机的条目，则添加该条目。如果 ARP 表中已经有一个条目，它会被更新。
+
+输出的最后一行`Received 0 response(s)` 表明我们没有得到预期的 ARP 回复。
+除此之外，arping 将源 IP 地址设置为目标 IP 地址，正如我们在输出的第一行中看到的，`ARPING 192.39.59.17 from 192.39.59.17 eth0`。
+
+
+**注意**
+
+![](attachments/Pasted%20image%2020241010115835.png)
+
+默认情况下，不允许使用未经请求的 ARP 更新在 ARP 表中创建新条目。因此，我们必须使将目标主机中的arp_accept内核参数设置为1。默认情况下它等于0。
+```bash
+$ sysctl net.ipv4.conf.all.arp_accept # Unsolicited ARP isn’t allowed
+net.ipv4.conf.all.arp_accept = 0 
+
+$ sysctl -w net.ipv4.conf.all.arp_accept=1 # Now, unsolicited ARP is allowed
+net.ipv4.conf.all.arp_accept = 1
+```
+
+## 只发送ARP响应
+
+使用使用 -A 选项的 arping 还会更新目标主机的 ARP 表。但是，它不使用未经请求的 ARP（即免费的arp请求），而是使用 ARP 回复。
+
+```bash
+arping –A -c 1 192.39.59.17
+ARPING 192.39.59.17 from 192.39.59.17 eth0
+Sent 1 probes (1 broadcast(s))
+Received 0 response(s)
+```
+
+由于arping发送一个 ARP 回复，在这种情况下，我们没有得到任何响应。我们在输出的最后一行`Received 0 response(s)`中观察到了这种行为。arping 将源 IP 地址设置为目标 IP 地址，就像使用 -U 选项一样。
+
+## 指定arp的源地址
+
+arping 自动分配 ARP 数据包中的源 IP 地址。但是，也可以使用`-s`选项手动设置它。
+
+首先，让我们尝试在不使用`-s`选项的情况下 ping 目标 192.39.59.17：
+
+```bash
+$ arping –c 1 192.39.59.17
+ARPING 192.39.59.17 from 192.39.59.16 eth0
+Unicast reply from 192.39.59.17 [00:50:56:B2:AB:CD]  0.697ms
+Sent 1 probes (1 broadcast(s))
+Received 1 response(s)
+```
+
+正如我们在输出的第一行中看到的，来自`192.39.59.16`的术语表示arping使用`192.39.59.16`作为源 IP 地址。这是本地主机的 IP 地址。
+
+现在，让我们尝试使用`–s`选项ping 目标`192.39.59.17`：
+```bash
+$ arping –c 1 –s 192.39.59.20 192.39.59.17
+ARPING 192.39.59.17 from 192.39.59.20 eth0
+Unicast reply from 192.39.59.17 [00:50:56:B2:AB:CD]  0.697ms
+Sent 1 probes (1 broadcast(s))
+Received 1 response(s)
+```
+
+在这里，我们使用`–s 192.39.59.20` 将源 IP 地址设置为`192.39.59.20`。输出第一行中来自`192.39.59.20`的术语表明arping实际上使用了指定的源地址。
+
+### ip_nonlocal_bind 参数
+为了能够使用`-s`选项设置源 IP 地址，我们必须能够绑定非本地机器的地址。通常，这是禁用的。但是，我们可以通过将`net.ipv4.ip_nonlocal_bind`内核参数设置为1来启用它。
+
+ip_nonlocal_bind： 是否运行服务绑定一个本机不存在的IP地址。
+
+
+
+#### 配置说明
+
+![](attachments/Pasted%20image%2020240425111206.png)
+
+0：默认值，表示不允许服务绑定一个本机不存在的地址。
+1：表示运行服务绑定一个本机不存在的地址。
+
+
+#### 使用场景
+有些服务需要依赖一个VIP才可以启动，但是可能正常情况下，此VIP并不在本机上，当VIP漂移到本机上时才存在；但是服务又需要提前启动。例如，haproxy、nginx 等代理需要绑定VIP时。
+
+#### 范例
+
+```bash
+$ sysctl net.ipv4.ip_nonlocal_bind
+net.ipv4.ip_nonlocal_bind = 0
+
+$ arping –c 1 –s 192.39.59.20 192.39.59.17
+bind: Cannot assign requested address
+
+$ sysctl –w net.ipv4.ip_nonlocal_bind=1
+net.ipv4.ip_nonlocal_bind = 1
+
+$ arping –f –s 192.39.59.20 192.39.59.17
+ARPING 192.39.59.17 from 192.39.59.20 eth0
+Unicast reply from 192.39.59.17 [00:50:56:B2:AB:CD]  0.697ms
+Sent 1 probes (1 broadcast(s))
+Received 1 response(s)
+```
+
+
+## 在重复地址检测模式下运行
+
+我们将-D选项传递给arping以在重复地址检测 (DAD) 模式下运行它。如果网络中的另一台主机正在使用目标 IP 地址，则arping会检测到这一点并返回1。如果没有重复的 IP 地址，则返回0。**
+
+让我们在 DAD 模式下测试已经使用的 IP 地址192.39.59.17：
+```bash
+$ arping –D –c 1 192.39.59.17
+ARPING 192.39.59.17 from 0.0.0.0 eth0
+Unicast reply from 192.39.59.17 [00:50:56:B2:AB:CD] 0.970ms
+Sent 1 probes (1 broadcast(s))
+Received 1 response(s)
+
+$ echo $?
+1
+```
+由于IP地址 192.39.59.17 是远程主机的IP地址，所以 arping 返回 1作为退出状态。
+
+现在，让我们使用-D选项ping 一个未使用的 IP 地址：
+```bash
+$ arping -D –c 1 192.39.59.20
+ARPING 192.39.59.20 from 0.0.0.0 eth0
+Sent 1 probes (1 broadcast(s))
+Received 0 response(s)
+$ echo $?
+0
+```
+
+现在，由于没有 IP 地址为192.39.50.20的主机，arping的退出状态为0。
+
+**在 DAD 模式下使用arping会自动将源 IP 地址设置为0.0.0.0。**
+
 
 ## ARP欺骗
 ```bash
@@ -40,6 +195,7 @@ arping命令仅能实现这种简单的arp欺骗，更多的arp欺骗方法可�
 
 
 # 其他
+
 ## scapy构造arp包
 
 由于arping的时候，无法指定mac地址，如果 `-I` 指定的网口被 DPDK程序接管了，那么在linux内核中就无法管理该口；那么就无法指定了，比如 VF 口被DPDK接管。那么此时通过 scapy 进行构造 ARP 响应的欺骗包进行处理。
@@ -203,6 +359,8 @@ if __name__ == "__main__":
 
 # 参考
 ```bash
+# Arping 命令
+https://www.itcodingman.com/arping_command/
 
 scapy构造ARP
 https://juejin.cn/post/6844903955026165768

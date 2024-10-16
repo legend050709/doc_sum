@@ -8,7 +8,7 @@
 问题在于，有时可能会缓存不安全的 IP 地址或已经失效的 IP 结果，这时就需要将其删除。DNS 缓存还可能影响您连接到 Internet 的能力或引起其他问题。无论出于什么原因，所有主要操作系统都允许您强制清除此缓存的过程，也就是「刷新 DNS 缓存」。
 
 重要的是要了解，DNS 缓存条目也会定期自动清除，无需干预。这是因为 DNS 缓存除了保存所有与识别和查询域名相关的信息外，还保存了一个称为 TTL（生存时间）的值。
-![](attachments/Pasted%20image%2020240313191919.png)
+![](../attachments/Pasted%20image%2020240313191919.png)
 TTL 定义了 DNS 记录「保持有效」的时间段（以秒为单位）。在此期间，所有查询请求将从本地缓存中得到回答，而无需再次查询 DNS 服务器。一旦 TTL 到期，该条目将自动从缓存中删除。
 **有时我们要强制刷新 DNS，而不是等待所有条目 TTL 自动到期。**
 
@@ -96,7 +96,7 @@ a.b.t66666rr.dhb.yyyy.internal. 60 IN A	2.2.2.11
 DNS 欺骗，也称为 DNS 缓存投毒，是一种攻击方式。
 恶意攻击者通过访问 DNS 缓存并篡改其中的信息，将您重定向到错误的网站。有时，他们会将您重定向到钓鱼网站，以便窃取敏感信息，例如网银登录信息。建议对 DNS 缓存定期清除，以防止此类攻击。
 
-![](attachments/Pasted%20image%2020240313192533.png)
+![](../attachments/Pasted%20image%2020240313192533.png)
 
 ##  遇到 404 错误
 
@@ -129,7 +129,7 @@ For example, the website has been transferred to another server, and its IP addr
 
 
 刷新dns缓存非常简单，任何时候都以进行。但是不同的系统，Windows、Mac OS和Linux上的方法是不一样的。
-![](attachments/Pasted%20image%2020231017173054.png)
+![](../attachments/Pasted%20image%2020231017173054.png)
 
 # 特性
 ## **不存在刷新DNS缓存的超时时间**
@@ -161,7 +161,7 @@ ipconfig /flushdns
 ```
 
 ### macos系统
-![](attachments/Pasted%20image%2020240313175909.png)
+![](../attachments/Pasted%20image%2020240313175909.png)
 
 ### linux系统
 在 Linux 上，除非已安装并运行诸如 `Systemd-Resolved`，`DNSMasq` 或 `Nscd` 之类的缓存服务，否则没有操作系统级 `DNS` 缓存。

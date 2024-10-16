@@ -8,7 +8,7 @@
 
 # 规则限制
 权重配置仅适用于记录类型为“A记录、CNAME记录、AAAA记录”，且是**相同主机记录**、**相同线路**下的**多个记录值。具体使用规则如下：
-![](attachments/Pasted%20image%2020240122105848.png)
+![](../attachments/Pasted%20image%2020240122105848.png)
 
 # 使用场景 
 - 有两个服务集群分布在A、B两地，其中A服务集群处理能力为2G,B服务集群为4G，通过DNS权重比例分配功能引导访问流量，使得服务集群流量达到合理的比例。
@@ -47,7 +47,7 @@ www.test.com   TTL：3600 权重:1   A记录：  2.2.2.2
 ```
 
 2）模拟三个不同区域用户DNS请求及业务流量访问：
-![](attachments/Pasted%20image%2020240122112702.png)
+![](../attachments/Pasted%20image%2020240122112702.png)
 
 **调度说明**
 三个不同区域的客户端依次发起了`www.test.com`域名的访问，系统/浏览器调用接口向LDNS发起了域名解析请求
@@ -66,7 +66,7 @@ www.test.com   TTL：3600 权重:1   A记录：  2.2.2.2
 > 一般情况下：LDNS会遵循权威DNS给出应答的TTL值，在本地缓存指定的时间。 特殊情况下：LDNS针对TTL缓存具有自治的逻辑，举个例子：针对TTL最大不超过3600，最小TTL不小于60，超过这个范围的则强制修改为自身设定的最大/最小TTL。 （每个LDNS的自治情况不得而知，这里举个例子）
 
 我们**假设三个区域的客户端相同，且发起的请求频次也相同**，但是**其中一台LDNS的TTL缓存机制较为特殊**，来分析一下如何导致的解析流量不均衡：
-![](attachments/Pasted%20image%2020240122113414.png)
+![](../attachments/Pasted%20image%2020240122113414.png)
 
 ```text
 1）test.com权威DNS上有如下权重配置：
@@ -85,7 +85,7 @@ www.test.com   TTL：3600 权重:1   A记录：  2.2.2.2
 由权威DNS的权重比例调度规则我们可知：权威解析针对**LDNS访问总次数**来进行权重比例调度解析的。
 
 如果在真实的业务访问中，在**一个区域内**的**客户端数量**，或者**客户端访问次数**，相比其他所有的区域访问量都高的话，那么可能存在业务侧流量不均衡的现象，如下图：
-![](attachments/Pasted%20image%2020240122113607.png)
+![](../attachments/Pasted%20image%2020240122113607.png)
 
 相对区域A、B而言，这里区域C中的**客户端数量更多**，且都使用的是同一个LDNS。
 由于LDNS存在一定时间的缓存，大量的客户端得到的解析结果为2.2.2.2,客户端集群-c向服务器B:2.2.2.2发起了大量的访问，导致流量不均衡。
@@ -98,28 +98,28 @@ www.test.com   TTL：3600 权重:1   A记录：  2.2.2.2
 
 # 范例
 ## 阿里云的DNS权重范例
-![](attachments/Pasted%20image%2020240122105925.png)
+![](../attachments/Pasted%20image%2020240122105925.png)
 
-![](attachments/Pasted%20image%2020240122110043.png)
+![](../attachments/Pasted%20image%2020240122110043.png)
 
 ## 单独为某一线路开启权重
 即：单独为某个View下开启下的特定域名开启权重配置。
 除了“开启权重”的全局开启操作，您还可以单独为某一线路进行线路权重开启。例如：
 
 子域名的负载均衡策略为**返回全部地址**，单击**设置权重**。
-![](attachments/Pasted%20image%2020240122110308.png)
+![](../attachments/Pasted%20image%2020240122110308.png)
 
 选择要开启权重的线路。
-![](attachments/Pasted%20image%2020240122110335.png)
+![](../attachments/Pasted%20image%2020240122110335.png)
 
 打开**线路权重开关**，在下方权重列按业务场景需求配置权重值。
-![](attachments/Pasted%20image%2020240122110352.png)
+![](../attachments/Pasted%20image%2020240122110352.png)
 
 ## 效果说明
 ### 未开启权重配置的效果
 
 假设您有 3 台服务器（IP 地址分别为`1.1.XX.XX`、`2.2.XX.XX`、`3.3.XX.XX`）提供同一服务（1个域名），且在解析设置中对应如下3条A记录：
-![](attachments/Pasted%20image%2020240122110957.png)
+![](../attachments/Pasted%20image%2020240122110957.png)
 
 当Local DNS访问云解析DNS，云解析DNS将这3个解析记录全部返回给Local DNS，Local DNS再将所有的IP地址返回给网站访问者，网站访问者的浏览器会随机访问其中一个IP。
 
@@ -187,7 +187,7 @@ DNS权重扩展协议的应用场景：
 
 中国移动提出的DNS权重扩展协议就是在此基础上，新定义了一个扩展选项（option）来携带域名多个解析结果的权重参数信息。如果整个解析流程的LDNS、权威DNS或CDN 调度系统（GSLB）均支持权重扩展，则可以实现按照不同解析地址权重准确调度流量。如果解析流程中存在不支持权重扩展的DNS服务器，则会使用标准DNS协议进行DNS解析，不会有兼容性问题。
 
-![](attachments/Pasted%20image%2020240122115544.png)
+![](../attachments/Pasted%20image%2020240122115544.png)
 
 ### DNS权重扩展协议报文格式
 ```bash
@@ -208,20 +208,20 @@ DNS权重扩展协议的应用场景：
 
 * 选项数据（OPTION-Data）在RFC6891中定义，所占字节由Option-LENGTH确定。在权重选项扩展中，请求报文和应答报文使用不同的OPTION-DATA内容。对于请求报文，不包含OPTION-DATA数据;对于应答报文，包含了域名每个解析地址的权重信息。
 ```
-![](attachments/Pasted%20image%2020240122115942.png)
+![](../attachments/Pasted%20image%2020240122115942.png)
 
 ### 工作流程
 DNS权重的整个工作流程由多个参与方协同完成。
-![](attachments/Pasted%20image%2020240122120148.png)
+![](../attachments/Pasted%20image%2020240122120148.png)
 
 DNS权重工作流程如下所示：
-![](attachments/Pasted%20image%2020240122120208.png)
+![](../attachments/Pasted%20image%2020240122120208.png)
 
 ## 方案部署实施
 DNS权重扩展协议支持独立运行，但考虑ECS扩展已是LDNS不可或缺的标配功能，中国移动CDN在选择江苏部署时，需要满足ECS和权重两项功能叠加的设计需求。当CDN GSLB同时收到带有这两项扩展功能的DNS请求时，在处理逻辑上，GSLB首先根据ECS扩展选项选择出相应的边缘节点视图，其次再对该视图下的各个节点下发权重信息。
 
 相比CDN GSLB，LDNS侧的改造难度更大，涉及网管服务器、递归服务器、缓存服务器三大网元的改造，权重扩展的部署实施模型如下图所示：
-![](attachments/Pasted%20image%2020240122120708.png)
+![](../attachments/Pasted%20image%2020240122120708.png)
 
 
 # 参考

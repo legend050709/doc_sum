@@ -131,7 +131,7 @@ zone third.example.com {
 
 如果使用UDP，限制传输数据 512B以内（DNS的UDP响应就是限制在512B以内）。由于数据同步传送的数据量比一个 DNS 请求和响应报文的数据量要多得多，因此使用TCP。
 
-![](attachments/Pasted%20image%2020240104133505.png)
+![](../attachments/Pasted%20image%2020240104133505.png)
 
 因此：
 **UDP 用于 client 和 server 的查询和响应**；
@@ -153,7 +153,7 @@ man dig
 ## master自动同步变更给slave
 RFC 标准协议通过 MASTER-SLAVE 架构，**NOTIFY请求响应（UDP） + SOA请求响应（UDP） + XFR请求响应（TCP）** 机制实现数据自动同步，用户只需要在主服务器上更改域名，更改信息便可自动同步到从服务器 。
 
-![](attachments/Pasted%20image%2020240104162335.png)
+![](../attachments/Pasted%20image%2020240104162335.png)
 
 ## slave发起zone传输
 zone transfer的请求发起者，永远是 slave服务器。
@@ -233,7 +233,7 @@ general: info: zone 23.172.in-addr.arpa/IN/base: notify from 10.108.164.23#40210
 #### 范例
 常规情况下，zone每发生一次变化，序列号加1，通过序列号标识版本，获取增量更新信息。
 
-![](attachments/Pasted%20image%2020240115203238.png)
+![](../attachments/Pasted%20image%2020240115203238.png)
 
 如上，忽略tcp的建连过程，
 1，2号报文为notify的通告和响应；通告即zone发生变化，master通告slave。
@@ -501,25 +501,25 @@ notify是这样工作的：
 
 **当主DNS服务器重启了DNS服务或者通过NSUPDATE动态修改了域名解析记录时，则通知所有slave DNS服务器来更新区域数据。**(有些地方模糊地说SOA序列号发生改变也会发送notify，其实不然，因为区域数据文件需要编译加载到内存，简单的修改Zone数据库文件，没有加载到内存中，则是无效的）
 
-![](attachments/Pasted%20image%2020240104162652.png)
+![](../attachments/Pasted%20image%2020240104162652.png)
 
 （1）用户在 MASTER 上动态修改域名解析记录（如 NSUPDATE），修改成功后，域名所在 ZONE 的版本号加 1。
 
 如下所示，`test.com`初始配置：
 
-![](attachments/Pasted%20image%2020240104162738.png)
+![](../attachments/Pasted%20image%2020240104162738.png)
 
 初始 SOA 序列号：
 
-![](attachments/Pasted%20image%2020240104162805.png)
+![](../attachments/Pasted%20image%2020240104162805.png)
 
 NSUPDTA 新增记录：
 
-![](attachments/Pasted%20image%2020240104162815.png)
+![](../attachments/Pasted%20image%2020240104162815.png)
 
 最新 SOA 序列号：
 
-![](attachments/Pasted%20image%2020240104162831.png)
+![](../attachments/Pasted%20image%2020240104162831.png)
 
 （2）MASTER 向其配置的 SLAVE 节点发送 NOTIFY（一般是 UDP 报文）
 
@@ -535,11 +535,11 @@ NSUPDTA 新增记录：
 
 （4）MASTER 根据 SLAVE 请求的 XFR 类型返回对应的数据
 - IXFR 返回格式和结果：
-![](attachments/Pasted%20image%2020240104163411.png)
-![](attachments/Pasted%20image%2020240104163415.png)
+![](../attachments/Pasted%20image%2020240104163411.png)
+![](../attachments/Pasted%20image%2020240104163415.png)
 
 - AXFR 返回结果（即 zone下的所有RR记录）：
-![](attachments/Pasted%20image%2020240104163511.png)
+![](../attachments/Pasted%20image%2020240104163511.png)
 
 
 ## 报文解析
@@ -594,13 +594,13 @@ NSUPDTA 新增记录：
 ### 报文介绍
 **axfr query**
 
-![](attachments/Pasted%20image%2020240115203521.png)
+![](../attachments/Pasted%20image%2020240115203521.png)
 
 如上所示，query type 为 AXFR；
 
 **axfr response**
 
-![](attachments/Pasted%20image%2020240115204308.png)
+![](../attachments/Pasted%20image%2020240115204308.png)
 对于response，axfr结果放在`answers section`内，开头和结尾的SOA记录表示左括号和右括号，当中的内容表示这个zone的所有记录。
 
 ## IXFR
@@ -613,7 +613,7 @@ NSUPDTA 新增记录：
 
 ### 报文介绍
 **ixfr query**
-![](attachments/Pasted%20image%2020240115204422.png)
+![](../attachments/Pasted%20image%2020240115204422.png)
 
 如上所示，query type 为 IXFR；
 
@@ -621,12 +621,12 @@ NSUPDTA 新增记录：
 
 
 **ixfr response**
-![](attachments/Pasted%20image%2020240115204444.png)
+![](../attachments/Pasted%20image%2020240115204444.png)
 对于应答，上图包含4个SOA，同样在`answer section`内，开始和结尾的soa含义仍旧和axfr保持一致，代表左括号和右括号。
 第二个SOA为老的序列号，后面跟的是需要删除掉的RRs；第三个SOA为较新的序列号，表示需要增加的RRs。
 
 下面截取rfc1995中的部分内容，多个版本更新可以顺次将更新串起来，也可以直接经过运算，得到最终增量结果。
-![](attachments/Pasted%20image%2020240115205057.png)
+![](../attachments/Pasted%20image%2020240115205057.png)
 
 
 **ixfr的返回分类**：
@@ -664,7 +664,7 @@ slave服务器接收到notify声明后响应主DNS服务器告知它已经收到
 dig @115.29.32.62 liumapp.com axfr
 ```
 不出意外，应该能够得到`liumapp.com`在`115.29.32.62`这台`DNS server`上的所有解析记录。
-![](attachments/Pasted%20image%2020240114220534.png)
+![](../attachments/Pasted%20image%2020240114220534.png)
 但是从安全角度来讲，我肯定不希望这样的事情发生，所以就要用到传输限制。
 
 ## `allow-transfer`限制措施
@@ -736,14 +736,14 @@ zone "liumapp.com" {
 dig @115.29.32.62  liumapp.com axfr
 
 ```
-![](attachments/Pasted%20image%2020240114221026.png)
+![](../attachments/Pasted%20image%2020240114221026.png)
 
 但是通过`106.14.212.41`是可以获取数据的：
 ```bash
 dig @106.14.212.41  liumapp.com axfr
 注：辅助服务器 `106.14.212.41` 中没有 allow-transfer 的限制，因此可以成功。
 ```
-![](attachments/Pasted%20image%2020240114221511.png)
+![](../attachments/Pasted%20image%2020240114221511.png)
 
 
 # 主从DNS服务器的数据同步的SOA参数

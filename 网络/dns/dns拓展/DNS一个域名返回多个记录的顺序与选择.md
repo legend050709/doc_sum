@@ -56,7 +56,7 @@ rrset-order语句允许对在多记录响应下的记录的顺序的设定。
 如果没有设定类型，默认值为ANY。如果没有设定名称，默认值为”*”。
 
 
-![](attachments/Pasted%20image%2020240117174217.png)
+![](../attachments/Pasted%20image%2020240117174217.png)
 
 **说明**：
 `rrset-order` 可以设置在 `option`中，也可以设置在view中。
@@ -93,22 +93,22 @@ IN类以”host.example.com”为后缀。
 
 
 `sortlist` 可以设置在 `option`中，也可以设置在view中。
-![](attachments/Pasted%20image%2020240117173720.png)
+![](../attachments/Pasted%20image%2020240117173720.png)
 
 **`sortlist` 中包含2个元素**
 第一个元素被用来匹配查询者的IP地址。如果查询者的地址匹配，名称服务器会对发送给查询者的应答进行排序，以使任何匹配第二个元素的地址都被放在最前面。
 第二个元素实际上可以是一个包含许多元素的地址匹配列表，在这种情况下，应答中的第一个地址就是第一个匹配该列表的地址。
-![](attachments/Pasted%20image%2020240117173012.png)
+![](../attachments/Pasted%20image%2020240117173012.png)
 这个排序列表会作用在位于192.249.249/24的查询者上，并且发送给它们的应答会将它们自己的网络地址排在最前面，接着才是位于192.253.253/24的地址。
 
 排序列表中的元素，可以是简单的子网甚至是单独的主机。
-![](attachments/Pasted%20image%2020240117173046.png)
+![](../attachments/Pasted%20image%2020240117173046.png)
 
 
 **`sortlist` 中只有一个元素**
 那么它会被用来核对查询者的IP地址。如果查询者的地址匹配，则名称服务器会对发送给查询者的应答进行排序，以使任何匹配该元素的地址都被放在最前面。**只有一个条目，则匹配查询者的IP，也对响应的多记录进行排序**。
 > 注：只有一个元素，其实是2个元素；只不过第二个元素，和第一个元素相同。
-![](attachments/Pasted%20image%2020240117172800.png)
+![](../attachments/Pasted%20image%2020240117172800.png)
 这个排序列表中只有一条包含一个元素的条目。位于该网络的查询者查询，该列表会将位于网络`192.249.249/24`的地址排在应答的最前面。
 
 ### 小结
@@ -188,7 +188,7 @@ PING serverfault.com (104.18.22.101) 56(84) bytes of data.
 openat(AT_FDCWD, "/etc/hosts", O_RDONLY|O_CLOEXEC) = 5
 64 bytes from 104.18.22.101 (104.18.22.101): icmp_seq=1 ttl=62 time=68.6 ms
 ```
-![](attachments/Pasted%20image%2020240110173606.png)
+![](../attachments/Pasted%20image%2020240110173606.png)
 
 可以看到依次读取了 `/etc/nsswitch.conf`，`/etc/host.conf`，`/etc/resolv.conf` `/etc/gai.conf` 四个配置文件， DNS 解析的策略也跟他们相关。
 
@@ -358,7 +358,7 @@ DNS 本身作为服务发现，通过轮询 DNS 提供了最基本的负载分�
 # 多个IPv4记录
 ## 现象
 一个域名可以解析出几个IP地址，例如在访问 `www.163.com`时，抓包得到的DNS响应包中有2个IP地址：221.229.167.47和58.220.39.91，如下图所示。
-![](attachments/Pasted%20image%2020240110154344.png)
+![](../attachments/Pasted%20image%2020240110154344.png)
 虽然DNS解析得到了多个IP，但是大多数软件只会使用第一个IP地址。
 
 ## `gethostbyname`介绍
@@ -569,7 +569,7 @@ static struct hostent *gngethostbyname(char *HostName, int timeout)
 ## `getaddrinfo`介绍
 
 IPv6中引入了`getaddrinfo()`的新API，它是协议无关的，既可用于IPv4也可用于IPv6。
-![](attachments/Pasted%20image%2020240110162854.png)
+![](../attachments/Pasted%20image%2020240110162854.png)
 ```c
 int getaddrinfo(const char *node, const char *service,
                const struct addrinfo *hints,
@@ -587,7 +587,7 @@ struct addrinfo {
 };
 ```
 ## `getaddrinfo` 没有轮询
-![](attachments/Pasted%20image%2020240110171006.png)
+![](../attachments/Pasted%20image%2020240110171006.png)
 调用 `getaddrinfo` 可能会返回多个结果。根据 rfc3484 / rfc6724 的要求，需要**根据来源 IP 与结果 IP 进行最长匹配排序，以便相同子网里的 IP 在列表中排在首位，以得到成功率最高的结果**。换句话说，按照最新规范，**DNS 解析返回的结果应当是固定顺序的，而非 round-robin**。
 
 ## `getaddrinfo`范例
@@ -602,15 +602,15 @@ IP address: 2408:871a:2100:2:0:ff:b09f:237
 IP address: 2408:871a:2100:3:0:ff:b025:348d
 ```
 抓包如下所示：
-![](attachments/Pasted%20image%2020240110164056.png)
+![](../attachments/Pasted%20image%2020240110164056.png)
 如上所示，使用相同的五元组发送了2个请求包，而不是一个包中2个请求。
 
 # RFC3484
 参考：[RFC 3484介绍](https://rfc2cn.com/rfc3484.html)
-![](attachments/Pasted%20image%2020240111142801.png)
+![](../attachments/Pasted%20image%2020240111142801.png)
 
 优先级以及Label 介绍
-![](attachments/Pasted%20image%2020240111144704.png)
+![](../attachments/Pasted%20image%2020240111144704.png)
 
 ## 理解
 具体来讲，在尚未确定源IPv6地址的时候，给出一台机器上不同网卡上配置的所有IPv6地址，作为一个集合，遵循 **RFC3484给出的8干条Rule**，最终将会确定一个唯一的一个最优IP地址作为通信的源IP地址。
@@ -647,7 +647,7 @@ fc00::/7： ULA(uniqic local addr)地址，不能在公网路由，但可用于�
 #### iPv4 scope
 IPv4没有这个scope的概念，但是在很多操作系统协议栈中，它依然被 **模拟** 了出来。
 比如对于Linux内核而言，它就将127.0/8以及169.254这种DHCP失败的地址视为了本机scope地址，本地链路scope地址，意思是说它们已经被限制住了范围，此外，关于路由scope也是一样，Linux内核将链路层自己发现的路由，其scope定为link范围，而非自动发现的路由，其scope则是global。
-![](attachments/Pasted%20image%2020240111153731.png)
+![](../attachments/Pasted%20image%2020240111153731.png)
 #### 理解
 Rule 2有两层意思：
 1. **优选更大scope**
@@ -664,7 +664,7 @@ IPv6允许为每一个IPv6地址配置一个元组映射：M:{地址前缀，优
 该元组映射作为系统的一张策略表存在，用于选择源IP地址或者目标IP地址。
 
 如果Rule 1～Rule 5均没有选择出优选IP地址，也就是说多个幸存者IP无法决胜负，成了平局，那么在从剩余的幸存者候选IP地址中选择的时候，执行以下序列：
-![](attachments/Pasted%20image%2020240111153954.png)
+![](../attachments/Pasted%20image%2020240111153954.png)
 即：基于目标IP的最长前缀匹配，找到对应的标签。然后再选择同标签，且优先级大的Sip。
 
 如下方式，查看M映射表。
@@ -685,10 +685,10 @@ prefix ::/0 label 1
 ### Rule 7
 在IPv6中，有一种生命周期有限的地址，称作 **临时地址(含有tentative标记)**。临时地址一般用于私密通信，用完即丢。
 比如：刚配置一个IPv6地址到接口上，刚配置上去，则含有tentative标记，dad检测没有问题之后，则会将该标记去掉。
-![](attachments/Pasted%20image%2020240111154254.png)
+![](../attachments/Pasted%20image%2020240111154254.png)
 
 ## gai.conf 文件
-![](attachments/Pasted%20image%2020240110181853.png)
+![](../attachments/Pasted%20image%2020240110181853.png)
 注： gai.conf 中的优先级的值越大，就是越优先。
 标签（Label）类似于分组。
 
@@ -762,20 +762,20 @@ Result: 2001::2 (longest-matching-prefix)
 
 ### Default Destination Address Selection
 IPv6和IPv4的默认选择规则：
-![](attachments/Pasted%20image%2020240111160040.png)
+![](../attachments/Pasted%20image%2020240111160040.png)
 
 IPv4优先：
-![](attachments/Pasted%20image%2020240111160336.png)
+![](../attachments/Pasted%20image%2020240111160336.png)
 
 IPv6全局唯一地址优先：
-![](attachments/Pasted%20image%2020240111160705.png)
+![](../attachments/Pasted%20image%2020240111160705.png)
 
 ### 其他应用
 环境：站点A存在2个地址，一个地址作为和B高性能通信的地址，一个地址作为和其他站点通信的地址；站点B存在2个地址，一个地址作为和A高性能通信的地址，一个地址作为和其他站点通信的地址。
 
 期望：
 A和B之间通信使用高性能地址通信；A或者B和其他站点通信使用普通地址通信。
-![](attachments/Pasted%20image%2020240111161730.png)
+![](../attachments/Pasted%20image%2020240111161730.png)
 
 # 参考
 ```c

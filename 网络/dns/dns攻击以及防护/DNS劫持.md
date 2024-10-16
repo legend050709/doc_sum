@@ -13,10 +13,10 @@ DNS劫持即通过某种技术手段，篡改正确域名和IP地址的映射关
 
 正常情况的DNS，和劫持后的DNS的情况，如下所示：、
 **正常情况：**
-![](attachments/Pasted%20image%2020240104165806.png)
+![](../attachments/Pasted%20image%2020240104165806.png)
 
 **BGP泄漏后：**
-![](attachments/Pasted%20image%2020240104165825.png)
+![](../attachments/Pasted%20image%2020240104165825.png)
 
 ## 巴西银行钓鱼事件
 - 事件危害：黑客诱导原本想访问正常银行网站的受害者访问到钓鱼网站，并恶意窃取受害者的银行账目密码信息。
@@ -25,7 +25,7 @@ DNS劫持即通过某种技术手段，篡改正确域名和IP地址的映射关
 # DNS劫持
 ## DNS解析原理
 介绍劫持原理前，你需要先了解典型的DNS解析流程。
-![](attachments/Pasted%20image%2020240104170455.png)
+![](../attachments/Pasted%20image%2020240104170455.png)
 
 客户端发起递归DNS请求，本地递归DNS(大多数情况下为运营商DNS)或者公共DNS通过迭代查询请求多级的DNS权威服务器，并最终将查询结果返回给客户端。
 
@@ -50,17 +50,17 @@ DNS解析过程中发生在客户端和DNS服务器网络通信时的DNS劫持�
 ### DNS请求重定向
 通过技术手段(中间盒子，软件等)将DNS流量重定向到其他DNS服务器。
 如下所示：
-![](attachments/Pasted%20image%2020240104170859.png)
+![](../attachments/Pasted%20image%2020240104170859.png)
 ### DNS请求复制
 利用分光等设备将DNS查询复制到网络设备，并先于正常应答返回DNS劫持的结果。
 案例：一个DNS查询抓包返回两个不同的应答。
-![](attachments/Pasted%20image%2020240104171005.png)
+![](../attachments/Pasted%20image%2020240104171005.png)
 
 ### DNS请求代答
 网络设备或者软件直接代替DNS服务器对DNS查询进行应答。
 
 案例：一些DNS服务器实现了SERVFAIL重写和NXDOMAIN重写的功能。
-![](attachments/Pasted%20image%2020240104171055.png)
+![](../attachments/Pasted%20image%2020240104171055.png)
 
 ### 篡改DNS权威记录
 篡改DNS权威记录 我们这里指的黑客非法入侵DNS权威记录管理账号，直接修改DNS记录的行为。
@@ -88,14 +88,14 @@ DNS劫持在互联网中似乎已经变成了家常便饭，那么该如何应�
 在此隆重介绍一下，**阿里的DNS域名检测工具已经正式上线**，地址是：[阿里的DNS域名检测工具](https://boce.aliyun.com/detect/http)
 
 **拨测工具**：
-![](attachments/Pasted%20image%2020240104171857.png)
+![](../attachments/Pasted%20image%2020240104171857.png)
 范例如下所示：
-![](attachments/Pasted%20image%2020240104172000.png)
+![](../attachments/Pasted%20image%2020240104172000.png)
 
 **网站/DNS/域名检查工具**：
-![](attachments/Pasted%20image%2020240104172153.png)
+![](../attachments/Pasted%20image%2020240104172153.png)
 范例如下所示：
-![](attachments/Pasted%20image%2020240104172352.png)
+![](../attachments/Pasted%20image%2020240104172352.png)
 
 ## DNS劫持防范
 - 安装杀毒软件，防御木马病毒和恶意软件；定期修改路由器管理账号密码和更新固件。

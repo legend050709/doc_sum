@@ -19,7 +19,7 @@ DNS的请求和响应的基本单位是**DNS报文**（Messgae）。请求和响
 3、回答（Answer）  
 4、权威（Authority）  
 5、附加（Additional）
-![](attachments/Pasted%20image%2020240104104202.png)
+![](../attachments/Pasted%20image%2020240104104202.png)
 ```c
 +---------------------+
 |        Header       | 报文头，固定12字节
@@ -36,7 +36,7 @@ DNS的请求和响应的基本单位是**DNS报文**（Messgae）。请求和响
 ## Header部分
 DNS Header是每个DNS报文都必须拥有的一部分，它的长度固定为**12B**。
 每一类DNS报文都有一个首部部分。首部包括一些字段，用于规定其余部分是否存在，也是规定是查询还是响应，是标准查询还是其他类型的操作。
-![](attachments/Pasted%20image%2020240104104248.png)
+![](../attachments/Pasted%20image%2020240104104248.png)
 
 如下所示，每一行2个字节，它拥有如下的结构：
 ```c
@@ -98,7 +98,7 @@ QR(Query-Response)是1bit flag位，查询/响应的标志位。
 - **RCODE(Response Code)(4bit)**
 响应码。表示响应的差错状态。
 0表示没有差错，1表示格式错误，32表示服务器错误，3表示域参照问题，4表示查询类型不支持，5表示被禁止，其它被保留。
-![](attachments/Pasted%20image%2020240104105307.png)
+![](../attachments/Pasted%20image%2020240104105307.png)
 
 
 - **QDCOUNT**
@@ -121,7 +121,7 @@ Additional RRs。附加资源记录数。
 2、资源记录（RR）区域，即Answers、Authorities、Additional records三个区域。每个区域均包括数量不等的资源记录块。
 
 ## Question段/Query段
-![](attachments/Pasted%20image%2020240104105939.png)
+![](../attachments/Pasted%20image%2020240104105939.png)
 question部分存放的是向服务器查询的域名数据。它由**QDCOUNT**个条目(Entry)组成。一般情况下它只有一条Entry。
 
 每个Entry的格式是相同的，如下所示：
@@ -139,7 +139,7 @@ question部分存放的是向服务器查询的域名数据。它由**QDCOUNT**�
 ```
 
 比如：
-![](attachments/Pasted%20image%2020240104110040.png)
+![](../attachments/Pasted%20image%2020240104110040.png)
 ### DNS标准名称(name)表示法
 DNS使用一种标准格式对域名进行编码。它由一系列的**label**（和域名中用.分割的label不同）构成。
 每个lebel首字节的高两位用于表示label的类型。这意味着一共可直接分配四种label类型。RFC1035中分配了四个里面的两个，分别是：`00`表示的普通label，`11`表示的压缩label。
@@ -149,7 +149,7 @@ DNS使用一种标准格式对域名进行编码。它由一系列的**label**�
 后面的部分和域名的那个label完全相同。例如`www.example.com`中第一个label `www` 使用普通label编码时会得到二进制序列：`**[0x03]['w']['w']['w']**`;
 由于所有域名最后都会有一个长度为0的根域名，因此该编码下便会有个值为`0x00`的label来标识域名末尾。
 `www.example.com`的完整编码是“`[3]www[7]example[3]com[0]`“，画个图的话就是：
-![](attachments/Pasted%20image%2020231229203626.png)
+![](../attachments/Pasted%20image%2020231229203626.png)
 
 #### 压缩label(11xxxxxx)
 **背景**
@@ -167,7 +167,7 @@ label首字节的高两位为11时表示这个label是压缩表示的，即为�
 **OFFSET**便是指针，这个OFFSET表示label的真实数据位于整个数据包的offset处。和数组下标类似，数据包的第一个字节offset为0。
 
 下面是一个真实DNS数据包看起来的样子：
-![](attachments/Pasted%20image%2020231229204110.png)
+![](../attachments/Pasted%20image%2020231229204110.png)
 假设依次在数据包的`0x0C`，`0x2E`和`0x4C`(此处的`0x0C`、`0x2E`和`0x4C`是相对于DNS Header的位置)处依次出现了三条域名：`example.com`，`www.example.com`，`www.example.com`。由于后两条域名的`example.com`部分与第一条相同，因此可以使用压缩指针进行压缩。
 
 对于第二条域名，第一个label `www`并未在以前域名中出现，因此第一个label需要直接给出，从第二个label起，example.com已经在数据包0x0C处有了一份，因此构造指针`0xC00C`(11000000 00001100)，最高两bit表示这是一个指针，后14bit指定了接下来的label位于整个报文的偏移量（第一个字节偏移量是0），也就是0C。
@@ -214,8 +214,8 @@ FRC1035内指定了编号为1-16的16种资源类型，而当前则一共定义�
 
 ## Answer，Authority，Additional段
 资源记录（RR）区域，即Answers、Authorities、Additional records三个区域，每个区域均包括数量不等的查询块，每块格式如下：
-![](attachments/Pasted%20image%2020240104110347.png)
-![](attachments/Pasted%20image%2020240104120721.png)
+![](../attachments/Pasted%20image%2020240104110347.png)
+![](../attachments/Pasted%20image%2020240104120721.png)
 
 **Answer**，**Authority**和**Additional**三个段的格式是完全相同的，都是由零至多条Resource Record（资源记录）构成。这些资源记录因为不同的用途而被分开存放。
 
@@ -227,7 +227,7 @@ Additional这个名字看起来就很附加，前面三个段放不了的信息�
 
 
 范例如下所示：
-![](attachments/Pasted%20image%2020240104110435.png)
+![](../attachments/Pasted%20image%2020240104110435.png)
 ### RR记录格式
 资源记录是DNS系统中非常重要的一部分，它拥有一个变长的结构，具体格式如下：
 ```bash
@@ -302,7 +302,7 @@ A就是Address的首字母，它用于解析一个域名对应的IPv4地址，�
 ```
 
 范例如下所示：
-![](attachments/Pasted%20image%2020240104121039.png)
+![](../attachments/Pasted%20image%2020240104121039.png)
 
 #### NS
 域名服务器记录，用来指定该域名由哪个DNS服务器来进行解析。它的结果是一条新的域名，不过是权威服务器的。
@@ -352,7 +352,7 @@ SOA即Start Of Zone，“区域开始记录”，这个记录主要用于权威D
 所有的时间单位都是秒，除前两个字段使用DNS标准名称表示法以外，其它字段长度都是32bit。SOA记录的TTL都是0，也就是说这个记录不能被缓存。
 
 范例如下：
-![](attachments/Pasted%20image%2020240104120828.png)
+![](../attachments/Pasted%20image%2020240104120828.png)
 
 #### PTR
 ptr用于将ip地址反向解析出域名。它和.arpa域名联合使用。例如对114.114.114.114做反向解析可以获得结果：
@@ -385,20 +385,20 @@ AAAA一看就和A有关系，它被用于IPv6地址的解析。AAAA是4个A，�
 ```
 ## 范例
 一次DNS请求的过程：
-![](attachments/Pasted%20image%2020240104111102.png)
+![](../attachments/Pasted%20image%2020240104111102.png)
 包括请求和响应，二者具备相同的ID。
 
 **请求**
-![](attachments/Pasted%20image%2020240104111219.png)
+![](../attachments/Pasted%20image%2020240104111219.png)
 DNS请求中含有一个被请求的域名：dailyupdate.wangwang.taobao.com。
 
 **响应**
-![](attachments/Pasted%20image%2020240104111346.png)
+![](../attachments/Pasted%20image%2020240104111346.png)
 使用Wireshark得到的分析如下：
-![](attachments/Pasted%20image%2020240104111358.png)
+![](../attachments/Pasted%20image%2020240104111358.png)
 
 在这里，就包含了域名部分重复的例子：
-![](attachments/Pasted%20image%2020240104111501.png)
+![](../attachments/Pasted%20image%2020240104111501.png)
 图中红框所示即为使用0xC028代替之前出现的`com`段，但是`dailyupdate.wangwang.taobao.com`由于在该`CNAME`的前一部分，则没有被代替。
 
 # 参考

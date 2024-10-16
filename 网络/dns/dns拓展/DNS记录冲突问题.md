@@ -14,7 +14,7 @@
 
 3、↔️：可重复，指在同一类型下，同一条线路下，可设置相同的多条记录值。如：已经设置了 `dnswork.top` 的 A 记录，还可以继续再设置 `dnswork.top` 的 A 记录。
 
-![](attachments/Pasted%20image%2020240122102606.png)
+![](../attachments/Pasted%20image%2020240122102606.png)
 
 ## 主机记录为非@
 在主机记录相同、解析线路相同的情况下，这几种不同类型的解析记录不能共存：
@@ -24,7 +24,7 @@
 
 3、↔️：可重复，指在同一类型下，同一条线路下，可设置相同的多条记录值。如：已经设置了 `www.dnswork.top` 的 A 记录，还可以继续再设置 `www.dnswork.top` 的 A 记录。
 
-![](attachments/Pasted%20image%2020240122102834.png)
+![](../attachments/Pasted%20image%2020240122102834.png)
 
 # cname和其他记录冲突
 ## 冲突原因
@@ -39,7 +39,7 @@ CNAME 记录和 MX、TXT 记录冲突的根本原因在于 CNAME (Canonical NAME
 
 ## 冲突范例
 假设为dnswork.top配置如下两条记录
-![](attachments/Pasted%20image%2020240122142012.png)
+![](../attachments/Pasted%20image%2020240122142012.png)
 
 按照RFC标准协议CNAME优先级较高。
 ```text
@@ -70,7 +70,7 @@ ALIAS 记录，又称`CNAME Flattening` 记录，中文为“别名”记录，�
 ### 使用二级域名进行解析
 刚才也说到了，一个域名节点只能有一个 CNAME 的解析记录，那么就可以启用二级域名，这样就不是同一个域名节点了。
 大致操作方法如下：
-![](attachments/Pasted%20image%2020240122142850.png)
+![](../attachments/Pasted%20image%2020240122142850.png)
 
 一般来说为根域名设置 CNAME 记录的情况都是由于网站需要接入 CDN。如果您可以接受网站采用 `www.example.com` 这样的网址而不是`example.com`，那么您完全可以使用 `www.example.com` 域名接入 CDN。由于 `www.example.com` 不是根域名了，因此它的 CNAME 记录不会和根域名的 MX、TXT 记录冲突，这样就解决了网站的 CDN 接入与域名邮箱共存的问题。
 > 这种方法的有点在于最为简单，但缺点是必须使用二级域名。
@@ -85,18 +85,18 @@ ALIAS 记录，又称`CNAME Flattening` 记录，中文为“别名”记录，�
 在不同的域名服务商可能有不同的叫法，比如阿里云叫 显示/隐式 URL，CloudXNS的叫做 LINK 记录。
 
 现在我们有域名`example.com`
-![](attachments/Pasted%20image%2020240122154650.png)
+![](../attachments/Pasted%20image%2020240122154650.png)
 需要将其以CNAME解析到`cn.to.com`,同时需要添加MX记录且主机记录为@，此时CNAME会与MX冲突。
 
 通过配置隐性URL解决冲突:
 通过二级域名`www.example.com`以CNAME解析到`cn.to.com`。
-![](attachments/Pasted%20image%2020240122154807.png)
+![](../attachments/Pasted%20image%2020240122154807.png)
 
 添加隐性URL记录，主机记录为@ ，记录值为`www.example.com`。
-![](attachments/Pasted%20image%2020240122154838.png)
+![](../attachments/Pasted%20image%2020240122154838.png)
 
 此时访问`example.com`都会转发到`www.example.com`，而`www.example.com`又以CNAME解析到`cn.to.com`。  这样CNAME就没有用到`@`，MX就可以使用@作为主机记录。
-![](attachments/Pasted%20image%2020240122154951.png)
+![](../attachments/Pasted%20image%2020240122154951.png)
 
 # 其他
 ## URL转发
