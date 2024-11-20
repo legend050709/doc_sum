@@ -4,16 +4,26 @@
 在Golang的流程控制中，循环语句有for和range两种。
 ## for
 
-**使用方法一**：
+### 普通格式的 for
+```go
+// 完整格式的for
+for init; condition; modif { }
+```
+
+
 `for 赋值表达式; 关系表达式或逻辑表达式; 赋值表达式 { }`
 ```go
 for i := 0; i < 10; i++ { 
 
 }
 ```
+### 只有条件判断的for
+```go
+// 只有条件判断的for，实现while的功能
+// 要在循环体中加上退出条件，否则无限循环
+for condition { }
+```
 
-**使用方法二**：
-`for 关系表达式或逻辑表达式 { }`
 ```go
 n := 10 
 for n > 0 { 
@@ -21,25 +31,40 @@ for n > 0 {
 }
 ```
 
-**使用方法三**：
-`for { }`
+### 无限循环的for
+好几种方式实现for的无限循环。只要省略for的条件判断部分就可以实现无限循环。
+```go
+for i := 0;;i++ 
+for { } 
+for ;; { }
+for true { }
+```
+
+无限循环时，一般在循环体中加上退出语句，如break、os.Exit、return等。
+
 ```go
 for {
     fmt.Println("hello world")
 }
 // 等价于
-// for true {
-//  fmt.Println("hello world")
-// }- 
+for true {
+	fmt.Println("hello world")
 }
+
 ```
 
-## range
-Golang range类似迭代器操作，可以对 slice、map、数组、字符串等进行迭代循环。
-在字符串、数组和切片中它返回 (索引index, 值value) ，在集合map中返回 (键key, 值value)。
+## for-range
+Golang range类似迭代器操作，可以对 **slice、map、数组、字符串**等进行迭代循环。
+
+### 返回值
+**两个返回值**
+在字符串、数组和切片（slice）中它返回 (索引index, 值value) ，在集合map中返回 (键key, 值value)。
+
+**一个返回值**
 但若当只有一个返回值时，第一个参数是索引(index)或键(key)。
 
-**遍历字符串**
+### 遍历字符串
+
 ```go
 str := "abc"
 for i, char := range str {
@@ -57,7 +82,9 @@ for i := range str { //只有一个返回值
 // 2
 ```
 
-**遍历切片**
+
+### 遍历切片
+
 ```go
 nums := []int{1, 2, 3}
 for i, num := range nums {
@@ -69,7 +96,8 @@ for i, num := range nums {
 // 2 => 3
 ```
 
-**遍历map**
+### 遍历map
+
 ```go
 kvs := map[string]string{"a": "apple", "b": "banana"}
 for k, v := range kvs {
@@ -84,13 +112,52 @@ for k := range kvs { //只有一个返回值
 // a
 // b
 ```
+
+
 # 注意事项
-for/range 循环中，由于 func 捕获，或者显式/隐式的取引用，对循环变量产生了引用并且这个引用逃逸出了当前循环迭代（iteration）的生命周期范围。而由于 Golang 一开始决定将将循环变量（i、k、v）的生命周期定义为整个循环，而不是每个迭代都有新一份的循环变量，导致了每一轮迭代产生的引用实际上都指向同一个值，而不是指向每一轮各自对应的值。
+```go
+for index,value := range XXX {}
+```
+## value是从XXX中拷贝的副本
+value是从XXX中拷贝的副本，所以通过value去修改XXX中的值是无效的，在循环体中应该总是让value作为一个只读变量。如果想要修改XXX中的值，应该通过index索引到源值去修改(不同类型修改的方式不一样)。
+
+```go
+func main() {
+    s1 := []int{11,22,33}
+    for index,value := range s1 {
+        value += 1      // 只在for结构中有效
+        fmt.Println(index,value)
+    }
+    fmt.Println(s1)   // for外面的结果仍然是[11 22 33]
+}
+```
+
+要在循环结构中修改slice，应该通过index索引的方式：
+```go
+func main() {
+    s1 := []int{11,22,33}
+    for index,value := range s1 {
+        value += 1      // 只在for结构中有效
+        fmt.Println(index,value)
+    }
+    fmt.Println(s1)   // for外面的结果仍然是[11 22 33]
+}
+```
+
+## value是 per 循环而不是per迭代的
+for/range 循环中，由于 func 捕获，或者显式/隐式的取引用，对循环变量产生了引用并且这个引用逃逸出了当前循环迭代（iteration）的生命周期范围。
+而由于 Golang 一开始决定将将循环变量（i、k、v）的生命周期定义为整个循环，而不是每个迭代都有新一份的循环变量，导致了每一轮迭代产生的引用实际上都指向同一个值，而不是指向每一轮各自对应的值。
+
 ## 原因
-golang 的循环变量是 per loop 的，而不是 per iteration 的。如果对循环变量产生了引用（比如闭包 capture，或者取指针），不同次迭代取到的指针都是同一个。
+
+==**golang 的循环变量是 per loop 的，而不是 per iteration 的**。
+对循环变量产生了引用, 很容易产生问题==。
+
+如果对循环变量产生了引用（比如闭包 capture，或者取指针），不同次迭代取到的指针都是同一个。
 如果这个指针/引用被逃逸出了一次迭代的范围内（比如 append 到了一个数组里，或者被go/defer后面的闭包capture了），因为所有 iteration 里取到的指针都是同一个，指向的对象也都会是同一个（最后一轮iteration的结果）。
+
 ## 场景
-### 场景一：使用循环迭代器的变量显式引用
+### 场景一：使用循环的变量的显式引用
 ```go
 func main() {
     var out []*int
@@ -137,7 +204,7 @@ func main() {
 - 创建临时变量`t := v`；`a2[i] = &t`  
 - 闭包(与上面的临时变量原理一样)，`func(v int) { a2[i] = &v }(v)`
 
-### 场景二：循环迭代器中使用匿名函数
+### 场景二：循环中使用匿名函数
 **现象1**
 ```go
 func TestIterator13(t *testing.T) {
@@ -160,7 +227,9 @@ func TestIterator13(t *testing.T) {
 9
 ```
 **分析**
-因为循环变量是共享的，打印的不是某一次的值，最后统一输出，值就会被改写，【笼统的说法是匿名函数是引用类型】
+原因是在 for 循环结束后，最后 i 的值被设置为了 3。
+因为循环变量是共享的，打印的不是某一次的值，最后统一输出，值就会被改写，【==笼统的说法是匿名函数是引用类型==】
+
 **正确做法**：
 ```go
 func TestIterator14(t *testing.T) {
@@ -192,6 +261,7 @@ for _, print := range prints {
 **分析**
 这段程序的输出结果是什么？没有 & 取地址符，是输出 1，2，3 吗？
 结果程序一运行，输出结果是 3，3，3。这又是为什么？
+
 问题的重点之一：关注到闭包函数，实际上所有闭包都打印的都是相同的 v，也就是输出 3，原因是在 for 循环结束后，最后 v 的值被设置为了 3，仅此而已。
 
 **正确做法**：
@@ -205,9 +275,7 @@ for _, v := range []int{1, 2, 3} {
 增加 v := v 语句，程序输出结果为 1，2，3。
 
 
-
-
-### 场景三：循环迭代器中使用goroutine
+### 场景三：循环中使用goroutine
 范例一：
 ```go
 type MyInt int
@@ -313,7 +381,7 @@ for _, val := range values {
 }
 ```
 
-### 场景四：循环迭代器中使用defer
+### 场景四：循环中使用defer
 **现象**
 ```go
 func TestIterator10(t *testing.T) {

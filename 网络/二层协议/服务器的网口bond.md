@@ -74,7 +74,82 @@ ip link set eth1 up
 # 查看
 ## bond0的生效信息
 ```bash
-cat /proc/net/bonding/bond0
+# cat /proc/net/bonding/eth02
+Ethernet Channel Bonding Driver: v3.7.1 (April 27, 2011)
+
+Bonding Mode: IEEE 802.3ad Dynamic link aggregation
+Transmit Hash Policy: layer3+4 (1)
+MII Status: up
+MII Polling Interval (ms): 100
+Up Delay (ms): 0
+Down Delay (ms): 0
+
+802.3ad info
+LACP rate: slow
+Min links: 0
+Aggregator selection policy (ad_select): stable
+System priority: 65535
+System MAC address: 5c:6f:69:c8:32:c0
+Active Aggregator Info:
+	Aggregator ID: 1
+	Number of ports: 2
+	Actor Key: 21
+	Partner Key: 3265
+	Partner Mac Address: 3c:c7:86:43:ac:f1
+
+Slave Interface: lan03
+MII Status: up
+Speed: 25000 Mbps
+Duplex: full
+Link Failure Count: 0
+Permanent HW addr: 5c:6f:69:c8:32:c0
+Slave queue ID: 0
+Aggregator ID: 1
+Actor Churn State: none
+Partner Churn State: none
+Actor Churned Count: 0
+Partner Churned Count: 0
+details actor lacp pdu:
+    system priority: 65535
+    system mac address: 5c:6f:69:c8:32:c0
+    port key: 21
+    port priority: 255
+    port number: 1
+    port state: 61
+details partner lacp pdu:
+    system priority: 32768
+    system mac address: 3c:c7:86:43:ac:f1
+    oper key: 3265
+    port priority: 32768
+    port number: 11
+    port state: 61
+
+Slave Interface: lan04
+MII Status: up
+Speed: 25000 Mbps
+Duplex: full
+Link Failure Count: 0
+Permanent HW addr: 5c:6f:69:c8:32:c1
+Slave queue ID: 0
+Aggregator ID: 1
+Actor Churn State: none
+Partner Churn State: none
+Actor Churned Count: 0
+Partner Churned Count: 0
+details actor lacp pdu:
+    system priority: 65535
+    system mac address: 5c:6f:69:c8:32:c0
+    port key: 21
+    port priority: 255
+    port number: 2
+    port state: 61
+details partner lacp pdu:
+    system priority: 32768
+    system mac address: 3c:c7:86:43:ac:f1
+    oper key: 3265
+    port priority: 32768
+    port number: 12
+    port state: 61
 ```
 ## 查看当前速率
 ```bash

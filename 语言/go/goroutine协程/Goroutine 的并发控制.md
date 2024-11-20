@@ -265,5 +265,11 @@ func main() {
 
 # 参考
 ```c
+# Go并发编程实战课
+https://politcloud.org/categories/go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/
+https://politcloud.org/categories/
+
+# 极客时间：Go 并发编程实战课
+https://time.geekbang.org/column/intro/100061801?tab=catalog
 
 ```

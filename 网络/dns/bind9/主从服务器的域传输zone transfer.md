@@ -300,7 +300,20 @@ www1.longshuai.com.       21600 IN CNAME  www.longshuai.com.
 
 ![](attachments/Pasted%20image%2020240409173946.png)
 
+参考：[# How does BIND choose the primary for a zone refresh (zone timer or notify)?](https://kb.isc.org/docs/aa-01467)
+
+**(0) slave进行zone refresh的时机**
+（1）slave中zone，会定期的进行 zone的 refresh（向master发送SOA请求，查看zone是否变化）。
+
+（2）如果master发送了notify消息，那么slave立马进行zone refresh，即notify触发zone  refresh。
+
 **(1)slave正在进行zone的refresh或排队(queue)进行refresh，此时收到notify，怎么办?**
+```bash
+653828 17-Oct-2024 15:35:00.829 notify: info: client @0x7f58080e90a0 127.0.0.1#28060/key kwai_base_key: view base: received notify for zone '56.10.in-addr.arpa': TSIG 'kwai_base_key'
+653829 17-Oct-2024 15:35:00.829 notify: info: client @0x7f5808122c40 127.0.0.1#9960/key kwai_base_key: view base: received notify for zone 'kwaidc.com': TSIG 'kwai_base_key'
+653830 17-Oct-2024 15:35:00.829 general: info: zone 56.10.in-addr.arpa/IN/base: notify from 127.0.0.1#28060: refresh in progress, refresh check queued
+653831 17-Oct-2024 15:35:00.829 general: info: zone kwaidc.com/IN/base: notify from 127.0.0.1#9960: refresh in progress, refresh check queued
+```
 正在进行（in progress）zone refresh：因为zone refresh(soa的发送和接收)是2个包，可能刚发送了soa请求，还没有收到回复。
 
 排队(queue)进行zone refresh：有多个zone进行refresh(发送soa)，正在发送了某个zone的请求，那么后续zone的refresh就需要进行排队(queue)。
@@ -314,6 +327,49 @@ www1.longshuai.com.       21600 IN CNAME  www.longshuai.com.
 存在多个master的时候，收到 notify，不太可能立刻进行 zone refresh，而是需要选择 master来发送 soa请求。
 另外一个就是，如果一个zone的2个记录更新，可能会发送2个notify，那么延迟发送soa请求，就可以少发 一个soa请求。
 
+
+**（4）存在多个slave，某个slave和master之间的主从同步耗时长的问题 **
+```text
+异常日志如下所示：
+# Zone refresh error: refresh: retry limit for master a.b.c.d#53 exceeded
+
+问题如下：
+该 salve 和 master之间的主从同步耗时长，比其他的slave耗时要长很多。
+在配置变更时(56.10的zone发生变更)，master给各个slave发notify，各个slave进行SOA查询，以及获取到master的SOA响应；后续，如果获取的zone的SN比自身的zone的SN大，则需要后续的ixfr的请求。
+```
+![](attachments/Pasted%20image%2020241017175031.png)
+
+
+参考：[# Zone refresh error: refresh: retry limit for master a.b.c.d#53 exceeded](https://lists.isc.org/pipermail/bind-users/2015-July/095278.html)
+
+![](attachments/Pasted%20image%2020241017175930.png)
+
+原因分析：
+1> 原因一：存在防火墙，组织了该slave的部分UDP协议的SOA请求。
+
+![](attachments/Pasted%20image%2020241017180321.png)
+
+
+2> 原因二：slave上存在SOA请求的限速
+比如，slave存在soa的请求的限速。那么增大master的soa请求的配置。
+```bash
+serial-query-rate：
+	slave上配置，控制slave发起soa refresh查询的速率.
+
+transfers-in：
+	slave上配置，收到的 zone-transfer (xfer-in) 的 并发数的最大值。
+```
+
+3> slave的存在丢包。
+```text
+比如：slave发包时存在丢包，或收包的时候存在丢包。
+可以查看 salve的 统计计数。
+	接口的统计计数：收和发的丢弃计数。
+	udp socket的接收和发送的buffer不足：查看/proc/net/snmp
+	
+```
+
+4> master存在丢包。
 
 
 # zone文件更新
@@ -755,7 +811,7 @@ dig @106.14.212.41  liumapp.com axfr
 - `refresh` : 从服务器每多久到主服务器检查序列号的变化(发送SOA请求)
 
 ## retry
-- `retry` : 从服务器到服务器请求同步解析库失败时，再次发起解析请求的时间间隔，这个时间需短时刷新时间。
+- `retry` : 从服务器到主服务器请求同步解析库失败时，再次发起解析请求的时间间隔，这个时间需短时刷新时间。
 
 ## expire
 
@@ -2077,14 +2133,17 @@ dig  @127.0.0.1 internal SOA +norecurse +noadflag +aaflag +opcode=notify  -y hma
 
 ### zone传输影响slave的dns查询处理
 **背景**
-一般而言，master不提供dns查询，只是动态接受zone的变更，然后同步给slave。slave提供client的 dns查询。
-slave通过 bird 发布 anycast ip，这样多个slave就可以提供dns的集群服务。但是 配置变更之后，master需要和slave之间进行 zone的同步，会影响slave对于client的dns的请求。
+一般而言，master不提供dns查询，只是动态接受zone的变更，然后同步给slave。
+slave提供client的 dns查询。
+slave通过 bird 发布 anycast ip，这样多个slave就可以提供dns的集群服务。
+但是 配置变更之后，master需要和slave之间进行 zone的同步，会影响slave对于client的dns的请求。
 
 **说明**
 大多数情况下，client的dns请求都是使用的  UDP进行dns请求(TCP的情况很少)，对于client来说，dns的请求和响应也就是一问一答，一共2个包（如果是外网的dns请求，reslover和权威之间可能还会有迭代查询，但是对于client来说，就是2个包）。
+
 那么，就可以通过控制 bird 的 anycast IP 的 path，对要进行配置下发的slave服务器，进行查询流量的摘除。摘除了之后，再对外提供dns查询服务。
 
-> 即：不再是mster和slave之间进行配置同步，而是直接nsupdate给slave下发配置，给slave下发配置前，本slave不再对外提供dns查询服务，集群中的其他的slave对外提供dns查询服务，配置下发完成之后，本slave再次对外提供查询服务。
+> 即：不再是mster和slave之间进行配置同步，而是直接 nsupdate 给slave下发配置，给slave下发配置前，本slave不再对外提供dns查询服务，集群中的其他的slave对外提供dns查询服务，配置下发完成之后，本slave再次对外提供查询服务。
 
 
 **缺点**

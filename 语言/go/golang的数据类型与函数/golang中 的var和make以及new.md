@@ -3,7 +3,13 @@
 # 背景
 
 ## 零值
-go语言总共分为四大类型：**基本数据类型、复杂数据类型、引用数据类型和接口类型**。
+
+Go 有四类数据类型：
+
+- 基本类型：数字、字符串和布尔值
+- 聚合类型：数组array和结构strcut
+- 引用类型：指针pointer、切片slice、映射map、函数function和通道channel
+- 接口类型：接口
 
 零值是指基本数据类型和指针的初始值。
 数值型零值为`0`、string的零值为`""`、bool的零值为`false`、指针的零值为`nil`。
@@ -11,6 +17,9 @@ go语言总共分为四大类型：**基本数据类型、复杂数据类型、�
 # var
 声明一个变量：
 ```go
+var 变量名 数据类型
+
+如下所示：
 var a int
 var b string
 ```
@@ -19,20 +28,28 @@ var b string
 当我们不指定变量的默认值的时候呢，这些变量的默认值是它所属类型的零值。
 > 比如上面的 int 型它的零值为 0，string 的零值为 ""，引用类型的零值为 nil。
 
+## 声明多个变量
 
-# new 和 make
-## new
+```go
+
+var (
+	a int
+	b bool
+	c string
+	
+)
+```
+
+
+# new
 ```go
 // The new built-in function allocates memory. The first argument is a type, // not a value, and the value returned is a pointer to a newly // allocated zero value of that type.
 
 func new(Type) *Type
 ```
-官方是这么解释`new`的：
->这个内置函数功能是分配内存。
->第一个参数接收一个类型而不是一个值，函数返回一个指向该类型内存地址的指针，同时把分配的内存置为该类型的零值。
 
-因此，`new` 的作用是根据传入的类型分配一片内存空间并返回指向这片内存空间的指针。
-> 注：ew(Type) 等价于 &Type{ }
+因此，`new` 的作用是**根据传入的类型分配一片内存空间并返回指向这片内存空间的指针**。
+> 注：**new(Type) 等价于 &Type{ }**
 
 ```go
 i := new(int)
@@ -43,8 +60,43 @@ i := &v
 上述代码片段中的两种不同初始化方法是等价的，它们都会创建一个指向 `int` 零值的指针。
 ```
 
-### new 实际较少使用
+
+```go
+package main
+
+import `fmt`
+
+func main() {
+    var a *int = new(int)
+    fmt.Println(a) // a是一个int指针类型 0xc00000a0c8
+    // a = 100      // 此时不能用a直接赋值，因为a是int指针类型，而100是int类型，两者类型不同，所以不同赋值
+    *a = 100 // 必须要在a前面加一个星号*，*a 表示内存地址指向的那块内存空间，*a=100表示将数字100存储到a(内存地址)指向的那块内存空间中；
+    fmt.Println(*a)
+
+    var b *[]int = new([]int)
+    // (*b)[0] = 1      // 此时b是一个指针类型，它的值是一个内存地址
+    fmt.Println(b, &b)       // b的值是一个内存地址，而这个内存地址也需要一块内存空间去存储，所以 &b是取b的内存地址
+    fmt.Printf("%p\n", b)    // 打印：0xc0000044c0, 这是b的值
+    fmt.Println(*b)          // 是一个空切片，打印：[]
+    *b = make([]int, 5, 100) // 给b(内存地址)分配一块内存空间并初始化切片长度为5，容量为100，这里才可以进行索引操作，如下
+    (*b)[0] = 10
+    (*b)[1] = 20
+    (*b)[2] = 30
+    fmt.Println(*b) // 打印：[10 20 30 0 0]
+
+    var c = make([]int, 5, 20)
+    c[0] = 100
+    c[1] = 200
+    fmt.Println(c) // 打印：[100 200 0 0 0]
+    // 通过上面的例子可以看出，用new()初始化引用类型的变量是多余的
+}
+```
+
+
+
+## new 实际较少使用
  如下**struct 初始化的过程**，可以说明不使用 new 一样可以完成 struct 的初始化工作。
+ 
 ```go
 type Foo struct {  
     name string  
@@ -82,14 +134,17 @@ foo5.age = 5
 fmt.Println(foo5.age)
 ```
 
-### 范例
+
+## 范例
 ```go
  a := new(int)
  fmt.Printf("类型为:%T, 值为:%v\n", a, a)
  fmt.Printf("类型为:%T, 值为:%v\n", *a, *a)
+ 
  b := new(string)
  fmt.Printf("类型为:%T, 值为:%v\n", b, b)
  fmt.Printf("类型为:%T, 值为:%v\n", *b, *b)
+ 
  c := new(*int)
  fmt.Printf("类型为:%T, 值为:%v\n", c, c)
  fmt.Printf("类型为:%T, 值为:%v\n", *c, *c)
@@ -104,9 +159,10 @@ fmt.Println(foo5.age)
 ```
 
 
-## make
-make 也是用于分配内存，与 new 不同的是，它一般只用于chan，map，slice 的初始化，并且直接返回这三种类型本身，而不是类型指针。
+# make
+make() 用来分配引用类型的内存，比如map、slice以及channel。并且直接返回这三种类型本身，而不是类型指针。
 
+**new()用来分配除了引用类型以外的所有其他类型的内存，比如int、数组等； new返回类型的指针**；
 
 ```go
 // The make built-in function allocates and initializes an object of type
@@ -142,9 +198,9 @@ ch := make(chan int, 5)
 ```
 ![](attachments/Pasted%20image%2020231213150439.png)
 
-### make(T, args) 返回的是 T 的 引用
+## make(T, args) 返回的是 T 的 引用
 如果不特殊声明，go 的函数默认都是按值传参，即通过函数传递的参数是值的副本，在函数内部对值修改不影响值的本身。
-make(T, args) 返回的值通过函数传递参数之后可以直接修改，即 map，slice，channel 通过函数传参之后，在函数内部的修改将影响函数外部的值。
+make(T, args) 返回的值通过函数传递参数之后可以直接修改，即 map，slice，channel 这些**引用类型** 通过函数传参之后，在函数内部的修改将影响函数外部的值。
 
 ```go
 func modifySlice(s []int) {  
@@ -156,7 +212,8 @@ fmt.Printf("%#v", s2) //[]int{0, 0, 0}
 modifySlice(s2)  
 fmt.Printf("%#v", s2) //[]int{1, 0, 0}
 ```
-这说明 make(T, args) 返回的是引用类型，在函数内部可以直接更改原始值，对 map 和 channel 也是如此。
+
+这说明 **make(T, args) 返回的是引用类型，在函数内部可以直接更改原始值，对 map 和 channel 也是如此**。
 
 ```go
 func modifyMap(m map[int]string) {  
@@ -188,7 +245,45 @@ fmt.Printf("c2 is not nill --> %#v \n ", c2)
 go modifyChan(c2)  
 fmt.Printf("c2 is not nill --> %#v ", <-c2) //"string"
 ```
-### 范例
+
+
+## 引用类型的初始化
+
+如下所示，map类型的初始化：
+```go
+package main
+
+import `fmt`
+
+func main() {
+    var m map[string]int  // map声明后未初化是nil
+    fmt.Println(m == nil) // true
+
+    // 初始化 方式一：
+    m = map[string]int{}
+    // 对未初始化的map直接赋值会抛出异常 panic: assignment to entry in nil map
+    m["cai"] = 22000
+    m["kung"] = 20000
+    fmt.Println(m, len(m))
+
+    // 初始化 方式二：
+    n := make(map[string]int)
+    n["guang"] = 12000
+    n["wang"] = 10000
+    n["guo"] = 8000
+    n["liang"] = 9000
+    fmt.Println(n, len(n))
+
+    value, ok := n["wangg"]
+    if ok {
+        fmt.Println("value:", value)
+    } else {
+        fmt.Println("value is not exists.")
+    }
+}
+```
+
+## 范例
 ```go
 slice := make([]int, 0, 100)
 hash := make(map[int]bool, 10)
@@ -199,16 +294,20 @@ ch := make(chan int, 5)
 	hash 是一个指向 runtime.hmap 结构体的指针；
 	ch 是一个指向 runtime.hchan 结构体的指针；
 ```
-## new和make的区别
-- make 只能用来分配及初始化类型为 slice、map、chan 的数据，而 new 可以分配任意类型的数据。
-> new常给int、string、数组分配内存。实际上，new函数并不常用，大家更喜欢使用短语句声明的方式。
 
+# new和make的区别
 
-- new 分配返回的是指针，即类型 *Type。make 返回引用，即 Type。
+make()用来分配引用类型的内存，比如map、slice以及channel；
+
+new()用来分配除了引用类型以外的所有其他类型的内存，比如int、数组等； new返回类型的指针；
+
+- （1）make 只能用来分配及初始化类型为 slice、map、chan 这样引用类型的数据，而 new 可以分配任意类型的数据。
+> new常给int、string、数组分配内存。实际上，new函数并不常用，大家更喜欢使用短语句声明的方式。即 new(Type) 等价于 &Type{}。
+- （2）new 分配返回的是指针，即类型 *Type。make 返回引用，即 Type。
 > new返回的是指向类型的指针；而make的返回类型与其参数的类型相同，而不是指向它的指针，因为这三种数据类型(slice, map, chan)本身就是引用类型。
-- new分配空间后，是将内存清零，并没有初始化内存；而make分配空间后，是初始化内存，而不是清零。
+- （3）new分配空间后，是将内存清零，并没有初始化内存；而make分配空间后，是初始化内存，而不是清零。
 
-### 范例
+## 范例
 ```go
 package main
 
@@ -232,6 +331,7 @@ func main() {
     
 }
 ```
+
 
 # 小结
 ![](attachments/Pasted%20image%2020231213150659.png)

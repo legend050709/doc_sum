@@ -202,8 +202,99 @@ tx0_xsk_cqes 48351037
 ```
 
 
+###### 计算网卡ethtool的各个队列的收发包速率
 
-计算Mellanox网卡的一些异常统计的pps，如下所示：
+正常情况下，Mellanox网卡各个队列的累计值的统计如下所示：
+```bash
+# ethtool -S lan03 |  grep rx[0-9]*_packets
+     rx_packets: 1000484956269
+     rx_packets_phy: 1000513315132
+     rx0_packets: 1058338745
+     rx1_packets: 1041184332
+     rx2_packets: 1039751122
+     rx3_packets: 1041466975
+     rx4_packets: 1040902855
+     rx5_packets: 1351854894
+     rx6_packets: 1042499000
+     rx7_packets: 1039520420
+     rx8_packets: 693401847
+     rx9_packets: 955343442569
+     rx10_packets: 709424218
+     rx11_packets: 693622953
+     rx12_packets: 693556145
+     rx13_packets: 693358717
+     rx14_packets: 693832817
+     rx15_packets: 697423543
+     rx16_packets: 694437167
+     rx17_packets: 693855340
+     rx18_packets: 693979958
+     rx19_packets: 800497982
+     rx20_packets: 693479600
+     rx21_packets: 693492895
+     rx22_packets: 694815539
+     rx23_packets: 693651854
+     rx24_packets: 694501945
+     rx25_packets: 693315040
+     rx26_packets: 693524282
+     rx27_packets: 693843944
+     rx28_packets: 693755051
+     rx29_packets: 693825759
+     rx30_packets: 694137540
+     rx31_packets: 694240107
+     rx32_packets: 693183555
+     rx33_packets: 693468219
+     rx34_packets: 693772988
+     rx35_packets: 693080980
+     rx36_packets: 694090632
+     rx37_packets: 692453589
+     rx38_packets: 692641011
+     rx39_packets: 693737031
+     rx40_packets: 694354889
+     rx41_packets: 693623836
+     rx42_packets: 692888546
+     rx43_packets: 694164426
+     rx44_packets: 692710616
+     rx45_packets: 693929065
+     rx46_packets: 693773986
+     rx47_packets: 1106141566
+     rx48_packets: 693988197
+     rx49_packets: 693968834
+     rx50_packets: 693334118
+     rx51_packets: 693862601
+     rx52_packets: 1255042910
+     rx53_packets: 695070383
+     rx54_packets: 693748297
+     rx55_packets: 693360378
+     rx56_packets: 696096460
+     rx57_packets: 698773230
+     rx58_packets: 693433993
+     rx59_packets: 693326842
+```
+
+
+Mellanox网卡的收包的速率，如下所示：
+```
+# cat get_eth_queue_pps.sh
+sleep_time=1
+ethif=$1
+declare -A allinfo1
+declare -A allinfo2
+while true
+do
+  echo ------------------$(date)----------------------
+  eval $( ethtool -S ${ethif} |  grep rx[0-9]*_packets | awk -F: '{print $1,$2}' | awk '{print $1,$2}' | awk  '{printf "allinfo1[%s]=%d;",$1,$2'})
+        sleep ${sleep_time}
+        for key1 in "${!allinfo1[@]}"
+        do
+    diff=$((allinfo1[$key1] - allinfo2[$key1]))
+    echo $key1 - ${diff}
+    allinfo2[$key1]=${allinfo1[$key1]}
+        done
+done
+```
+
+###### 计算Mellanox网卡ethtool的一些异常统计的pps
+如下所示：
 ```bash
 sleep_time=1
 declare -A allinfo1

@@ -256,6 +256,7 @@ Cpus_allowed_list:	31
 #### 获取多进程下所有线程的亲和性
 ```bash
 taskset -a -p PID
+taskset -a -pc PID
 ```
 
 范例：
@@ -300,6 +301,7 @@ pid 2676's current affinity mask: 100
 
 
 #### 设置多进程下所有线程的亲和性
+##### 所有线程有相同的亲和性
 ```bash
 
 taskset -a -p MASK PID
@@ -312,7 +314,34 @@ taskset -a -p MASK PID
 
 ![](attachments/Pasted%20image%2020240516160444.png)
 
+##### 不同线程不同的亲和性
+```bash
+# 获取线程ID
+ps -T -p <进程ID>
 
+# numa情况查看
+numactl --hardware
+
+
+# 更改绑核情况, 假如 12830-12863 为 named 进程生成的线程的 线程的id；
+cnt=1;for a in `seq 12830 12863`; do taskset -pc $cnt $a; cnt=$((cnt+1)); if [[ $cnt -eq 31 ]]; then cnt=1; fi; done
+
+# 理论生效信息: 查看进程下的线程的绑核情况
+taskset -a -pc PID
+
+
+# 实际生效信息验证：进程的线程实际运行的core的信息
+ps -L -p PID  -o pid,ppid,lwp,nlwp,psr,state,lstart,etimes,bsdtime,pcpu,vsz,rss,pmem,minflt,majflt,wchan:25,ucmd | sort -k5 -n
+
+```
+
+### 注意
+
+#### taskset 给 进程的线程绑核不会立刻生效
+
+![](attachments/image%20(18).png)
+
+如上所示，通过taskset 给named的线程设置了绑核之后，然后通过ps查看，大概需要等待一段时间（分钟级别，3分钟左右），绑核才可以生效。
 
 # cpuset
 

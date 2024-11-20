@@ -99,10 +99,10 @@ IPIP隧道最大的问题就是外层只有三层，没有四层。存在转发�
 网卡的RSS对于TCP/UDP而言，可以基于四元组hash选择接收队列。但是IPIP隧道而言，只有2元祖，很可能接受队列收包不均衡。进而硬中断/软中断也不均衡。
 
 ###  解决
-（1）**RPS以及RFS**
+#### RPS以及RFS
 ```
 调整RPS:
-    echo fff > /sys/class/net/隧道口/queues/rx-0/rps_cpus
+    echo ffffff > /sys/class/net/隧道口/queues/rx-0/rps_cpus
     echo 4096 > /sys/class/net/隧道口/queues/rx-0/rps_flow_cnt
 
 
@@ -110,11 +110,15 @@ IPIP隧道最大的问题就是外层只有三层，没有四层。存在转发�
     sysctl -w net.core.rps_sock_flow_entries=131072
 ```
 
-(2) **taskset**
+**其他**：
 
-可能经过RPS/RFS的设置，依然存在软中断高的问题。可以考虑程序的绑核。将软中断高的CPU排除掉。
 
-(3) **隧道外层使用多个SIP**
+#### taskset
+
+可能经过RPS/RFS的设置，依然存在软中断高的问题。
+可以考虑程序的绑核。将软中断高的CPU排除掉， 即中断高的CPU不作为 业务的CPU，仅仅用来收包，不作为业务的处理。
+
+#### 隧道外层使用多个SIP
 
 如果隧道外层的IP存在多个，那么就可以将流量hash进行打散。
 

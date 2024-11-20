@@ -1,12 +1,16 @@
 ```table-of-contents
 ```
 # 背景
-一般情况下测试 gRPC 服务，都是通过客户端来直接请求服务端。如果客户端还没准备好的话，也可以使用 BloomRPC 这样的 GUI 客户端。 如果环境不支持安装这种 GUI 客户端的话，那么有没有一种工具，类似于 curl 这样的，直接通过终端，在命令行发起请求呢？ 答案肯定是有的，就是本文要介绍的 grpcurl。
+一般情况下测试 gRPC 服务，都是通过客户端来直接请求服务端。
+如果客户端还没准备好的话，也可以使用 BloomRPC 这样的 GUI 客户端。 如果环境不支持安装这种 GUI 客户端的话，那么有没有一种工具，类似于 curl 这样的，直接通过终端，在命令行发起请求呢？ 答案肯定是有的，就是本文要介绍的 grpcurl。
 
 # 介绍
-`grpcurl` 是一个能够直接与 gRPC 服务交互的命令行工具。基本算是 `curl` 的 gRPC 版本。由于 gRPC 服务之间的通信使用的是 protocol buffers（下文 PB 指代） 格式的二进制编码，所以无法使用传统的 curl，更何况旧版本的 curl 还不支持 HTTP/2。
+`grpcurl` 是一个能够直接与 gRPC 服务交互的命令行工具。基本算是 `curl` 的 gRPC 版本。
+由于 gRPC 服务之间的通信使用的是 protocol buffers（下文 PB 指代） 格式的二进制编码，所以无法使用传统的 curl，更何况旧版本的 curl 还不支持 HTTP/2。
 
-为了更好上手，该工具和服务器交互时，我们只需要提供 JSON 数据作为请求数据即可，该工具底层会自动将其编码为 PB 格式的二进制与服务端进行交互。
+## 原理
+为了更好上手，该工具和服务器交互时，我们只需要提供 **JSON 数据作为请求数据**即可，该工具底层会**自动将其编码为 PB 格式的二进制与服务端进行交互**。
+
 
 该工具支持通过以下几种情况查看 gPRC service 的定义格式（schema）：
 
@@ -24,6 +28,8 @@
 Protobuf 本身具有反射功能，可以在运行时获取对象的 Proto 文件。gRPC 同样也提供了一个名为 reflection 的反射包，用于为 gRPC 服务提供查询。
 
 # 安装
+
+## 方式一：下载go包编译
 https://github.com/fullstorydev/grpcurl/issues/154
 
 ```go
@@ -32,6 +38,20 @@ export GOPROXY=https://mirrors.aliyun.com/goproxy/
 go get github.com/fullstorydev/grpcurl
 go install github.com/fullstorydev/grpcurl/cmd/grpcurl
 ```
+
+结果：在 $GOPATH/bin 目录下，生成一个 grpcurl 可执行文件。我们可以复制到 /usr/local/bin/ 下。
+
+## 方式二：直接下载可执行文件
+```bash
+wget https://github.com/fullstorydev/grpcurl/releases/download/v1.7.0/grpcurl_1.7.0_linux_x86_64.tar.gz
+
+tar -xvf grpcurl_1.7.0_linux_x86_64.tar.gz
+
+chmod +x grpcurl
+
+./grpcurl -help
+```
+
 # 使用
 ```bash
 % grpcurl --help

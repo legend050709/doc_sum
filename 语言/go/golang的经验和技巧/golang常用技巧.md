@@ -184,6 +184,38 @@ printInfo("foo", true, true)
 printInfo("foo", true /* isLocal */, true /* done */)
 ```
 
+## 两个变量的值交换
+
+在go之前的编程语言中，如果要交换变量的值，需要借助一个临时变量来实现。如下伪代码：
+
+```go
+// 如下，交换变量一和变量二的值，需要引入临时变量三
+
+变量三 = 变量一
+变量一 = 变量二
+变量二 = 变量三
+
+
+范例：
+var a int = 100
+var b int = 200
+var temp int
+temp = a
+a = b
+b = temp
+```
+
+**go的多重赋值**
+go语言提供了多重赋值的特性可以轻松实现变量的交换。如下伪代码：
+```go
+变量一，变量二 ：= 变量二，变量一
+
+范例：
+var a = 1
+var b = 2
+a,b = b,a 
+```
+
 # 参考
 ```c
 https://juejin.cn/post/7303390778490028070

@@ -445,7 +445,103 @@ zone reload up-to-date
 #### 使用场景
 一般情况下，通过静态更改zone文件的方式来更改zone数据，然后通过`rndc reload`来进行同步。
 上面的操作，一般都是在master上进行操作，slave上的zone信息通过master和slave 之间的 zone 传输同步。 
-不过也可以禁止master和slave之间的 zone的动态传输，而是 在slave上更改zone文件，然后reload的方式。
+不过也可以禁止master和slave之间的 zone的动态传输，而是 在slave上更改zone文件，然后reload的方式，这种方式一般并不使用。
+
+#### 注意事项
+
+**对于slave而言**：
+zone的区域配置文件（区分zone的区域配置文件和zone的引导文件）一般是master同步过来的配置，然后named从内存读取写入到磁盘的（磁盘文件并不是text格式，vim并不可读）。==并不会在slave上直接更改zone配置文件==。
+
+slave上下面的配置更新，则需要在slave上进行`rndc reload`，但是==在slave上进行`rndc reload`是有损的，即对于client的dns查询是有损的==。
+（1）zone的区域引导文件的变更：
+	比如：zone的增删（不是zone中的RR记录的增删改）
+（2） view配置文件的变更：
+view配置文件（记录了view的名称，key，匹配的acl、以及view下的区域引导文件，rpz配置等) 的变更；比如增删view，变更acl、
+（3）其他配置的变更：
+比如全局配置 `named.conf.options` 文件中的变更、`named.conf.logging`日志文件的变更等
+
+bind的 named.conf.options 中的 全局option中的配置信息，如下所示的配置：
+```bash
+options {
+    directory "/var/named";
+    pid-file "/var/run/named/named.pid";
+    dump-file "/var/named/stats/cache_dump.db";
+    statistics-file "/var/named/stats/named_stats.txt";
+    memstatistics-file "/var/named/stats/mem.txt";
+    zone-statistics yes;
+    listen-on port 53 {
+        127.0.0.1;
+        x.x.x.x;
+    };
+    minimal-responses yes;
+
+    notify explicit;
+    dialup no;
+    heartbeat-interval 0;
+    transfers-in 200;
+    transfers-per-ns 200;
+    transfers-out 2000;
+    serial-query-rate 200;
+    min-refresh-time 300;
+    max-refresh-time 1800;
+    min-retry-time 180;
+    max-retry-time 1800;
+    notify-rate 2000;
+    notify-delay 1;
+
+    allow-query { any; };
+    allow-query-cache { any; };
+
+    recursion yes;
+    allow-recursion { any; };
+
+    dnssec-validation no;
+
+    querylog no;
+
+    plugin-qlog-log yes;
+
+    plugin-qlog-ext-log yes;
+
+    forwarders {
+            8.8.8.8;
+    };
+    forward first;
+    server-id hostname;
+
+    recursive-clients 1000;
+    tcp-clients 2000;
+    tcp-listen-queue 200;
+
+};
+```
+
+
+> 注：区分zone的区域配置文件和zone的引导文件；
+> zone的区域配置文件中是具体的RR记录；
+> zone的引导文件：配置的是域名以及对应的区域配置文件。
+
+
+**解决方法**
+（1）可以在slave进行`rndc reload`之前，将slave设备的 bgp path调大（相当于将slave设备下线）
+由于dns查询是一来一回的udp包（一共2个包），调大bgp path对于存量查询，基本上是无损的。
+（2) 执行 `rndc reload`
+（3）将bgp path 调回去。
+
+
+#### 总结
+`reload`的场景：
+**（1）对于master而言**：
+1》通过静态更改zone文件的方式来更改zone数据；
+	然后slave的zone的更新，依赖于master和slave之间的zone的同步。
+2》更改master设备上的其他的信息。
+
+**（2）对于slave而言**：
+1> 更改zone引导配置文件：
+	zone的增删（不是zone中的RR记录的增删改）
+2> 更改view配置文件：
+	view的增删改。
+注：对于slave上的zone的RR记录的更新，则依赖于master和slave之前的 zone同步，而不是更新zone区域配置文件。
 
 ### nsupdate动态管理域
 **前提条件**：

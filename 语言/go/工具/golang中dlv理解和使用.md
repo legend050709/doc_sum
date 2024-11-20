@@ -17,6 +17,18 @@
 ## 输出字符串限制
 通过`config -list` 可以查看可以配置的选项，其中 `max-string-len`可以配置输出的最大字符串长度.
 
+# 应用
+## gcore生成core文件，通过dlv分析
+
+```bash
+gcore `pidof go_keepalived`
+./dlv core /opt/kgw/bin/go_keepalived core.`pidof go_keepalived`
+>transcript -x /tmp/bb
+>goroutines -t 20
+>transcript -off
+>quit
+```
+
 # 参考
 ```bash
 

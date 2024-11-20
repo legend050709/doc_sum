@@ -155,8 +155,17 @@ timeout <option> <duration> <command>
 ```c
 httpie 工具（是一个python写的类curl的命令行工具。使用python实现，其目标是让 CLI 和 web 服务之间的交互尽可能的人性化）：
 	https://xin053.github.io/2016/08/15/httpie%E4%BA%BA%E6%80%A7%E5%8C%96curl%E5%B7%A5%E5%85%B7%E4%BD%BF%E7%94%A8%E8%AF%A6%E8%A7%A3/
-
 ```
+
+## 请求ipv6
+```bash
+对于ipv4的请求：
+	curl 192.22.2.3
+
+对于ipv6的请求：
+	curl  -g -d  -v [2402:5ec0:1001:3010:192:22:2:2]:80
+```
+
 # 参考
 ```c
 httpstat:

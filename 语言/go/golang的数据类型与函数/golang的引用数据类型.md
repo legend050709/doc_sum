@@ -36,6 +36,7 @@ slice 在空间不足的情况下，再 append，会发生扩容新建一个 new
 # map
 map 也是我们常用的数据结构，比较特别的一点是 Golang 中没有 set 这个数据结构，如果我们需要使用 set 的话，需要使用 `map[interface{}]struct{}` 来实现。
 需要注意的一点是 Golang 中的 map 不是一个线程安全的数据结构，其数据结构如下：
+
 ![](attachments/Pasted%20image%2020240207144323.png)
 ![](attachments/Pasted%20image%2020240207144353.png)
 

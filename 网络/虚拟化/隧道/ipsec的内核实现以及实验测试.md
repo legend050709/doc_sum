@@ -223,6 +223,9 @@ XfrmOutStateInvalid     	0
 
 # 参考
 ```c
+# 使用 ip xfrm 手工配置 IPsec VPN
+https://taoshu.in/net/manual-ipsec-ip-xfrm.html
+
 ## IPSEC介绍与实现
 https://abcdxyzk.github.io/blog/2021/06/15/net-ipsec/
 

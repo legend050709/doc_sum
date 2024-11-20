@@ -1,5 +1,10 @@
 ```table-of-contents
 ```
+#  Linux中的进程和服务
+
+计算机中，一个正在执行的程序或命令，被叫做“进程”（process）。
+启动之后一直存在、常驻内存的进程，一般被称作“服务”（service）。
+
 # systemd服务介绍
 ## 历史
 历史上，Linux 的启动一直采用`init`进程。
@@ -261,7 +266,7 @@ $ systemctl show -p CPUShares httpd.service
 # 设置某个 Unit 的指定属性
 $ sudo systemctl set-property httpd.service CPUShares=500
 ```
-### 开机启动
+### enable 开机启动
 对于那些支持 Systemd 的软件，安装的时候，会自动在`/usr/lib/systemd/system`目录添加一个配置文件。
 如果你想让该软件开机启动，就执行下面的命令（以`httpd.service`为例）。
 ```bash
@@ -271,14 +276,88 @@ $ sudo systemctl set-property httpd.service CPUShares=500
 
 这是因为开机时，`Systemd`只执行`/etc/systemd/system`目录里面的配置文件。这也意味着，如果把修改后的配置文件放在该目录，就可以达到覆盖原始配置的效果。
 
+#### disable 禁止开机启动
+
+执行`systemctl disable xxx`后，会禁用这个服务。它实现的方法是将服务对应的软连接从`/etc/systemd/system`中删除。
+
+```bash
+ sudo systemctl disable httpd
+```
+
+#### 范例
+```bash
+[root@NameNode01 system]# systemctl enable NetworkManager
+Created symlink from /etc/systemd/system/multi-user.target.wants/NetworkManager.service to /usr/lib/systemd/system/NetworkManager.service.
+Created symlink from /etc/systemd/system/dbus-org.freedesktop.nm-dispatcher.service to /usr/lib/systemd/system/NetworkManager-dispatcher.service.
+Created symlink from /etc/systemd/system/network-online.target.wants/NetworkManager-wait-online.service to /usr/lib/systemd/system/NetworkManager-wait-online.service.
+```
+
+这个命令会在`/etc/systemd/system/`目录下创建需要的符号链接，表示服务需要进行启动。通过stdout输出的信息可以看到，软连接实际指向的文件为`/usr/lib/systemd/system/`目录中的文件，实际起作用的也是这个目录中的文件。
+
+```bash
+[root@NameNode01 system]# systemctl disable NetworkManager
+Removed symlink /etc/systemd/system/multi-user.target.wants/NetworkManager.service.
+Removed symlink /etc/systemd/system/dbus-org.freedesktop.NetworkManager.service.
+Removed symlink /etc/systemd/system/dbus-org.freedesktop.nm-dispatcher.service.
+Removed symlink /etc/systemd/system/network-online.target.wants/NetworkManager-wait-online.service.
+```
+在执行`systemctl disable xxx`的时候，实际只是删除了软连接，并不会产生其他影响。
+
+### mask 屏蔽服务
+
+`systemctl mask` 命令用于屏蔽服务，使其无法被 `systemctl` 启动。屏蔽服务的情况通常包括：
+
+- **安全性要求：** 一些敏感服务可能需要被完全禁用，以防止潜在的安全威胁。
+- **系统定制：** 在定制化系统中，可能需要屏蔽一些默认启用的服务，以符合特定需求。
+- **依赖关系：** 在某些情况下，为了确保系统的正确运行，可能需要屏蔽某些服务的启动。
+
+```bash
+systemctl mask servicename
+```
+
+#### 注意
+在执行了mask禁用服务后，强行start服务会报
+```text
+Failed to start <service-name>: Unit is masked.
+```
 
 
-### 启动服务
+在执行了mask禁用服务后，强行enable开机自启会报
+```text
+Failed to execute operation: Cannot send after transport endpoint shutdown
+```
+
+#### unmask 取消屏蔽
+
+```bash
+systemctl unmask servicename
+```
+
+
+#### mask和 disable的区别
+
+执行 `systemctl mask xxx`会`屏蔽`这个服务。它和`systemctl disable xxx`的区别在于，前者只是删除了符号链接，后者会建立一个指向`/dev/null`的符号链接，这样，即使有其他服务要启动被`mask`的服务，仍然无法执行成功。
+
+- **`systemctl disable` 命令：** 用于禁用一个服务的开机启动。当你禁用一个服务后，系统将不再开机启动该服务，但仍然允许手动启动。
+
+- **`systemctl mask` 命令：** 用于屏蔽一个服务，将其单元文件链接到 `/dev/null`，使其无法被 `systemctl` 启动。屏蔽后，即使尝试手动启动服务，也将无法成功。
+
+
+#### 范例
+
+```bash
+[root@NameNode01 system]# systemctl mask NetworkManager 
+Created symlink from /etc/systemd/system/NetworkManager.service to /dev/null.
+```
+
+### start 启动服务
 设置开机启动以后，软件并不会立即启动，必须等到下一次开机。如果想现在就运行该软件，那么要执行`systemctl start`命令。
 ```bash
 sudo systemctl start httpd
 ```
-### 查看服务的状态
+
+
+### status 查看服务的状态
 执行上面的`systemctl start`命令以后，有可能启动失败，因此要用`systemctl status`命令查看一下该服务的状态。
 ```bash
 $ sudo systemctl status httpd
@@ -309,7 +388,17 @@ httpd.service - The Apache HTTP Server
 - `CGroup`块：应用的所有子进程
 - 日志块：应用的日志
 ```
-### 停止服务
+
+
+#### 范例
+
+![](attachments/Pasted%20image%2020241113114041.png)
+
+### list-unit-files 查看服务开机状态
+
+![](attachments/Pasted%20image%2020241113114131.png)
+
+### stop 停止服务
 终止正在运行的服务，需要执行`systemctl stop`命令。
 ```bash
 sudo systemctl stop httpd.service
@@ -323,6 +412,8 @@ sudo systemctl kill httpd.service
 ```bash
 sudo systemctl restart httpd.service
 ```
+
+
 
 ## unit的依赖关系
 Unit 之间存在依赖关系：A 依赖于 B，就意味着 Systemd 在启动 A 的时候，同时会去启动 B。
