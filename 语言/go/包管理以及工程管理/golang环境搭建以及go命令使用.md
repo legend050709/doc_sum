@@ -23,6 +23,10 @@
 
 
 # go命令使用
+## go命令参数
+```go
+-v :
+```
 ## go build
 ## go clean
 ## go run

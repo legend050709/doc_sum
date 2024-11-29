@@ -2257,74 +2257,113 @@ Channel 的缺点：
 **(2) Channel 中传递的都是数据的拷贝，可能会影响性能**
 但是就目前我们的机器性能来看，这点数据拷贝所带来的 CPU 消耗，大多数的情况下可以忽略。
 
-**(3) Channel 中==传递指针==会导致数据竞态问题（data race/ race conditions）**
-
-data race 指的是多线程并发读写一个变量，对应到Golang中就是多个goroutine同时读写一个变量，这种行为是未定义的，也就是说读变量出来的值很有可能不是写入的值，这个值是任意值都有可能。
+**(3) Channel 中==传递指针/引用==会导致数据竞态问题（data race/ race conditions）**
 
 
-## data race 范例
+## channel中传递指针或引用导致data race的问题
 
+### 范例
+
+#### 范例一：传递指针
 ```go
 package main
 
 import (
     "fmt"
-    "runtime"
     "time"
 )
 
-var i int64 = 0
+type B struct {
+    Value int
+}
+type A struct {
+    Bv B
+}
+
 
 func main() {
-    runtime.GOMAXPROCS(2)
+    ch := make(chan *A)
+    b := B{1}
+    a := A{Bv:b}
+
+    go func(ch chan *A){
+       for {
+        select {
+        case a := <-ch:
+            a.Bv.Value = 2
+        }
+        }
+    }(ch)
+    ch <- &a
+    time.Sleep(2 * time.Second)
+    fmt.Println(a)
+}
+
+```
+
+#### 范例二：传递引用（slice）
+```go
+package main
+
+import "fmt"
+import "time"
+
+func main() {
+    ch := make(chan []byte, 10)
     go func() {
         for {
-            fmt.Println("i is", i)
-            time.Sleep(time.Second)
+            select {
+            case data := <-ch:
+                fmt.Println(string(data))
+            }
         }
     }()
+    data := make([]byte, 0, 32)
+    data = append(data, []byte("bbbbbbbbbb")...)
+    ch <- data
 
-    for {
-        i += 1
-    }
+    // fmt.Printf("%p\n", data)
+    data = data[:0]
+    // fmt.Printf("%p\n", data)
+
+    data = append(data, []byte("aaa")...)
+    ch <- data
+
+    time.Sleep(time.Second * 5)
 }
 ```
 
-在我mac本地环境会不断的输出0。
-全局变量i被两个goroutine同时读写，也就是我们所说的data race，导致了i的值是未定义的。
-如果读写的是一块动态伸缩的内存，很有可能会导致panic。例如多goroutine读写map。
-幸运的是，Golang针对data race有专门的内置工具，例如把上面的代码保存为main.go，执行 `go run -race main.go` 会把相关的data race输出：
 
-```text
-==================
+说明：
+```go
+预测的运行结果：
+bbbbbbbbbb
+aaa
 
-WARNING: DATA RACE
-
-Read at 0x00000121e848 by goroutine 6:
-
-  main.main.func1()
-
-      /Users/saas/src/awesomeProject/datarace/main.go:15 +0x3e
-
- 
-
-Previous write at 0x00000121e848 by main goroutine:
-
-  main.main()
-
-      /Users/saas/src/awesomeProject/datarace/main.go:21 +0x7b
-
- 
-
-Goroutine 6 (running) created at:
-
-  main.main()
-
-      /Users/saas/src/awesomeProject/datarace/main.go:13 +0x4f
-
-==================
+实际结果：
+aaabbbbbbb
+aaa
 ```
 
+
+解决方法：加锁 或者新变量拷贝。
+```go
+	d := make([]byte, len(data))
+	copy(d, data)
+```
+
+### 小结
+**（1）问题**：
+跨协程， channel通信时， 如果==传递的数据为指针/引用类型==， 一定要确认：
+生产者、消费者协程是否在数据传递结束后， 仍然会修改此指针内容。如果存在修改，则可能导致==读取脏数据或者data race==。
+
+**（2）解决方法**：
+1> 共享数据的加锁操作
+2> 不共享数据：
+比如：将通信数据序列化为json字符串后传递。
+比如，值传递而不是指针/引用传递。
+比如，待传递数据拷贝为临时数据，然后传递。
+	
 # 其他
 ## channel 和 全局变量
 chan 类似管道，管道顾名思义一端进一端出，很形象表明了一个连接器。go 中的 chan 连接 goroutine，游离于众多 goroutine 之间，功用性与全局变量有得一拼。
