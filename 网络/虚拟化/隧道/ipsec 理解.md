@@ -138,15 +138,14 @@ ESP和AH定义了协议和载荷头的格式及所提供的服务，但却没有
 SA（Security Association：安全关联 或 安全联盟）；
 安全关联是指一组用来保护信息的策略和密钥。
 
-### SA包含的信息
-安全关联是要建立IPSec 隧道的通信双方对隧道参数的约定：
-包括隧道两端的IP地址、隧道采用的验证方式、验证算法、验证密钥、对等体间传输的数据的封装模式、加密算法、共享密钥以及SA的生命周期等一系列参数。
 
 
-## SA的作用
-IPSec安全传输数据的前提是在IPSec对等体之间成功建立安全联盟。
 
-IPSec是在两个端点之间提供安全通信，端点被称为IPSec对等体。IPSec能够允许系统、网络的用户或管理员控制对等体间安全服务的粒度。
+### SA的作用
+IPSec安全传输数据的前提是在IPSec对等体之间成功建立安全联盟SA(主要是协商加解密的信息，达成一致)。
+
+IPSec是在两个端点之间提供安全通信，端点被称为IPSec对等体。
+IPSec能够允许系统、网络的用户或管理员控制对等体间安全服务的粒度。
 通过SA（Security Association），IPSec能够对不同的数据流提供不同级别的安全保护。
 
 ### SA的特点
@@ -159,28 +158,42 @@ IPSec是在两个端点之间提供安全通信，端点被称为IPSec对等体�
 SA 是特定于协议的，即每个 SA 都与 AH 或 ESP 相关联，但不能同时与两者相关联。
 如果希望同时使用AH和ESP来保护对等体间的数据流，则分别需要两个SA，一个用于AH，另一个用于ESP。
 
-### SA的标识
+### SA的key以及内容
+#### SA的key
 SA 由三元组唯一标识：
 - 安全参数索引 (SPI)
 - 目的地的 IP 地址（单播、多播、广播)
 - 安全协议标识符（AH 或 ESP）。
 
-其中，SPI是为唯一标识SA而生成的一个32位比特的数值，它在AH和ESP头中封装。
+DPDK 中 的 SA 的key 存在三种， 如下所示：
+```c
+RTE_IPSEC_SAD_SPI_ONLY = 0, // spi only
+RTE_IPSEC_SAD_SPI_DIP,     // spi + dip
+RTE_IPSEC_SAD_SPI_DIP_SIP, // spi + dip + sip
+```
+SPI 在AH和ESP头中封装。通常使用 SPI_only 作为 sa 的 key 。 
 
-#### 安全协议标识
-标识该 SA 是 AH 安全关联或 ESP 安全关联。
-
-#### IP 目的地址
-只允许使用单一地址，表示 SA 的目的地址。
-
-#### SPI
+##### SPI
 SPI(安全参数索引：security parameter index)，它在AH和ESP头中封装。
-SPI 用来描述一个 SA，用于 IPSec 快速匹配，告诉对端通过这个 SPI 对应的 SA 对该数据进行解密，让加解密更加高效，占用 4byte；
+SPI 用来索引一个 SA，用于 IPSec 快速查找到SA，告诉对端通过这个 SPI 对应的 SA 对该数据进行解密，让加解密更加高效，占用 4byte；
 
 对于一个对应的感兴趣流，一端的 egress SPI 肯定是对端的 ingress SPI（因为数据保护使用的是对称算法，必须保证加解密 key 相同）
 
 #####  SPI的生成
-在手工配置SA时，需要手工指定SPI的取值。使用IKE协商产生SA时，SPI将随机生成。
+在手工配置SA时，需要手工指定SPI的取值。
+使用IKE协商产生SA时，SPI将随机生成。
+
+##### SA的key的作用
+SAD 中存在多个SA，那么可以基于sa的key（通常是SPI），在SAD中查找到SA。
+
+比如：收到隧道封装包之后，从包中取出SPI，然后在SAD中基于SPI查找SA，找到SA之后，就可以知道通过什么算法进行验证、解密等操作。
+
+
+#### SA的内容
+
+安全关联SA 是要建立IPSec 隧道的通信双方对隧道参数的约定（约定：即双方协商出来的配置；如果是手工模式，则需要双方的配置相同）。
+
+包括隧道两端的SPI值，目IP地址、隧道采用的验证算法、验证密钥、加密算法、加密秘钥、封装模式（传输模式/隧道模式）、SA的生命周期等一系列参数。
 
 ### 建立IPsec SA的方式
 建立IPSec SA有两种方式：手工方式和IKE方式。
@@ -206,45 +219,37 @@ IKE：小型、中大型网络
 
 这由安全关联（Security Association，SA）来指定，SA是包含特定连接参数的集合，每个合作伙伴可以拥有一个或多个安全关联。
 
-当一个数据报到达时，将使用三条数据在安全关联数据库（SADB:Security Associations Database） 中查找正确的 SA：
-- Partner IP address （合作伙伴 IP 地址）
-- IPsec Protocol (ESP or AH) （IPsec 协议（ESP 或 AH））
-- Security Parameters Index （安全参数索引）
+当一个数据报到达时，基于SA的Key在安全关联数据库SAD（Security Associations Database） 中查找正确的 SA：
 
 在许多方面，这个三元组可以类比为一个IP套接字，它通过远程IP地址、协议和端口号来唯一标识。
 
 
-
 ## SAD
 **安全关联数据库SAD(Security Association Database)**
-
-==将流量映射到特定配置==： 工作模式（隧道/传输）、加密信息、身份验证信息等
-
 SA是SADB的一个条目。
 
-在SAD中储存了大量的信息，我们只能触及其中的一部分：
-- AH: authentication algorithm (认证算法)
-- AH: authentication secret (认证秘钥)
-- ESP: encryption algorithm (加密算法)
-- ESP: encryption secret key (加密秘钥)
-- ESP: authentication enabled yes/no (是否启用认证（是/否)
-- Many key-exchange parameters (许多密钥交换参数)
-- Routing restrictions (路由限制)
-- IP filtering policy (IP过滤策略)
+SAD 数据库结构（1）：认证信息（左边的SPI+dip+proto 是 索引 ）
+![](attachments/Pasted%20image%2020241129142312.png)
 
+SAD 数据库结构（2）：加密信息
+![](attachments/Pasted%20image%2020241129142316.png)
 
-## SPD
+## SPD 和 SP
+### SP
+SP(Security Policy) 用来定义哪些流量需要走IPSec。
+这些信息有目的端IP、来源端IP、只执 行AH 或ESP、同时执行AH 及ESP、目的端Port、来源端Port、走Transport 或Tunnel 模式。
 
-IPSec设备会把SA的相关参数放入**SPD（Security Policy Database）** 里面，
-SPD里面存放着“什么数据应该进行怎样的处理”这样的消息，在IPSec数据包出站和入站的时候会首先从SPD数据库中查找相关信息并做下一步处理。
+### SPD
+**SPD（安全策略数据库：Security Policy Database）** 
 
-**安全策略数据库SPD(Security Policy Database)**
-
-==将 IP 流量映射到特定策略== ：
 每个 SPD 规则需要两条 ACL 规则，一条定义隧道上的流量，一条定义隧道内的流量。
 SPD 规则适用的协议对于两个 ACL 规则必须相同，并且与 ACL 规则一起使用的序列号必须是连续的。
 
 ![](attachments/Pasted%20image%2020241124205342.png)
+
+SPD 数据库结构
+![](attachments/Pasted%20image%2020241129143117.png)
+
 
 
 ### 出站流量处理流程
@@ -855,6 +860,25 @@ IPSec采用==对称加密==算法对数据进行加密和解密。数据发送�
 
 ## 验证/认证（auth）
 IPSec的加密功能，无法验证解密后的信息是否是原始发送的信息或完整。
+### 拆包流程
+
+**<1> ESP协议传输模式的装包流程：**
+![](attachments/Pasted%20image%2020241129135230.png)
+
+（1）首先，给原IP报文添加ESP尾部；
+（2）然后，将尾部和原IP报文的载荷一起进行加密；
+（3）第三，为机密数据加入ESP头部；
+（4）第四，对加密区域和ESP头部进行验证，得到完整性度量值，附在ESP报文最后；
+（5）最后，将IP头部附在ESP报文前，构成新的IP报文。
+
+
+**<2> ESP协议传输模式的拆包流程**：
+（1）首先，检查协议类型，确定为IPSec包；
+（2）然后，通过ESP头部SPI确认SA内容，以及通过序列号确认不是重放攻击；
+（3）第三，计算验证区域的摘要，与ESP验证数据做比较，相同则数据完整；
+（4）第四，根据SA提供的算法和密钥，解密加密区域，得原IP数据包和ESP尾部；
+（5）第五，根据尾部填充长度学习删除填充字段，即可得原IP数据包；
+（6）最后，根据IP的目的地址进行转发。
 
 ### 完整性验证和源验证
 
