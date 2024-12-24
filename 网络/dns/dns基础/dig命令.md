@@ -264,6 +264,16 @@ dig 域名 +[no]nsid
 ![](../attachments/Pasted%20image%2020240115193743.png)
 
 
+### 应用场景
+集群部署的DNS，使用相同的anycast IP. Client请求存在超时或者失败，不确定是哪个DNS服务器的问题。通过添加 `+nsid` 可以看到那个server的响应存在问题。
+
+```bash
+for i in `seq 1 100`; do dig xxxxx +nsid; done
+
+比如：
+for a in `seq 1 3`; do echo ------${a}----; dig www.baidu.com +nsid | grep -e NSID -e "ANSWER SECTION" -A 3; done
+```
+
 ## 设置查询的超时时间和重试次数
 ```bash
 dig +time=5 +tries=1 @10.0.0.10 cdnxxx.com

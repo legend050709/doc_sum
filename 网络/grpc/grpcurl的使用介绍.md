@@ -35,8 +35,10 @@ https://github.com/fullstorydev/grpcurl/issues/154
 ```go
 yum install -y golang 
 export GOPROXY=https://mirrors.aliyun.com/goproxy/
+
 go get github.com/fullstorydev/grpcurl
-go install github.com/fullstorydev/grpcurl/cmd/grpcurl
+
+go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
 ```
 
 结果：在 $GOPATH/bin 目录下，生成一个 grpcurl 可执行文件。我们可以复制到 /usr/local/bin/ 下。
@@ -56,15 +58,19 @@ chmod +x grpcurl
 ```bash
 % grpcurl --help
 ```
--plaintext ：在使用grpcurl时，需要通过-cert和-key参数设置公钥和私钥文件，连接启用了tls协议的服务。对于没用tls协议的grpc服务，通过-plaintext参数忽略tls证书的验证过程。如果是Unix Socket协议，则需要指定-unix参数。
+-`plaintex`t ：在使用grpcurl时，需要通过`-cert`和`-key`参数设置公钥和私钥文件，连接启用了`tls`协议的服务。
+对于没用tls协议的grpc服务，通过`-plaintext`参数忽略`tls`证书的验证过程。
+如果是`Unix Socket`协议，则需要指定`-unix`参数。
 
- -d 参数设置的是方法参数，默认是json格式。如果 `-d` 参数是 `@` 则表示从标准输入读取 json 输入参数
+ `-d` 参数设置的是方法参数，默认是`json`格式。
+ 如果 `-d` 参数是 `@` 则表示从标准输入读取 json 输入参数
  
- -proto value :
+ `-proto value` :
 ```c
 The name of a proto source file. Source files given will be used to determine the RPC schema instead of querying for it from the remote server via the gRPC reflection API. When set: the ‘list’ action lists the services found in the given files and their imports (vs. those exposed by the remote server), and the ‘describe’ action describes symbols found in the given files. May specify more than one via multiple -proto flags. Imports will be resolved using the given -import-path flags. Multiple proto files can be specified by specifying multiple -proto flags. It is an error to use both -protoset and -proto flags.
 ```
--import-path value :
+
+`-import-path value `:
 ```c
 The path to a directory from which proto sources can be imported, for use with -proto flags. Multiple import paths can be configured by specifying multiple -import-path flags. Paths will be searched in the order given. If no import paths are given, all files (including all imports) must be provided as -proto flags, and grpcurl will attempt to resolve all import statements from the set of file names given.
 ```
@@ -111,6 +117,7 @@ grpc.reflection.v1alpha.ServerReflection
 ```
 
 即上面的命令我们通过 HTTP/2 的方式与 gRPC 服务端进行了一次交互，由于服务端使用了反射服务，可以查询到其支持的所有的 service，其中就包括前面定义的 proto 内容 `grpc.examples.echo.Echo` 。
+
 ### proto文件方式
 亦或者我们可以直接加载 proto 文件的方式查看所支持的服务：
 ```bash
@@ -124,6 +131,8 @@ grpc.examples.echo.Echo
 ### 反射方式
 ```bash
 % grpcurl -plaintext 127.0.0.1:50051 list grpc.examples.echo.Echo
+# 查看具体的某个 servier的 方法列表
+
 grpc.examples.echo.Echo.BidirectionalStreamingEcho
 grpc.examples.echo.Echo.ClientStreamingEcho
 grpc.examples.echo.Echo.ServerStreamingEcho
@@ -133,6 +142,7 @@ grpc.examples.echo.Echo.UnaryEcho
 同理，使用 proto 文件方式也可以得到一样的输出:
 ```bash
 % grpcurl -import-path ./echo -proto echo.proto list grpc.examples.echo.Echo
+
 grpc.examples.echo.Echo.BidirectionalStreamingEcho
 grpc.examples.echo.Echo.ClientStreamingEcho
 grpc.examples.echo.Echo.ServerStreamingEcho

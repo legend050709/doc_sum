@@ -120,8 +120,11 @@ go tool pprof http://localhost:6060/debug/pprof/goroutine?seconds=10
 - 采样指标：alloc_space, alloc_objects, inuse_space, inuse_objects
 - 计算方式：inuse = alloc - free
 
+
 # 参考
 ```text
 # Golang 性能问题排查定位
 https://wenzhiquan.github.io/2021/05/21/2021-05-21-golang-pprof/
+
+
 ```

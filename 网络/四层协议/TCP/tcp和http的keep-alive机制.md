@@ -64,6 +64,66 @@ TCP keepalive 是 **TCP 层（内核态）** 实现的，它是给所有基于
 
 
 # 其他
+## 支持设置tcp的keep-alive的工具
+### socat 工具
+Linux下的 nc 以及 telnet 工具，无法使用 tcp的keep-alive，但是 socat 可以使用 tcp 的 keep-alive。
+
+socat 作为 client，开启 keep-alive， 如下所示；
+```bash
+# cat /proc/sys/net/ipv4/tcp_keepalive_time; cat /proc/sys/net/ipv4/tcp_keepalive_intvl;cat /proc/sys/net/ipv4/tcp_keepalive_probes
+5
+8
+100
+
+# socat - tcp4:192.22.2.57:8888,keepalive
+```
+
+### nc 无法开启keep-alive
+开启keep-alive需要程序 通过 `setsockopt` 将 keep-alive 开关打开，才可以。仅仅设置系统中的 keep-alive的配置是不够的。
+
+如下所示，nc 无法发送 tcp 的 keep-alive 报文。
+
+```bash
+# cat /proc/sys/net/ipv4/tcp_keepalive_time; cat /proc/sys/net/ipv4/tcp_keepalive_intvl;cat /proc/sys/net/ipv4/tcp_keepalive_probes
+5
+8
+100
+
+# nc 192.22.2.57 8888
+```
+
+### 自定义程序开启tcp的keep-alive
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+int main() {
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    int optval = 1;
+
+    // 开启 TCP Keep-Alive
+    setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval));
+
+    // 其他 Keep-Alive 参数
+    int keepidle = 60;  // 开始 Keep-Alive 的时间
+    int keepintvl = 10; // Keep-Alive 探测的间隔
+    int keepcnt = 5;    // 最大探测次数
+
+    setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPIDLE, &keepidle, sizeof(keepidle));
+    setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPINTVL, &keepintvl, sizeof(keepintvl));
+    setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPCNT, &keepcnt, sizeof(keepcnt));
+
+    // 连接和其他操作...
+
+    close(sockfd);
+    return 0;
+}
+
+```
+
 ## 没有keep-alive的established的tcp的超时时间
 ### 问题
 三次握手之后，tcp就处于established 状态。对应到用户态的程序，则此时 epoll 监听到 listen_fd 可读， server端是可以从全连接队列accept 一个 new_sock。 然后将 new_sock 加入到 epoll 中，但是client 一直没有数据的发送，并且client也不进行 close 或者shutdown调用（即：client 也不会发送 fin 或者 rst），那么 server上处于 established 状态的  new_sock 可以持续多久呢？

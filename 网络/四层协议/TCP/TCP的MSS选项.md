@@ -230,7 +230,7 @@ void tcp_v4_err(struct sk_buff *icmp_skb, u32 info)
 ![](attachments/Pasted%20image%2020231129121314.png)
 
 ### 通信双方的mss_cache设置流程
-有了前面的铺垫，再来看所谓的 MSS “协商过程”就容易多了。
+有了前面的铺垫，再来看==所谓的 MSS “协商过程”== 就容易多了。
 
 这里我用两台虚拟机作为 TCP 连接的双方，虚拟机网卡的默认 mtu 是 1500，而我将主动端虚拟机网卡 mtu 设置为 1399. TCP 默认开启了 timestamp 选项。
 ![](attachments/Pasted%20image%2020231129115620.png)

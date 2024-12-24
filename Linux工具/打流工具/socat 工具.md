@@ -1,6 +1,7 @@
 ```table-of-contents
 ```
 # 介绍
+
 **socat**（英文全拼：Socket CAT）是 Linux 下的一个多功能的网络工具，其功能与有瑞士军刀之称的 [Netcat](https://getiot.tech/zh/linux-command/netcat) 类似，可以看作是 Netcat 的加强版。官方文档描述它是 `"netcat++" (extended design, new implementation)`，项目比较活跃，`kubernetes-client(kubectl)` 底层就是使用的它做各种流量转发。
 
 # 安装
@@ -21,10 +22,9 @@ brew install socat
 socat 的基本命令格式：
 ```c
 socat [参数] 地址1 地址2
-```
- 地址的语法为：
- ```css
-protocol:host:port
+
+地址的语法为：
+ protocol:host:port
 ```
 
 给 socat 提供两个地址，socat 干的活就是把两个地址的流对接起来。左边地址的输出传给右边，同时又把右边地址的输出传给左边，也就是一个**双向的数据管道**。
@@ -34,15 +34,66 @@ socat 支持非常多的地址类型：`-`/stdio，TCP, TCP-LISTEN, UDP, UDP-LIS
 socat 的功能就是这么简单，命令行参数也很简洁，唯一需要花点精力学习的就是它各种地址的定义和搭配写法。
 而 netcat 定义貌似没这么严谨，可以简单的理解为网络版的 cat 命令。
 
+## 参数说明
+
+
 ## 连接到主机 TCP 8080 端口
 ```bash
-$ socat - TCP4:www.example.com:8080
+
+	socat - TCP4:www.example.com:8080
+	socat - tcp4:192.22.2.57:8888
 ```
 在这种情况下，`socat` 在 STDIO（-）和名为 `www.example.com` 主机 8080 端口建立的 TCP4 连接之间进行数据传输。
+
+### client开启tcp的keep-alive
+Linux下的 nc 以及 telnet 工具，无法使用 tcp的keep-alive，但是 socat 可以使用 tcp 的 keep-alive。如下所示：
+
+
+```bash
+socat - tcp4:192.22.2.57:8888,keepalive
+
+系统中的keep-alive的设置：
+cat /proc/sys/net/ipv4/tcp_keepalive_time
+cat /proc/sys/net/ipv4/tcp_keepalive_intvl
+cat /proc/sys/net/ipv4/tcp_keepalive_probes
+
+`tcp_keepalive_time`：在连接空闲多长时间后开始发送 Keep-Alive 探测包（默认 7200 秒，即 2 小时）。
+`tcp_keepalive_intvl`：发送 Keep-Alive 探测包的时间间隔（默认 75 秒）。
+`tcp_keepalive_probes`：在放弃连接之前发送的 Keep-Alive 探测包的最大数量（默认 9）。
+```
+
+测试范例，如下所示：
+```bash
+# cat /proc/sys/net/ipv4/tcp_keepalive_time; cat /proc/sys/net/ipv4/tcp_keepalive_intvl;cat /proc/sys/net/ipv4/tcp_keepalive_probes
+5
+8
+100
+
+# socat - tcp4:192.22.2.57:8888,keepalive
+```
+抓包如下：
+![](attachments/Pasted%20image%2020241203154041.png)
+
 
 ## 监听一个新端口
 ```bash
 $ socat TCP-LISTEN:7000 -
+```
+
+### server端开启tcp的keep-alive以及reuseaddr等选项
+
+`socat` 将在本地监听端口 `1234`，并启用 TCP Keep-Alive
+```bash
+socat - TCP-LISTEN:1234,keepalive
+```
+
+除了 `keepalive` 选项外，`socat` 还支持其他一些 TCP 选项，可以通过 `SO_` 前缀进行设置，例如：
+- `SO_REUSEADDR`：允许重用本地地址。
+- `SO_BROADCAST`：允许发送广播消息。
+- `SO_LINGER`：控制 socket 关闭时的行为。
+
+```bash
+socat - TCP-LISTEN:1234,keepalive,reuseaddr
 ```
 
 ## 使用 `socat` 作为 转发器

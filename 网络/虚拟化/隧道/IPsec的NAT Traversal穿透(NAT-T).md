@@ -177,6 +177,10 @@ NAT穿越的启用协商在快速模式的SA载荷中进行。
 
 SSL/TLS协议对NAT完全透明，因为它位于TCP协议之上，与NAT没有半毛钱关系。因此SSL与NAT兼容性非常友好。
 
+## ipsec 和 SSL 对比
+
+![](attachments/Pasted%20image%2020241202105031.png)
+
 # 参考
 
 ```c

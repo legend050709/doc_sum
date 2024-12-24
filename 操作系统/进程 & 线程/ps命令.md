@@ -320,7 +320,7 @@ ps -eo pid,lstart,etime,cmd | grep nginx
 ![](attachments/Pasted%20image%2020240903145619.png)
 
 ```bash
-# ps -eo pid,start,lstart,%cpu,start_time,etime,cmd | head -n 1 && ps -eo pid,start,lstart,%cpu,start_time,etime,cmd  | grep nginx
+# ps -eo pid,ppid,start,lstart,%cpu,start_time,etime,cmd | head -n 1 && ps -eo pid,ppid,start,lstart,%cpu,start_time,etime,cmd  | grep nginx
 ```
 
 ![](attachments/Pasted%20image%2020240903145954.png)

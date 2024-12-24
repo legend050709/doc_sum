@@ -1,8 +1,11 @@
 ```table-of-contents
 ```
 # 概述
+![](attachments/Pasted%20image%2020241212163722.png)
+
 **lnstat命令**用来显示linux系统的网路状态。
-lnstat命令实际上是读取系统“/proc”中目录“/proc/net/stat”下面的文件，来显示当前主机的网络状态的。lnstat命令是rtstat命令的更新替代命令，功能更完善。
+lnstat命令实际上是==读取系统“/proc”中目录“/proc/net/stat”下面的文件==，来显示当前主机的网络状态的。
+lnstat命令是rtstat命令的更新替代命令，功能更完善。
 ![](attachments/Pasted%20image%2020231129202547.png)
 > 如果开启了 contrack, 则会有 /proc/net/stat/nf_conntrack 文件。
 

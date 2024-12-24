@@ -18,7 +18,7 @@
 **路由**从哪来？ 
 一般来说有三个来源：
 1. 用户主动配置；
-2. 2.内核生成； 
+2. 内核生成； 
 3. 其他一些路由协议进程(`OSPF`、`BGP`)生成。
 
 普通主机上可能没有最后一种，所以，为了理解方便，你可以将**路由**就理解为你用`route`命令看到的内容。
@@ -40,15 +40,15 @@ Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
 **缓存**无处不在。现代计算机系统中，**Cache**是**CPU**与内存间存在一种容量较小但速度很高的存储器，用来存放`CPU`刚使用过或最近使用的数据。
 **路由缓存就是基于这种思想的软件实现**。
 
-- **查询原则**
-> 内核查询**FIB**前，固定先查询**cache**中的记录，如果**cache**命中(**hit**)，那就直接用就好了，不必查询**FIB**。
-> 如果没有命中(**miss**), 就回过头来查询**FIB**，最终将结果保存到**cache**，以便下次不再需要需要查询**FIB**。
+## 查询原则
+内核==查询**FIB**前，固定先查询**cache**中的记录==；
+（1）如果**cache**命中(**hit**)，那就直接用就好了，不必查询**FIB**。
+（2）如果没有命中(**miss**), 就回过头来查询**FIB**，最终将结果保存到**cache**，以便下次不再需要需要查询**FIB**。
 
-# route cache的特点
-缓存是精确匹配的, 每一条缓存表项记录了匹配的源地址和目的地址、接收发送的`dev`，以及与内核邻居系统(**L2**层)的联系(`negghbour`)。
-
-区别：
+# route cache 和 fib route 的区别
 `FIB`中存储的也就是路由信息，它常常是范围匹配的，比如像`ip route 1.2.3.0/24 dev eth0`这样的网段路由。
+
+缓存route cache是精确匹配的, 每一条缓存表项记录了匹配的源地址和目的地址、接收发送的`dev`，以及与内核邻居系统(**L2**层)的联系(`negghbour`)。
 
 # 内核中的route cache
 ## 3.6版本以前的路由缓存
@@ -97,31 +97,82 @@ end
 对于转发或者本机发送的skb来说，路由系统能帮它们找到下一跳邻居就足够了。
 
 #### 解决思路
-如果你的系统配置了大量的路由表项，其中只有少量的路由项是你的数据发出时要理由的(WEB服务器更多的面临这种情况)。
-不幸的是，最长前缀匹配算法无法保证拥有最大流量的那个连接的发送方向路由查找以最快的速度返回，因此还是需要一个cache系统来保证这一点，而我的方式就是，将路由项保存在已经确认有效的socket结构体中。值得注意的是，此优化对于forward数据包的路由无效，因为forward数据无法跟一个socket建立关联。此优化最大的用武之地是，你的机器提供对外的服务，别人经常从你的机器下载数据，这样这个优化的收益是非常可观的，因为每一个数据包的路由查找开销都被节省了下来！
+如果你的系统配置了大量的路由表项，其中只有少量的路由项是你的数据发出时要使用的(WEB服务器更多的面临这种情况)。
 
-> 顺便说一下，在现有的 Linux 协议栈实现中，已经有`sk_dst_set/get`这类API将一个socket与一个路由项关联，然而我看来，它只是指示了一些经由该路由发出的数据包的“链路特征”，比如`MTU，MSS，RTT`之类，并没有使用它来免除最长前缀匹配的路由查找。
+不幸的是，最长前缀匹配算法无法保证拥有最大流量的那个连接的发送方向路由查找以最快的速度返回，因此还是需要一个cache系统来保证这一点。
+而我的方式就是，==将路由项保存在已经确认有效的socket结构体中==。
+值得注意的是，此优化对于forward数据包的路由无效，因为forward数据无法跟一个socket建立关联。此优化最大的用武之地是，你的机器提供对外的服务，别人经常从你的机器下载数据，这样这个优化的收益是非常可观的，因为每一个数据包的路由查找开销都被节省了下来！
+
+> 顺便说一下，在现有的 Linux 协议栈实现中，==已经有`sk_dst_set/get`这类API将一个socket与一个路由项关联==；然而我看来，它只是指示了一些经由该路由发出的数据包的“链路特征”，比如`MTU，MSS，RTT`之类，并没有使用它来免除最长前缀匹配的路由查找。
 
 ### 小结
-总结起来就是，**3.6**版本以前的这种路由缓存在**skb**地址稳定时的确可能提高性能。但这种根据**skb**内容决定的性能却是不可预测和不稳定的，即系统并不知道这些被cache住的路由是不是有效的路由。
+总结起来就是，**3.6**版本以前的这种路由缓存在**skb**地址稳定时的确可能提高性能。
+但这种根据**skb**内容决定的性能却是不可预测和不稳定的，即系统并不知道这些被cache住的路由是不是有效的路由。
 > 有效的路由就是那些真正为本机所用的路由。
 
 
 ## 3.6版本及其以后的路由缓存
-正如前面所说，**3.6**版本移除了**FIB**查找前的路由缓存，取而代之的是下一跳缓存。
-这意味着每一个接收以及发送的**skb**现在都必须要进行**FIB**查找了。这样的好处是现在查找路由的代价变得**稳定(consistent)**了。
+### 3.6版本下一跳缓存代替路由缓存
+正如前面所说，**==内核3.6版本移除了FIB查找前的路由缓存，取而代之的是下一跳缓存==** 。
+这意味着==每一个接收以及发送的**skb**现在都必须要进行**FIB**查找==了。
+这样的好处是现在查找路由的代价变得**稳定(consistent)**了。
 
-路由缓存完全消失了吗? 
-> 并没有！在**3.6**以后的版本, 你还可以在内核代码中看到**dst_entry**。这是因为，**3.6**版本实际上是将**FIB**查找缓存到了**下一跳(fib_nh)**结构上，也就是**下一跳缓存**。即 **route cache 变为 nh cache（nexthop cache）**。
+#### 不存在下一跳缓存时
+跳过路由缓存，如今的过程可能会变成以下 的逻辑：
+```c
+dst=lookup_fib_table(skb);
+dst_nexthop=alloc_entry(dst);
+neigh=bind_neigh(dst_nexthop);
+neigh.output(skb);
+release_entry(dst_nexthop);
+
+```
+出现了新的问题，即 alloc/release会带来巨大的内存抖动，我们知道，内存分配与释放是一个必须要在CPU外部完成的事务，它的开销是巨大的。
+
+#### 新的下一跳缓存只是为了避免内存的分配/释放
+
+事实上，Linux在3.6以后，实现了新的路由cache，不再缓存一个路由项，因为那需要 skb的元组精确匹配；
+而是缓存下一跳，新的下一跳缓存只是为了避免内存的分配/释放。
+找到这个cache必须经过`lookup_fib_table`这个例程。
+
+```c
+dst=lookup_fib_table(skb);
+dst_nexthop=lookup_nh_cache(dst);
+if dst_nexthop == NULL;
+then
+    dst_nexthop=alloc_entry(dst);
+    if dst_nexthop.cache == true;
+    then
+        insert_into_nh_cache(dst_nexthop);
+    endif
+endif
+neigh=bind_neigh(dst_nexthop);
+neigh.output(skb);
+if dst_nexthop.cache == false
+then
+    release_entry(dst_nexthop);
+endif
+
+注：内核中的详细代码查看：__mkroute_output/__mkroute_input, 其中会设置 rt_set_nexthop; 慢路径申请的函数为：rt_dst_alloc
+
+```
+
+一般而言，一个路由项只有一个下一跳，因此这个缓存是极其有意义的。
+这意味着，在大多数时候，当路由查找的结果是一个确定的dst时，其下一跳缓存会 命中，此时便不再需要重新分配新的`dst_nexthop`结构体，而是直接使用缓存中的即可。
+
+### 路由缓存完全消失了吗? 
+并没有！在**3.6**以后的版本, 你还可以在内核代码中看到**dst_entry**。
+这是因为，3.6版本实际上是将 FIB查找 缓存到了**下一跳(fib_nh)结构上，也就是下一跳缓存**。即 **route cache 变为 nh cache（nexthop cache）**。
 
 ### 为什么需要缓存下一跳
+#### 没有下一跳缓存的情况
 我们可以先来看下没有下一跳缓存的情况。以**转发forward** 过程为例，相关的伪代码如下：
 ```
-FORWARD:
+FORWARD: 报文转发的处理
 
 fib_result = fib_lookup(skb)
 dst_entry  = alloc_dst_entry(fib_result)
-skb->dst = dst_entry;
+skb->dst = dst_entry; // 将fib结果附到 skb上；
 
 skb->dst.output(skb)   
 nexthop = rt_nexthop(skb->dst, ip_hdr(skb)->daddr)
@@ -129,44 +180,160 @@ neigh = ipv4_neigh_lookup(dev, nexthop)
 dst_neigh_output(neigh,skb)
 release_dst_entry(skb->dst)
 ```
-内核利用**FIB**查询的结果申请**dst_entry**, 并设置到**skb**上，然后在发送过程中找到下一跳地址，继而查找到**邻居**结构(查询**ARP**)，然后邻居系统将报文发送出去，最后释放**dst_entry**。
+内核利用**FIB**查询的结果申请**dst_entry**, 并设置到**skb**上；
+然后在发送过程中找到下一跳地址，继而查找到**邻居**结构(查询**ARP**)，然后邻居系统将报文发送出去，最后释放**dst_entry**。
 
-下一跳缓存的作用
-> 尽量减少最初和最后的申请释放**dst_entry**，它将**dst_entry**缓存在下一跳结构(**fib_nh**)上。
+#### 下一跳缓存的作用
+尽量减少最初和最后，对于**dst_entry**的申请、释放，
+它==将`dst_entry`缓存在下一跳结构(`fib_nh`)上==。
 
 
-这和之前的路由缓存有什么区别吗？
-> 很大的区别！之前的路由缓存是以源IP和目的IP为KEY，有千万种可能性，而现在是和下一跳绑定在一起，一台设备没有那么多下一跳的可能。这就是下一跳缓存的意义！
+#### 和之前的路由缓存有什么区别？
+很大的区别！之前的路由缓存是以源IP和目的IP为KEY，有千万种可能性；
+而现在是和下一跳绑定在一起，一台设备没有那么多下一跳的可能。这就是下一跳缓存的意义！
 
-### 提前分流（早期解复用） early demux
+#### 下一跳缓存减少路由查找的开销了吗？
+==下一跳缓存并没有减少路由查找的开销，路由查找是绕不过去的，而是减少了内存分配/释放的开销==。
+这是因为一个数据包在发送过程中，必须在路由查找结束后绑定一个下一跳结构体，然后绑定一个邻居。
+路由表只是一个静态表，数据通道没有权限修改它，它只是用来查找，协议栈必须用查找到的路由项信息来构造一个下一跳结构体，这个时候就体现了缓存下一跳的重要性，因为它减少了构造的开销。
+
+#### 路由项和下一跳结构体以及邻居结构体的关系
+路由查找结果是路由项，它和下一跳结构体以及邻居结构体之间还有层次关系，其关系如下：
+
+路由项--->下一跳结构体---->邻居项
+一 个数据包在发送过程中，必须在路由查找结束后绑定一个下一跳结构体，然后绑定一个邻居，路由表只是一个静态表，数据通道没有权限修改它，它只是用来查找， 协议栈必须用查找到的路由项信息来构造一个下一跳结构体，这个时候就体现了缓存下一跳的重要性，因为它减少了构造的开销！
+### rt_cache 文件
+
+#### /proc/net/rt_cache 文件
+
+`ip route show table cache` 应该就是读取的这个文件。
+
+PROC文件`/proc/net/rt_cache`，查看系统的cache项。其与cache统计项不同（`/proc/net/stat/rt_cache`）。
+
+#### /proc/net/stat/rt_cache 文件
+` /proc/net/stat/rt_cache` 
+
+参考：[# Tuning Linux IPv4 route cache](https://vincent.bernat.ch/en/blog/2011-ipv4-route-cache-linux)
+
+`man lnstat`
+![](attachments/Pasted%20image%2020241210141445.png)
+
+```bash
+lnstat -s1 -i1 -c-1 -f rt_cache
+
+除了第一列，`lnstat` 输出的值以每秒为单位。
+```
+![](attachments/Pasted%20image%2020241210140421.png)
+
+
+字段说明：
+![](attachments/Pasted%20image%2020241210141854.png)
+
+**in_slow_tot**
+![](attachments/Pasted%20image%2020241212154950.png)
+
+
+**in_no_route**
+![](attachments/Pasted%20image%2020241212155252.png)
+
+
+**out_slow_tot**
+
+![](attachments/Pasted%20image%2020241212154551.png)
+
+
+#### 观察`rt_cache`文件是否进行了慢路径的dst申请 
+当你看到`input`或者`output`路径中的`rt_dst_alloc`调用时，你可能会很灰心丧气。
+但是如果你使用下面的命令看一下实际结果：
+`watch -d -n 1 “cat /proc/net/stat/rt_cache”`
+如果你发现，`in_slow_tot`和`out_slow_tot`两个字段的计数器增加十分缓慢，甚至停滞！这意味着绝大多数的数据包在接收和发送过 程中都命中了下一跳cache！
+
+如果你发现了异常，也就是说不是这种情况，它们中的其一或者两者增长的很快，那么可能是两方面的原因：
+
+### 收到路由重定向的处理
+所谓的重定向路由，它会更新本节点路由表的一个路由项条目，要注意的是，这个更新并不是永久的，而是临时的，所以Linux的做法并不是直接修改路由表，而是修改下一跳缓存！这个过程是异步的。
+
+伪代码如下：
+```c
+# IP_OUT函数：
+执行IP发送逻辑，它首先会查找标准路由表，然后在下一跳缓存中查找下一跳dst_nexthop，以决定是否重新分配一个新的dst_nexthop；
+查找下一跳缓存失败，进而创建新的dst_nexthop，之后将其插入到下一跳缓存，以留给后续的数据包发送时使用，这样就避免了每次重新分配/释放新的内存空间。
+
+func IP_OUT：
+    dst=lookup_fib_table(skb);
+    dst_nexthop = lookup_redirect_nh(skb.daddr, dst); // 查找重定向下一跳
+    if dst_nexthop == NULL; then
+        dst_nexthop=lookup_nh_cache(dst); // 查找下一跳缓存
+    endif
+    if dst_nexthop == NULL; then
+        dst_nexthop=alloc_entry(dst);
+        if dst_nexthop.cache == true; then
+            insert_into_nh_cache(dst_nexthop);
+        endif
+    endif
+    neigh=bind_neigh(dst_nexthop);
+    neigh.output(skb);
+    if dst_nexthop.cache == false; then
+        release_entry(dst_nexthop);
+    endif
+endfunc
+
+=================
+
+# IP_ROUTE_REDIRECT函数：将创建或者更新一个dst_nexthop，并将其插入到一个链表中，该链表由数据包的目标地址作为查找键。
+func IP_ROUTE_REDIRECT:
+    dst=lookup_fib_table(icmp.redirect.daddr);
+    dst_nexthop = new_dst_nexthop(dst, icmp.redirect.newnexthop);
+    insert_into_redirect_nh(dst_nexthop); // 插入重定向下一跳
+endfunc
+```
+
+
+
+## 总结
+3.6版本内核之前的路由cache，其思想并没有错，错在这个cache放错了地方以至于可能会成为众矢之的而被DDos。
+**3.6**版本将**FIB**查询之前的路由缓存移除了，取而代之的是下一跳缓存。
+
+# 收包方向提前分流（早期解复用） `early demux`
 
 `early demux`是在**skb**接收方向的加速方案。
-如前面所说，在取消了**FIB**查询前的路由缓存后，每个**skb**应该都需要查询**FIB**。
+如前面所说，==在取消了`FIB`查询前的路由缓存后，每个`skb`应该都需要查询`FIB`==。
 
-**early demux**是基于一种思想：如果一个**skb**可以匹配本机某个应用程序的套接字，那么我们可以将路由的结果缓存在内核套接字结构上；下次同样的报文(四元组)到达后，我们可以在**FIB**查询前就将报文提交给上层，也就是**提前分流(early demux)**。
+**early demux**是基于一种思想：如果一个**skb**可以匹配本机某个应用程序的套接字，那么我们可以**将路由的结果缓存在内核套接字(socket: sock)结构上**；
+下次同样的报文(四元组)到达后，我们可以在**FIB**查询前就将报文提交给上层，也就是**提前分流(early demux)**。
 ![](attachments/Pasted%20image%2020231129193628.png)
 
-#### 详细说明
-`ip_rcv_finish` 负责为 sk_buff 从 IP Route System 中找到路由目标。
+## `early demux` 机制原理
+`ip_rcv_finish` 负责为 sk_buff 从 `IP Route System` 中找到路由目标。
 如果是路由到本机，则在下一个处理这个 sk_buff 的协议内(比如上层的 TCP/UDP 协议)还需要从 sk_buff 中找到对应的 socket。也就是说每个收到的数据包都会有两次 demux 工作。
-> 解多路复用：
-> 一次找到这个数据包该路由到哪里
-> 一次是如果路由到本机需要将数据包路由到对应的 Socket。
 
-但是对于类似 TCP 这种协议当 socket 处在 ESTABLISHED 状态后，协议栈不会出现变化，后来的数据包的路由路径跟握手时数据包的路由路径完全相同，所以就有了 Early Demux 机制。用于在收到数据包的时候根据 IP Header 中的 protocol 字段找到上一层网络协议，用上一层网络协议来解析数据包的路由路径，以减少一次查询。
+### 本机收包的两次解多路复用
+> （1）一次找到这个数据包该路由到哪里。
+即：查询路由，是转发还是给本机。
+> （2）一次是如果路由到本机需要将数据包路由到对应的 Socket。
+即：本机路由，需要查找匹配的socket。
+
+### ESTABLISHED的tcp socket收包省去路由查询
+但是对于类似 TCP 这种协议当 socket 处在 ESTABLISHED 状态后，协议栈不会出现变化，后来的数据包的路由路径跟握手时数据包的路由路径完全相同，所以就有了 Early Demux 机制。
+用于在收到数据包的时候根据 IP Header 中的 protocol 字段找到上一层网络协议，用上一层网络协议来解析数据包的路由路径，以减少一次查询。
 
 > 拿 TCP 来说，简单来讲就是收到数据包后去 TCP 层查找这个数据包有没有对应的处在 ESTABLISHED 状态的 Socket，有的话直接使用这个 Socket 已经 Cache 住的路由目标作为当前 Packet 的路由目标，从而不用再查找 IP Route System，因为根据 Packet 查找 Socket 是怎么都省不掉的。
 
-需要补充一下 Early Demux 对 Socket 还未处在 ESTABLISHED 状态的 TCP 连接无效。
-这就导致这种数据包不但会查一次 IP Route System 还会到 TCP ESTABLISHED 连接表中查一次，之后路由到 TCP 层又要再查一次 Socket 表。总体开销就会比只查一次 IP Route System 还要大。
-所以 Early Demux 并不是无代价的，只是大多数场景可能开启后会对性能有提高，所以 Linux 默认是开启的。
-但在某些场景下，目前来看应该是大量短连接的场景，连接要不断建立断开，有大量的数据包都是在 TCP ESTABLISHED 表中查不到东西，这个机制开启后性能会有损耗，所以 Linux 提供了关闭该机制的办法：
+## `early demux`注意事项
+需要补充一下 `Early Demux` 对 Socket 还未处在 ESTABLISHED 状态的 TCP 连接无效。
+这就导致这种数据包不但会查一次 `IP Route System`， 还会到 `TCP ESTABLISHED` 连接表中查一次，之后路由到 TCP 层又要再查一次 Socket 表。
+总体开销就会比只查一次 `IP Route System` 还要大。
+
+## `Early Demux`的适用场景
+所以 `Early Demux` 并不是无代价的，只是大多数场景可能开启后会对性能有提高，所以 Linux 默认是开启的。
+但在某些场景下，目前来看应该是大量短连接的场景，连接要不断建立断开，有大量的数据包都是在 `TCP ESTABLISHED` 表中查不到东西；
+这个机制开启后性能会有损耗，所以 Linux 提供了关闭该机制的办法：
 ```c
 sysctl -w net.ipv4.ip_early_demux=0
 ```
 
 
-#### 小结
+## 小结
 如果开启了 ip_early_demux（早期解复用），这是一项优化，为了 TCP 和 UDP 可以提前获得 skb 的 dst_entry（目标入口）；
 
 - 当 skb 为 TCP 报文并且开启了 tcp_early_demux 选项
@@ -179,9 +346,7 @@ sysctl -w net.ipv4.ip_early_demux=0
 **Early Demux（早期解复用）**  和查询 IP Route System（路由子系统）目的都是为了设置 skb->dst，如果 skb 是发给本机器，那么 Early Demux 和查询 IP Route System 获得的 dst_entry 会是同一个函数 ip_local_deliver；如果不是本机器，那么会转发出去。
 
 
-## 总结
-3.6版本内核之前的路由cache，其思想并没有错，错在这个cache放错了地方以至于可能会成为众矢之的而被DDos。
-**3.6**版本将**FIB**查询之前的路由缓存移除了，取而代之的是下一跳缓存。
+
  
 # 其他
 ## route cache查看
@@ -251,6 +416,12 @@ https://switch-router.gitee.io/blog/routecache/
 
 # Linux 3.6版本内核后关于路由cache的一个优化【dog250】
 https://blog.csdn.net/dog250/article/details/51945909
+
+# Tuning Linux IPv4 route cache
+https://vincent.bernat.ch/en/blog/2011-ipv4-route-cache-linux
+
+# Linux3.5内核以后的路由下一跳缓存
+https://blog.51cto.com/dog250/1747887
 
 # Tuning Linux IPv4 route cache
 https://vincent.bernat.ch/en/blog/2011-ipv4-route-cache-linux

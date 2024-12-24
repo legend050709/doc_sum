@@ -16,42 +16,44 @@ $ service apache2 start
 ```
 
 这种方法有两个缺点。
-一是启动时间长。`init`进程是串行启动，只有前一个进程启动完，才会启动下一个进程。
+一是**启动时间长。`init`进程是串行启动，只有前一个进程启动完，才会启动下一个进程**。
 二是启动脚本复杂。`init`进程只是执行启动脚本，不管其他事情。脚本需要自己处理各种情况，这往往使得脚本变得很长。
 
- centos7版本以后，系统的第一个进程由initd变成了systemd，systemd就像是一个小型操作系统一样，接管了系统初始化启动和进程服务管理等。
+ 注：centos7版本以后：==系统的第一个进程由`initd`变成了`systemd`，`systemd`就像是一个小型操作系统一样，接管了系统初始化启动和进程服务管理等==。
 
 ## 介绍
-**Systemd**：Systemd 就是为了解决这些问题而诞生的。它的设计目标是，为系统的启动和管理提供一套完整的解决方案。
+**Systemd**：Systemd 就是为了解决这些问题而诞生的。它的设计目标是，为**系统的启动和管理**提供一套完整的解决方案。
 
-因此，systemd 是 系统启动和服务器守护进程管理器，负责在系统启动或运行时，激活系统资源和服务器进程、以及其它进程。
+因此，systemd 是 ==系统启动和服务器守护进程管理器==，负责在系统启动或运行时，激活系统资源和服务器进程、以及其它进程。
 
 使用了 Systemd，就不需要再用`init`了。Systemd 取代了`initd`，成为系统的第一个进程（PID 等于 1），其他进程都是它的子进程。
+
+## Systemd 的 优缺点
+`Systemd` 的优点是功能强大，使用方便。
+缺点是体系庞大，非常复杂。事实上，现在还有很多人反对使用 Systemd，理由就是它过于复杂，与操作系统的其他部分强耦合，违反"keep simple, keep stupid"的Unix 哲学。
+
+## system 工具集
 
 ![](attachments/Pasted%20image%2020231218115433.png)
 
 Systemd 并不是一个命令，而是一组命令，涉及到系统管理的方方面面。
 - `systemctl`是 Systemd 的主命令，用于管理系统。
-- `systemd-analyze`命令用于查看启动耗时。
+- `systemd-analyze`：显示此次系统启动时运行每个服务所消耗的时间，可以用于分析系统启动过程中的性能瓶颈。
+- `hostnamectl`：用于查看和修改系统的主机名和主机信息
 ```bash
-# 查看启动耗时
-$ systemd-analyze                                                                                       
-# 查看每个服务的启动耗时
-$ systemd-analyze blame
+# 显示当前主机的信息
+$ hostnamectl
 
-# 显示瀑布状的启动过程流
-$ systemd-analyze critical-chain
-
-# 显示指定服务的启动流
-$ systemd-analyze critical-chain atd.service
+# 设置主机名。
+$ sudo hostnamectl set-hostname levonfly
 ```
 
-## 优缺点
-Systemd 的优点是功能强大，使用方便。
-缺点是体系庞大，非常复杂。事实上，现在还有很多人反对使用 Systemd，理由就是它过于复杂，与操作系统的其他部分强耦合，违反"keep simple, keep stupid"的Unix 哲学。
+- `journalctl`：用于查看系统、内核、各类应用服务日志
+- `systemd-notify`：Systemd 的内部工具，用于通知服务的状态变化
+- `systemd-path`：Systemd 的内部工具，用于显示系统上下文中的各种路径配置。
 
 ## 用户进程和systemd的关系
-操作系统使用systemd后，所有用户进程都是systemd的后代进程。如下所示：
+操作系统使用`systemd`后，所有用户进程都是`systemd`的后代进程。如下所示：
 ```bash
 $ pstree -p  
 systemd(1)─┬─agetty(1056)  
@@ -81,25 +83,30 @@ systemd(1)─┬─agetty(1056)
                          └─{tuned}(1381)
 ```
 > 注意：虽然从进程树关系来看，所有进程都直接或间接地受到systemd的管理。
-> 但是，并非所有systemd的子进程都受Systemd Unit管理单元的管理。只有那些由systemd方式启动的服务进程(比如systemctl命令启动)才受到Systemd Unit管理单元的监控和管理。
+> 但是，并非所有`systemd`的子进程都受`Systemd Unit`管理单元的管理。只有那些由`systemd`方式启动的服务进程(比如`systemctl`命令启动)才受到`Systemd Unit`管理单元的监控和管理。
 
 比如，用户可以通过下面两种方式启动Nginx服务进程：
 ```bash
 nginx                    # (1)  
 systemctl start nginx    # (2)
 ```
-但systemd只能监控、管理第(2)种方式启动的nginx服务。比如第一种方式启动的nginx，无法使用`systemctl stop nginx`来停止。
+但`systemd`只能监控、管理第(2)种方式启动的`nginx`服务。比如第一种方式启动的`nginx`，无法使用`systemctl stop nginx`来停止。
 
 所以，**systemd下的直系子进程可分为两类：受systemd管理的子进程和不受systemd管理的子进程**。
 ![](attachments/Pasted%20image%2020231219161753.png)
 
 ![](attachments/Pasted%20image%2020231219162018.png)
 ![](attachments/Pasted%20image%2020231219162056.png)
+
 ## systemd-analyze
-systemd-analyze是一个分析启动性能的工具，用于分析启动时服务时间消耗。它将列出有关每个服务启动所需时间的信息，包括启动时内核和用户空间所花费的时间。
+`systemd-analyze`是一个**分析启动性能**的工具，用于**分析启动时服务时间消耗**。
+
+它将列出有关每个服务启动所需时间的信息，包括启动时内核和用户空间所花费的时间。
+
+
 
 ### 使用
-systemd-analyze可使用的命令：
+`systemd-analyze`可使用的命令：
 ```bash
 - systemd-analyze [OPTIONS…] [time]
 - systemd-analyze [OPTIONS…] blame
@@ -114,6 +121,21 @@ systemd-analyze可使用的命令：
 - systemd-analyze [OPTIONS…] syscall-filter [SET…]
 - systemd-analyze [OPTIONS…] verify [FILES…]
 ```
+
+```bash                           
+# 查看启动耗时
+$ systemd-analyze   
+
+# 查看每个服务的启动耗时
+$ systemd-analyze blame
+
+# 显示瀑布状的启动过程流
+$ systemd-analyze critical-chain
+
+# 显示指定服务的启动流
+$ systemd-analyze critical-chain atd.service
+```
+
 
 ### 范例
 使用`systemd-analyze blame`可以查看每个单元的启动时间。如下所示：
@@ -427,7 +449,7 @@ systemctl list-dependencies --all nginx.service
 ```
 
 ## Unit 的配置文件
-每一个 Unit 都有一个配置文件，告诉 Systemd 怎么启动这个 Unit 。
+每一个 `Unit` 都有一个配置文件(形如：`xxx.service`)，告诉 `Systemd `怎么启动这个 `Unit` 。
 
 Systemd 默认从目录`/etc/systemd/system/`读取配置文件。但是，里面存放的大部分文件都是符号链接，指向目录`/usr/lib/systemd/system/`，真正的配置文件存放在那个目录。
 
@@ -453,7 +475,6 @@ $ systemctl list-unit-files
 $ systemctl list-unit-files --type=service
 ```
 
-
 ### 配置文件的状态
 这个命令会输出一个列表。
 ```bash
@@ -476,6 +497,7 @@ clamd@scan.service     disabled
 ```bash
 systemctl status bluetooth.service
 ```
+
 ### 查看配置文件
 前面说过，配置文件主要放在`/usr/lib/systemd/system`目录，也可能在`/etc/systemd/system`目录。找到配置文件以后，使用文本编辑器打开即可。
 
@@ -542,7 +564,9 @@ Directive2=value
 ## 配置文件的区块详解
 ### `[Unit]`区块
 
-`[Unit]`区块通常是配置文件的第一个区块，用来定义 Unit 的元数据，以及配置与其他 Unit 的关系。它的主要字段如下。
+**`[Unit]`区块通常是配置文件的第一个区块，用来定义 Unit 的元数据，配置与其他 Unit 的关系**。
+
+它的主要字段如下。
 ```text
 Description：简短描述
 Documentation：文档地址
@@ -560,24 +584,34 @@ Assert...：当前 Unit 运行必须满足的条件，否则会报启动失败
 
 #### 范例说明
 举例来说：
-某 Web 应用需要 postgresql 数据库储存数据。在配置文件中，它只定义要在 postgresql 之后启动，而没有定义依赖 postgresql 。上线后，由于某种原因，postgresql 需要重新启动，在停止服务期间，该 Web 应用就会无法建立数据库连接。
+某 `Web` 应用需要 `postgresql` 数据库储存数据。在配置文件中，它只定义要在 `postgresql` 之后启动，而没有定义依赖 `postgresql` 。上线后，由于某种原因，`postgresql` 需要重新启动，在停止服务期间，该 Web 应用就会无法建立数据库连接。
 
-`Wants`字段：表示`sshd.service`与`sshd-keygen.service`之间存在"弱依赖"关系，即如果"sshd-keygen.service"启动失败或停止运行，不影响`sshd.service`继续执行。
+`Wants`字段：表示`sshd.service`与`sshd-keygen.service`之间存在"弱依赖"关系，即如果 `sshd-keygen.service`  启动失败或停止运行，不影响`sshd.service`继续执行。  
 
 `Requires`字段则表示"强依赖"关系，即如果该服务启动失败或异常退出，那么`sshd.service`也必须退出。
 
 
 ### `[Service]`区块
-`Service`区块定义如何启动当前服务。
-```text
-Type：定义启动时的进程行为。它有以下几种值。
-- `Type=simple`：默认值，执行`ExecStart`指定的命令，启动主进程
-- `Type=forking`：以 fork 方式从父进程创建子进程，创建后父进程会立即退出，子进程将成为主进程。
-- `Type=oneshot`：一次性进程，Systemd 会等当前服务退出，再继续往下执行
-- `Type=dbus`：类似于`simple`，但会等待 D-Bus 信号后启动
-- `Type=notify`：类似于`simple`，启动结束后会发出通知信号，然后 Systemd 再启动其他服务；
-- `Type=idle`：类似于`simple`，但是要等到其他任务都执行完，才会启动该服务。一种使用场合是为让该服务的输出，不与其他服务的输出相混合；
+**`Service`区块定义如何启动当前服务**。
 
+`Type`：定义启动时的进程行为。它有以下几种值。
+```text
+- `Type=simple`：默认值，`ExecStart`字段启动的进程为主进程。  
+服务进程不会 fork，如果该服务要启动其他服务，不要使用此类型启动。
+
+- `Type=forking`：`ExecStart`字段将以`fork()`方式从父进程创建子进程启动，创建后父进程会立即退出，子进程成为主进程。通常需要指定`PIDFile`字段，以便 `Systemd` 能够跟踪服务的主进程。对于常规的守护进程（daemon），除非你确定此启动方式无法满足需求，使用此类型启动即可。
+
+- `Type=oneshot`：只执行一次，Systemd 会等当前服务退出，再继续往下执行, 适用于只执行一项任务、随后立即退出的服务。通常需要指定`RemainAfterExit=yes`字段，使得 Systemd 在服务进程退出之后仍然认为服务处于激活状态。
+
+- `Type=dbus`：类似于`simple`，但会等待 D-Bus 信号后启动
+
+- `Type=notify`：当前服务启动完毕会发出通知信号，通知 Systemd，然后 Systemd 再启动其他服务。
+
+- `Type=idle`：Systemd 会等到其他任务都执行完，才会启动该服务。一种使用场合是：让该服务的输出，不与其他服务的输出相混合。
+```
+
+启动，启动前，启动后的相关命令。
+```
 ExecStart：启动当前服务的命令
 ExecStartPre：启动当前服务之前执行的命令
 ExecStartPost：启动当前服务之后执行的命令
@@ -597,12 +631,12 @@ KillMode：定义 Systemd 如何停止服务。
 
 
 #### 启动命令
-**环境参数**
+##### 环境参数
 许多软件都有自己的环境参数文件，该文件可以用`EnvironmentFile`字段设置。
 `EnvironmentFile`字段：指定当前服务的环境参数文件。该文件内部的`key=value`键值对，可以用`$key`的形式，在当前配置文件中获取。
 上面的例子中，sshd 的环境参数文件是`/etc/sysconfig/sshd`。
 
-**启动命令**
+##### 启动命令字段
 配置文件里面最重要的字段是`ExecStart`。
 `ExecStart`字段：定义启动进程时执行的命令。
 上面的例子中，启动`sshd`，执行的命令是`/usr/sbin/sshd -D $OPTIONS`，其中的变量`$OPTIONS`就来自`EnvironmentFile`字段指定的环境参数文件。
@@ -646,9 +680,10 @@ SSH_USE_STRONG_RNG=0
 ```
 
 注：所有的启动设置之前，都可以加上一个连词号（`-`），表示"抑制错误"，即发生错误的时候，不影响其他命令的执行。比如，`EnvironmentFile=-/etc/sysconfig/sshd`（注意等号后面的那个连词号），就表示即使`/etc/sysconfig/sshd`文件不存在，也不会抛出错误。
+
 #### 停止行为
 **停止行为**
-`KillMode`字段：定义 Systemd 如何停止 服务。
+`KillMode`字段：定义 `Systemd` 如何停止 服务。
 `KillMode`字段可以设置的值如下。
 ```text
 control-group（默认值）：当前控制组里面的所有子进程，都会被杀掉
@@ -657,7 +692,7 @@ mixed：主进程将收到 SIGTERM 信号，子进程收到 SIGKILL 信号
 none：没有进程会被杀掉，只是执行服务的 stop 命令。
 ```
 
-上面这个例子中，将`KillMode`设为`process`，表示只停止主进程，不停止任何sshd 子进程，即子进程打开的 SSH session 仍然保持连接。这个设置不太常见，但对 sshd 很重要，否则你停止服务的时候，会连自己打开的 SSH session 一起杀掉。
+上面这个例子中，将`KillMode`设为`process`，表示只停止主进程，不停止任何`sshd` 子进程，即子进程打开的 `SSH session` 仍然保持连接。这个设置不太常见，但对 sshd 很重要，否则你停止服务的时候，会连自己打开的 `SSH session` 一起杀掉。
 
 
 #### 重启行为
@@ -677,6 +712,8 @@ always：不管是什么退出原因，总是重启
 对于守护进程，推荐设为`on-failure`。对于那些允许发生错误退出的服务，可以设为`on-abnormal`。
 
 >另外，`RestartSec`字段：表示 Systemd 重启服务之前，需要等待的秒数。上面的例子设为等待42秒。
+
+
 
 #### 范例
 ```text
@@ -728,10 +765,14 @@ WantedBy=multi-user.target
 ### `[Install]`区块
 
 `[Install]`通常是配置文件的最后一个区块，定义如何安装这个配置文件，用来定义如何启动，以及是否开机启动。它的主要字段如下。
+
 ```text
-WantedBy：表示该服务所在的 Target。它的值是一个或多个 Target，当前 Unit 激活时（enable）符号链接会放入/etc/systemd/system目录下面以 Target 名 + .wants后缀构成的子目录中
-RequiredBy：它的值是一个或多个 Target，当前 Unit 激活时，符号链接会放入/etc/systemd/system目录下面以 Target 名 + .required后缀构成的子目录中
-Alias：当前 Unit 可用于启动的别名
+WantedBy：表示该服务所在的 Target。它的值是一个或多个 Target，当前 Unit 激活时（enable）符号链接会放入/etc/systemd/system目录下面以 Target 名 + .wants后缀构成的子目录中。
+
+RequiredBy：它的值是一个或多个 Target，当前 Unit 激活时，符号链接会放入/etc/systemd/system目录下面以 Target 名 + .required后缀构成的子目录中。
+
+Alias：当前 Unit 可用于启动的别名。
+
 Also：当前 Unit 激活（enable）时，会被同时激活的其他 Unit
 ```
 
@@ -759,6 +800,7 @@ $ systemctl list-dependencies multi-user.target
 # shutdown.target 就是关机状态
 $ sudo systemctl isolate shutdown.target
 ```
+
 ## 自定义Service 单元
 前面说过，Service 单元就是所要执行的任务。比如发送邮件就是一种 Service。
 新建 Service 非常简单，就是在`/usr/lib/systemd/system`目录里面新建一个文件，比如`mytimer.service`文件，你可以写入下面的内容。
@@ -851,9 +893,11 @@ sudo systemctl disable myscript.timer
 
 # systemd的 Target
 ## 介绍
-启动计算机的时候，需要启动大量的 Unit。如果每一次启动，都要一一写明本次启动需要哪些 Unit，显然非常不方便。Systemd 的解决方案就是 Target。
+启动计算机的时候，需要启动大量的 `Unit`。如果每一次启动，都要一一写明本次启动需要哪些 `Unit`，显然非常不方便。`Systemd` 的解决方案就是 `Target`。
 
-简单说，Target 就是一个 Unit 组，包含许多相关的 Unit 。启动某个 Target 的时候，Systemd 就会启动里面所有的 Unit。从这个意义上说，Target 这个概念类似于"状态点"，启动某个 Target 就好比启动到某种状态。
+简单说：
+**`Target` 就是一个 `Unit` 组，包含许多相关的 Unit 。启动某个 Target 的时候，Systemd 就会启动里面所有的 Unit**。
+从这个意义上说，`Target` 这个概念类似于"状态点"，启动某个 `Target` 就好比启动到某种状态。
 
 
 ## Target 的配置文件
@@ -897,12 +941,13 @@ $ sudo systemctl set-default multi-user.target
 $ sudo systemctl isolate multi-user.target
 ```
 
-## Target 和 `init`比较
-所谓 Target 指的是一组相关进程，有点像 init 进程模式下面的启动级别。启动某个Target 的时候，属于这个 Target 的所有进程都会全部启动。
+## `Target` 和 `init`进程比较
+所谓 `Target` 指的是一组相关进程，有点像 `init` 进程模式下面的启动级别。
+启动某个`Target` 的时候，属于这个 `Target` 的所有进程都会全部启动。
 
-不同的是，RunLevel 是互斥的，不可能多个 RunLevel 同时启动，但是多个 Target 可以同时启动。
+不同的是，`RunLevel` 是互斥的，不可能多个 `RunLevel` 同时启动，但是多个 `Target` 可以同时启动。
 
-Target 与 传统 RunLevel 的对应关系如下。
+`Target` 与 传统 `RunLevel` 的对应关系如下。
 ```bash
 Traditional runlevel      New target name     Symbolically linked to...
 
@@ -925,7 +970,21 @@ Runlevel 6           |    runlevel6.target -> reboot.target
 
 # systemd的日志管理
 ## 介绍
-Systemd 统一管理所有 Unit 的启动日志。带来的好处就是，可以只用`journalctl`一个命令，查看所有日志（内核日志和应用日志）。日志的配置文件是`/etc/systemd/journald.conf`。
+`Systemd` 统一管理所有 `Unit` 的启动日志。
+
+**日志收集**：`systemd-journald`进程收集来**自系统、用户空间服务和内核**的日志消息。
+
+**二进制日志格式**：与传统的文本日志不同，`journald` 使用二进制格式存储日志，这使得日志的读取和处理更加高效，同时也支持结构化数据(比如，以`json`格式输出)。
+
+ **持久性和临时存储**：`journald` 可以配置为将日志存储在内存中（临时）或持久化到磁盘上。持久化日志存储可以通过配置 `/var/log/journal` 目录来实现。
+
+**日志轮换和清理**：`journald` 具有自动轮换和清理日志的功能，可以根据配置的大小限制和时间限制自动删除旧日志，以节省存储空间。
+
+**支持日志的元数据**：每条日志消息都可以附带元数据，例如时间戳、进程ID、用户ID、会话ID等，这些信息有助于更好地理解和分析日志。
+
+**实时日志查看**：`journald` 提供了实时日志查看功能，可以使用 `journalctl` 命令来查看和过滤日志消息。这使得管理员能够快速定位问题。
+
+**日志的配置文件**：`/etc/systemd/journald.conf`。
 
 ## 操作
 `journalctl`功能强大，用法非常多。
@@ -1006,8 +1065,7 @@ $ sudo journalctl --no-pager
 $ sudo journalctl -b -u nginx.service -o json
 
 # 以 JSON 格式（多行）输出，可读性更好
-$ sudo journalctl -b -u nginx.serviceqq
- -o json-pretty
+$ sudo journalctl -b -u nginx.service -o json-pretty
 
 # 显示日志占据的硬盘空间
 $ sudo journalctl --disk-usage
@@ -1019,24 +1077,129 @@ $ sudo journalctl --vacuum-size=1G
 $ sudo journalctl --vacuum-time=1years
 ```
 
+# systemd 的 notify
+## 介绍
+`systemd sd_notify`是什么？ 
+传统的服务化进程管理，我们只是能知道他活着，他挂了.  
+`sd_notify`可以做到一个运行程序跟`systemd`交互通信。 **服务主动告诉`systemd`我现在的状态和事件**。
+
+## 配置
+在 `systemd` 中，服务的配置通常在 `.service` 文件中进行。为了使用 `Notify` 类型，您需要在服务文件中设置 `Type` 字段为 `notify`。
+```text
+[Unit]
+Description=My Example Service
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/my_service
+# 其他配置项...
+
+[Install]
+WantedBy=multi-user.target
+
+```
+1. 当 `systemd` 启动服务时，它会等待服务进程发送通知。
+2. 服务进程在启动完成后调用 `sd_notify` 来发送状态消息。
+3. `systemd` 接收到通知后，会更新服务的状态，并根据通知内容执行相应的操作（如启动依赖服务、记录日志等）。
+4. 如果在指定的时间内`systemd`没有收到 `READY=1` 的消息，`systemd` 就会认为启动失败。并终止该服务。
+
+## 作用
+在 `systemd` 中，`Notify` 类型的主要作用是允许服务在启动、运行和停止过程中向 `systemd` 发送状态更新。这种机制提供了更精细的进程管理和监控能力，具体作用包括如下。
+
+### 状态报告
+
+- **服务准备就绪**: 
+服务可以在完成初始化后，通过发送 `READY=1` 通知 `systemd`，表明它已经准备好接受请求。这使得 `systemd` 可以有效地管理服务的依赖关系，例如在服务启动时自动启动其他依赖服务
+
+- **状态更新**: 
+服务可以通过 `STATUS=...` 发送当前状态信息，帮助系统管理员或监控工具更好地理解服务的运行状况。
+
+- **监控和重启**: 
+通过使用 `Notify`，服务可以在运行时报告其健康状态，`systemd` 可以根据这些状态信息决定是否需要重启服务或采取其他恢复措施。
+
+### 进程管理
+
+- **动态监控**：
+通过发送通知，`systemd` 可以实时监控服务的状态。这使得管理者能够在服务运行时获得更多的上下文信息，例如服务是否正在重新加载配置，或是否正在停止。
+
+- **失败处理**:
+如果服务在启动过程中未能在预定时间内发送通知，`systemd` 会将其视为启动失败，并采取相应的措施（如重启服务或记录错误）。
+
+### 资源管理
+
+- **依赖管理**: 
+`systemd` 可以根据收到的通知动态管理服务之间的依赖关系。例如，如果一个服务依赖于另一个服务的状态，`systemd` 可以确保在依赖服务准备好之前，不会启动依赖它的服务。
+
+- **通知其他服务或系统组件**: 
+服务可以通过 `sd_notify` 向 `systemd` 发送各种类型的事件通知，例如它正在重新加载配置或即将停止。这种机制可以帮助其他依赖于该服务的组件做出相应的调整。
+
+
+
+## 原理
+`systemd` 的 `Notify` 类型配置允许服务在启动时向 `systemd` 通知其状态，从而实现更好的进程管理和监控。通过使用 `sd_notify` 接口，服务可以灵活地报告其状态和事件，帮助 `systemd` 做出相应的管理决策。
+
+ `sd_notify`函数 接口中，服务其实是通过环境变量 `NOTIFY_SOCKET`指定的`unix socket`的路径， 直接与 `systemd` 进行通信。
+
+## sd_notify 函数
+
+![](attachments/Pasted%20image%2020241221152756.png)
+
+`sd_notify()`是`systemd`提供的一个函数，用于向`systemd`发送通知消息。它可以用于指示服务启动、停止、重启、状态变化等操作。当`systemd`收到通知消息时，它会更新服务状态，并向其他应用程序广播这些通知。
+
+### 函数原型
+```c
+#include <systemd/sd-daemon.h>
+
+int sd_notify(int unset_environment, const char *state);
+```
+
+如果 `unset_environment` 参数非零，`sd_notify()` 在返回之前将会取消设置 `$NOTIFY_SOCKET` 环境变量（无论函数调用本身是否成功）。后续对 `sd_notify()` 的调用将会失败，但该变量不再被子进程继承。
+
+state：表示当前服务的状态，可以是以下值之一：
+- READY=1：表示服务已经启动完成，可以接受客户端请求。
+- STATUS=""：表示服务状态发生了变化，是一个字符串，说明服务的当前状态。
+- RELOADING=1：表示服务正在重新加载配置。
+- STOPPING=1：表示服务正在停止。
+- WATCHDOG=1：表示服务正在进行自我监控。
+
+
+### 使用
+`sd_notify()`函数通常在服务启动时使用，在进入主循环之前调用，告知`systemd`服务已成功启动，可以接受请求。这样，`systemd`就知道了服务的状态，并可以监控服务的运行状态。
+#### `Type=notify`的服务 使用`sd_notify()`函数
+如上所诉。
+
+#### `Type=forking`的服务 使用`sd_notify()`函数
+在服务的配置文件（`xxx.service`）中配置的`service`的`Type=forking`的`systemd`管理的服务中，通常需要使用`sd_notify()`函数来通知`systemd`服务已经启动成功，并且获取主进程的`PID`，以用于`systemd`监控该服务的状态。
+这是因为，使用`Type=forking`类型启动的服务，`systemd`无法直接得知服务的真正进程`ID`，而必须由服务本身通过`sd_notify()`函数通知`systemd`。
+
+虽然在`Type=forking`的`systemd`管理的服务中可以不使用`sd_notify()`函数，但是这样会导致`systemd`无法监控到服务的启动状态，如果服务意外停止，`systemd`无法自动重启服务，从而增加了服务管理的难度。
+
+因此，一般建议在`Type=forking`的`systemd`管理的服务中使用`sd_notify()`函数通知`systemd`进程已经启动完成。可以在服务启动时调用`sd_notify(0, "READY=1")`函数，将`READY`状态通知给`systemd`。如果服务需要重新加载配置，则可以在重新加载配置时使用`sd_notify(0, "RELOADING=1"`)通知`systemd`。
+
+### 注意
+需要注意的是，`sd_notify()`函数只有在`systemd`的控制下启动的服务中才有效，对于其他任意进程调用`sd_notify()`函数是没有任何作用的。
+
+
 # systemd 的 path
 ## 介绍
 systemd 的 path工具提供了**监控文件、目录变化并触发执行指定操作**的功能。
-有时候这种监控功能是非常实用的，比如监控到`/etc/nginx/nginx.conf`或`/etc/nginx/conf.d/`发生变化后，立即 reload nginx。虽然，用户也可以使用**inotify**类的工具来监控，但远不如**systemd path**更方便、更简单且更易于观察监控效果和调试。
-> 注意：其实，systemd path的底层使用的是inotify，所以受限于inotify的缺陷，systemd path只能监控本地文件系统，而无法监控网络文件系统。
+有时候这种监控功能是非常实用的，比如监控到`/etc/nginx/nginx.conf`或`/etc/nginx/conf.d/`发生变化后，立即 `reload nginx`。虽然，用户也可以使用**inotify**类的工具来监控，但远不如**systemd path**更方便、更简单且更易于观察监控效果和调试。
+> 注意：其实，`systemd path`的底层使用的是`inotify`，所以受限于`inotify`的缺陷。
+
+注：`systemd path`只能监控本地文件系统，而无法监控网络文件系统。
 
 ## 监控项
-systemd path暴露的监控功能并不多，它能监控的动作包括：
+`systemd path`暴露的监控功能并不多，它能监控的动作包括：
 ![](attachments/Pasted%20image%2020231219162602.png)
 > 注：这些指令监控的路径必须是绝对路径。
 
 ## 使用
-要使用systemd path的功能，需至少编写两个文件，一个`.path`文件和一个`.service`文件，这两个文件的前缀名称通常保持一致，但并非必须。
+要使用`systemd path`的功能，需至少编写两个文件，一个`.path`文件和一个`.service`文件，这两个文件的前缀名称通常保持一致，但并非必须。
 
 这两个文件可以位于以下路径：
-- /usr/lib/systemd/system/
-- /etc/systemd/system/
-- ~/.config/systemd/user/：用户级监控，只在该用户登录后才监控，该用户所有会话都退出后停止监控。
+- `/usr/lib/systemd/system/`
+- `/etc/systemd/system/`
+- `~/.config/systemd/user/`：用户级监控，只在该用户登录后才监控，该用户所有会话都退出后停止监控。
 
 ## 范例
 
@@ -1131,9 +1294,9 @@ Jul 05 16:09:51 junmajinlong.com systemd[1]: Started path_test.service.
 Jul 05 16:09:55 junmajinlong.com systemd[1]: Started path_test.service.
 ```
 ## 资源控制
-systemd path触发的任务可能会消耗大量资源，比如执行rsync的定时任务、执行数据库备份的定时任务，等等，它们可能会消耗网络带宽，消耗IO带宽，消耗CPU等资源。
+`systemd path`触发的任务可能会消耗大量资源，比如执行`rsync`的定时任务、执行数据库备份的定时任务，等等，它们可能会消耗网络带宽，消耗IO带宽，消耗CPU等资源。
 
-想要控制这些定时任务的资源使用量也非常简单，因为真正执行任务的是`.service`，而Service配置文件中可以轻松地配置一些资源控制指令或直接使用Slice定义的CGroup。这些资源控制类的指令可参考`man systemd.resource-control`。
+想要控制这些定时任务的资源使用量也非常简单，因为真正执行任务的是`.service`，而`Service`配置文件中可以轻松地配置一些资源控制指令或直接使用`Slice`定义的`CGroup`。这些资源控制类的指令可参考`man systemd.resource-control`。
 
 例如，直接在`[Service]`中定义资源控制指令：
 ```bash
@@ -1143,13 +1306,13 @@ MemoryLimit=20M
 ExecStart=/usr/bin/backup.sh
 ```
 
-又或者让Service使用定义好的Slice：
+又或者让`Service`使用定义好的`Slice`：
 ```bash
 [Service]  
 ExecStart=/usr/bin/backup.sh  
 Slice=backup.slice
 ```
-其中backup.slice的内容为：
+其中`backup.slice`的内容为：
 ```bash
 $ cat /usr/lib/systemd/system/backup.slice  
 [Unit]  
@@ -1165,18 +1328,18 @@ MemoryLimit=20M
 ## systemd path的`Bug`
 注意，此中的`bug`是带引号的。
 
-systemd path监控路径上所产生的事件是需要时间的，如果两个事件发生时的时间间隔太短，systemd path可能会丢失第二个甚至后续第三个第四个等等事件。
+`systemd path`监控路径上所产生的事件是需要时间的，如果两个事件发生时的时间间隔太短，`systemd path`可能会丢失第二个甚至后续第三个第四个等等事件。
 
-例如，使用`PathChanged`或`PathModified`监控路径/tmp/foo目录时，执行以下操作触发事件：
+例如，使用`PathChanged`或`PathModified`监控路径`/tmp/foo`目录时，执行以下操作触发事件：
 ```bash
 $ touch /tmp/foo/a && rm -rf /tmp/foo/a
 ```
 
-期待的是systemd path能够捕获这两个事件并执行两次对应的操作，但实际上只会执行一次对应操作。换句话说，systemd path丢失了一次事件。
+期待的是`systemd path`能够捕获这两个事件并执行两次对应的操作，但实际上只会执行一次对应操作。换句话说，`systemd path`丢失了一次事件。
 
-之所以会丢失事件，是因为touch产生的事件被systemd path捕获，systemd path立即启动对应`.service`服务做出对应操作，在本次操作还未执行完时，rm又立即产生了新的事件，于是systemd path再次启动服务，但此时老的服务尚未退出，所以本次启动的新的服务实际上什么事也不做。
+之所以会丢失事件，是因为`touch`产生的事件被`systemd path`捕获，`systemd path`立即启动对应`.service`服务做出对应操作，在本次操作还未执行完时，`rm`又立即产生了新的事件，于是`systemd path`再次启动服务，但此时老的服务尚未退出，所以本次启动的新的服务实际上什么事也不做。
 
-所以，从结果上看去就像是systemd path丢失了事件，但实际上是因为服务尚未退出的情况下再次启动服务不会做任何事情。
+所以，从结果上看去就像是`systemd path`丢失了事件，但实际上是因为服务尚未退出的情况下再次启动服务不会做任何事情。
 可以加上一点休眠时间来耽搁一会：
 ```bash
 $ touch /tmp/foo/a && sleep 0.1 && rm -rf /tmp/foo/a
@@ -1190,7 +1353,7 @@ systemd path的这个『bug』也有好处，因为可以让**瞬间产生的多
 
 # Systemd服务环境变量缺失的问题
 ## 问题
-在Linux系统运维中，我们可能会遇到在使用systemd管理的服务时无法获取系统环境变量，尤其是`PATH`变量，从而导致无法正确找到命令路径。这确实是一个常见的挑战。
+在Linux系统运维中，我们可能会遇到在使用`systemd`管理的服务时无法获取系统环境变量，尤其是`PATH`变量，从而导致无法正确找到命令路径。这确实是一个常见的挑战。
 
 参考：[# Linux: 解决Systemd服务环境变量缺失的问题](https://blog.csdn.net/qq_14829643/article/details/135613395)
 
@@ -1205,12 +1368,12 @@ systemd path的这个『bug』也有好处，因为可以让**瞬间产生的多
 
 ### 服务文件中设置环境变量
 
-1. 在 xxx.service 通过 `Environment="MY_VAR_1=VAR_1_VALUE"` 设置变量
-2. 在 xxx.service 通过 `EnvironmentFile=/opt/workspace/my_env` 指定配置文件
+1. 在 `xxx.service` 通过 `Environment="MY_VAR_1=VAR_1_VALUE"` 设置变量
+2. 在 `xxx.service` 通过 `EnvironmentFile=/opt/workspace/my_env` 指定配置文件
 
 **Environment方式**
 
-编辑 systemd 的 service 文件，添加 `Environment=` 形如下：
+编辑 `systemd` 的 `service` 文件，添加 `Environment=` 形如下：
 ```bash
 [Service]
 Environment="MY_VAR_1=VAR_1_VALUE"

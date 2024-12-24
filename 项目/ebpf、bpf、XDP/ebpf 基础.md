@@ -78,6 +78,8 @@ eBPF 是一个运行在内核中的虚拟机，很多人在初次接触它时，
 
 # ebpf 程序类型
 
+
+
 ![](attachments/Pasted%20image%2020240913114358.png)
 
 程序类型是针对加载`eBPF`程序的系统调用命令`BPF_PROG_LOAD`的第二个参数中定义的；
@@ -93,6 +95,8 @@ eBPF 是一个运行在内核中的虚拟机，很多人在初次接触它时，
 5. 作为第一个参数传递给程序的对象类型
 
 ## 内核支持的程序类型
+
+![](attachments/Pasted%20image%2020241218173751.png)
 
 实际上，程序类型本质上定义了一个`API`，**通过不同的程序类型区分允许调用的不同函数列表**；目前内核支持的`eBPF`程序类型列表如下所示：
 
@@ -162,30 +166,18 @@ eBPF程序的目的之一是降低定制内核的门槛，然而这使得大量�
 ![](attachments/Pasted%20image%2020240808200303.png)
 
 
-### 常见的 helper 函数
+##  helper 函数分类
 
-#### bpf_probe_read
+![](attachments/Pasted%20image%2020241218173611.png)
 
-```bash
-bpf_probe_read(dst,, size, src)
-```
+### map相关的 helper 函数
 
-1. 因为BPF程序只能访问BPF寄存器和栈空间（通过辅助函数也可以访问map映射表），如果要访问其他内核地址内存，就需要使用此函数(会进行安全性检查并禁止缺页中断的发生); 
-2. 用于将用户空间内容读取到内核空间中（具体机制和具体体系结构相关，不是所有都支持）
+![](attachments/Pasted%20image%2020241218173028.png)
 
-#### bpf_map_lookup_elem
-```bash
-bpf_map_lookup_elem(map, key)
-```
+### network 相关的 helper 函数
 
-在映射表中查找键key, 并且返回它的值(指针)
+![](attachments/Pasted%20image%2020241218173239.png)
 
-#### bpf_map_update_elem
-```bash
-bpf_map_update_elem(map, key, value, flags)
-```
-
-根据key更新对应的value值
 
 ## eBPF 辅助函数的设计
 在内核中，struct bpf_func_proto 描述了 eBPF 辅助函数的定义、入参类型、返回值类型等重要信息。这些信息的指定主要是为了通过 eBPF verifier 的安全验证，确保传入数据的可靠性，避免传入错误的参数导致系统崩溃。struct bpf_func_proto 的具体形式的代码片段如下所示：
@@ -443,6 +435,7 @@ const struct bpf_func_proto bpf_map_update_elem_proto = {
 
 # 用户态系统调用命令
 ## 命令分类
+![](attachments/Pasted%20image%2020241218173458.png)
 
 **对象创建命令**
 返回fd。
@@ -565,6 +558,9 @@ eBPF程序都是独立验证的（调用者的堆栈和寄存器中的值被调�
 在BMC中有一个eBPF程序中有一个大循环，虽然eBPF程序只有142行，但是字节码已经到了七十多万行，如果不做逻辑拆分会在 verify 阶段被拒绝。
 
 
+# ebpf 的 lib库
+
+![](attachments/Pasted%20image%2020241218173954.png)
 
 # bpf to bpf calls
 
@@ -698,6 +694,8 @@ BTF 和一次编译到处执行（CO-RE）带来了很多的好处，但你也�
 
 # 参考
 ```bash
+# 官方文档、很好
+https://docs.ebpf.io/linux/helper-function/bpf_for_each_map_elem/
 
 # 比较好的英文文档，介绍。
 https://ebpf-docs.dylanreimerink.nl/linux/concepts/af_xdp/#zero-copy-mode

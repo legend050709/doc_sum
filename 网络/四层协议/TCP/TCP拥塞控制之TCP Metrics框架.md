@@ -11,9 +11,9 @@ TCP是一个复杂的协议，这种复杂来源于对报文传输的可靠性�
 当主机之间需要频繁建立和拆除TCP连接时，它带来的好处更加明显**。
 
 ## 小结
-因此，tcp_metric主要关注的是拥塞控制相关的内容。**`TCP Metrics`显然不能是`Per-Connection`的，而应该是`Per-Host`的**。
+因此，tcp_metric主要关注的是拥塞控制相关的内容。**==`TCP Metrics`显然不能是`Per-Connection`的，而应该是`Per-Host`的==**。
 
-也就是说，`TCP Metrics`表项应该是**基于`<源IP,目的IP>`二元组**的。从一台主机的角度，到达另一个特定地址主机的网络链路状况应该是被两台主机之间的所有连接所**共享**的。
+也就是说，`TCP Metrics`表项应该是**==基于`<源IP,目的IP>`二元组==**的。从一台主机的角度，到达另一个特定地址主机的网络链路状况应该是被两台主机之间的所有连接所**共享**的。
 
 
 # TCP metrics
@@ -66,6 +66,16 @@ TCP连接在初始建立时候如果没有对应目标IP地址的TCP metric，�
 # ip route add local 127.0.0.2 dev lo congctl reno initcwnd 5  ssthresh lock 4
 ```
 
+## 清理tcp metric
+```bash
+# 清除 tcp_metric
+sudo ip tcp_metrics flush all
+
+# 关闭 tcp_metrics 功能
+net.ipv4.tcp_no_metrics_save = 1
+ 
+sudo ip tcp_metrics delete 100.118.58.7
+```
 ## 查看 tcp metric
 ```bash
 # ip tcp_metrics help

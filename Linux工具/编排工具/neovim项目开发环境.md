@@ -1,5 +1,9 @@
 ```table-of-contents
 ```
+# 背景
+使用 vscode 查看 Linux 内核代码，会比较慢。
+因为 Linux 内核代码很是庞大，而 一般的PC(比如Mac笔记本)的内存，以及CPU又是有限的。那么在Mac下使用vscode查看Linux内核代码，涉及到查找，以及函数跳转就会比较慢。
+
 # neovim 简介
 
 ## LazyVim
