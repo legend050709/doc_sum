@@ -9,6 +9,17 @@
 
 
 # 解决
+## 设置git的邮箱和用户名
+```bash
+(1)用户名：
+`git config --global user.name 你的用户名`
+
+（2）邮箱：
+`git config --global user.email 你的邮箱`
+
+(3)检查：
+输入`git config --global --list`，然后回车，就可以查看是否配置了`user.name`和`user.email`
+```
 ## 新建个人用户
 ```c
   1) 创建：
@@ -30,8 +41,15 @@
 ```c
 cd /home/sam
 ssh-keygen -t rsa -P '' -f ./id_rsa_myself
+
+或者
+ssh-keygen -t rsa -P '' -f ./id_rsa_myself -C "legend050709@kuaishou.com"
 ```
-这个命令会在当前目录生成  id_rsa_myself 和id_rsa_myself.pub 的一对
+这个命令会在当前目录生成  `id_rsa_myself` 和`id_rsa_myself.pub` 的一对.
+
+或者
+**输入`ssh-keygen -t rsa -C 你的邮箱`**，然后一路回车即可，表示都使用默认值。
+之后在用户目录的 `.ssh` 文件夹下会自动生成包含私钥的文件 `id_rsa` 和包含公钥的文件 `id_rsa.pub`。输入命令`cat ~/.ssh/id_rsa.pub`查看`id_rsa.pub` 文件中的内容
 
 ## 设置ssh 环境
 **拷贝文件**

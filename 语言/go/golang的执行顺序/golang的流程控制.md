@@ -298,7 +298,8 @@ func main() {
 # 跳转
 ## break
 ## continue
-## 标签
+## label标签
+## goto
 
 # 参考
 ```bash

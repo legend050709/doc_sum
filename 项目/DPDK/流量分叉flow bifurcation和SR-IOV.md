@@ -1038,9 +1038,9 @@ DPDK程序 通过 `-w/-a PCIe`来使用 Mellanox网卡之后，物理网卡依�
 
 
 **（2）流量分叉**
-可以在DPDK程序中通过 rte_flow_isolate + 下发指定的 RSS/FDIR 规则，将匹配到规则的流量导流到 DPDK程序，其他的控制流量还是PASS 给内核，进而做到了流量分叉，这样即使DPDK程序挂掉，也不会导致系统的不可用。
+可以在DPDK程序中通过 `rte_flow_isolate` + 下发指定的 RSS/FDIR 规则，将匹配到规则的流量导流到 DPDK程序，其他的控制流量还是PASS 给内核，进而做到了流量分叉，这样即使DPDK程序挂掉，也不会导致系统的不可用。
 
-注：在 DPDK中通过 rte_flow 创建的规则，通过 ethtool -n ethx 也是无法看到的。感觉 Mellanox 网卡实现流量分叉，驱动里可能也是封装了PF/VF，DPDK绑定Mellanox网卡，可能就是在内层新建了 VF，DPDK中设置的rte_flow 作用于这个VF，这个VF又不对外暴漏。DPDK程序退出时，这样的VF及其规则都自动销毁了。
+注：在 DPDK中通过 `rte_flow` 创建的规则，通过 `ethtool -n ethx` 也是无法看到的。感觉 Mellanox 网卡实现流量分叉，驱动里可能也是封装了PF/VF，DPDK绑定Mellanox网卡，可能就是在内层新建了 VF，DPDK中设置的rte_flow 作用于这个VF，这个VF又不对外暴漏。DPDK程序退出时，这样的VF及其规则都自动销毁了。
 
 **（3）抓包**
 DPDK 使用 Mellnaox 网卡，Mellanox 网卡使能 sniffer 特性，那么就可以在Linux中使用 tcpdump 抓到 DPDK程序收到的 数据包。

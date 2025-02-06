@@ -47,6 +47,7 @@ ip monitor [options] [OBJECT]
 - neigh：监视邻居表（ARP 表）的变化。
 ```
 
+
 ### 常用选项
 ```bash
 -r, --raw：输出原始格式的数据。
@@ -64,6 +65,8 @@ ip monitor [options] [OBJECT]
 -q, --quiet：减少输出量，通常用于脚本中。
 ```
 
+![](attachments/Pasted%20image%2020241227150637.png)
+
 ### 帮助
 ```bash
 ip monitor help
@@ -80,21 +83,21 @@ ip monitor link
 
 ### 监视特定网络接口的状态变化
 ```bash
-  ip monitor link dev eth0
+  ip -ts monitor link dev eth0
 ```
 
 ### 监视路由表的变化
 ```bash
-ip monitor route
+ip -ts monitor route
 ```
 ### 监视网络接口地址的变化
 ```bash
- ip monitor address
+ ip -ts monitor address
 ```
 
 ### 监视所有的网络变化
 ```bash
- ip monitor all
+ ip -ts monitor all
 ```
 
 实际操作如下：

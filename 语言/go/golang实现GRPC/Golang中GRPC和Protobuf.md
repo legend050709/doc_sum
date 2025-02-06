@@ -316,7 +316,12 @@ message Response {
 换句话说，在一个 `oneof` 中，最多只能设置一个字段。使用 `oneof` 可以有效地节省存储空间，因为它只会存储一个字段的值。
 
 #### map类型
+##### 背景
+我们在Go语言开发中，最常用的就是切片类型和map类型了。
+切片类型在ProtoBuf中对应的就是repeated类型，前面我们已经介绍过了。
+再重点介绍一下map类型，ProtoBuf也是支持map类型的：
 
+##### 语法
 proto3支持map类型声明:
 
 ```
@@ -324,12 +329,41 @@ map<key_type, value_type> map_field = N;
 
 message Project {...}
 map<string, Project> projects = 1;
+
+
+message 消息名 {
+   map<key, value> name = n;
+}
 ```
 
-- `key_type`类型可以是内置的标量类型(除浮点类型和`bytes`)
-- `value_type`可以是除map以外的任意类型
-- `map`字段不支持`repeated`属性
-- 不要依赖`map`类型的字段顺序
+**（1）`key_type`**
+可以是内置的标量类型(除浮点类型和`bytes`)。另外，请注意，枚举不是有效的`key_type`。
+
+**（2）`value_type`**
+可以是除map以外的任意类型。
+
+ **（3）`map`字段不支持`repeated`属性**
+**（4）不要依赖`map`类型的字段顺序**
+
+##### 范例
+
+![](attachments/Pasted%20image%2020241231105610.png)
+
+```go
+syntax = "proto3";
+
+package map;
+option go_package = "./;score";
+
+message Student{
+  int64              id    = 1; //id
+  string             name  = 2; //学生姓名
+  map<string, int32> score = 3;  //学科 分数的map
+}
+```
+
+![](attachments/Pasted%20image%2020241231105905.png)
+
 
 #### any类型
 **`Any`** 是一个特殊的消息类型，允许你在 `protobuf` 消息中嵌入任意类型的消息。它可以用来实现动态类型的消息，允许在一个字段中存储不同类型的数据。

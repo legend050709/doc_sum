@@ -167,6 +167,14 @@ struct offload {
 注：ethtool 下发可能也有问题，即下发了一个ethtool 的 FDIR 规则，rule 的match flow type 是tcp，就不允许在再发一个FDIR规则 flow type 是 IP4了。
 
 
+# rte_flow的保留问题
+## 背景
+使用 `ethtool` 或 `TC`来设置规则，可能对于稍微复杂一些的规则，是无法设置成功的。那么就可能需要借助于其他的工具（比如 `rte_flow` ）来尝试是否可以设置成功，并且规则可以保留下来。
+
+
+## 介绍
+
+![](attachments/Pasted%20image%2020250102110917.png)
 
 # 参考
 ```bash

@@ -1664,6 +1664,31 @@ SSL/TLS协议对NAT完全透明，因为它位于TCP协议之上，与NAT没有�
 
 ![](attachments/Pasted%20image%2020240928215926.png)
 
+### 使用wireshark 解密ESP报文
+
+**解密前的报文**
+如下所示，ESP封装的报文：
+![](attachments/Pasted%20image%2020250124123940.png)
+
+**加密信息查看**
+如下所示，分别是 发包的加密，和收包的解密的ESP信息。此中只需看 `src 11.31.31.1 dst 12.32.32.1` 的 密钥信息。
+
+![](attachments/Pasted%20image%2020250124124844.png)
+
+如上所示：使用的是AEAD (aes-gcm 128bit) 进行 同时加密和认证的。
+密钥信息为：0x3132333435363738393031323334353637383930。
+转换为十进制就是：12345678901234567890 （一共是20B）
+
+**wireshark配置**
+如下所示，ESP协议头右键-->`protocol preference` --->`ESP SAs...`
+![](attachments/Pasted%20image%2020250124124601.png)
+
+![](attachments/Pasted%20image%2020250124125010.png)
+
+**解密后的报文**
+![](attachments/Pasted%20image%2020250124125226.png)
+
+
 # 实验范例
 # 参考
 ```c

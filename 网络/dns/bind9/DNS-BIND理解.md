@@ -867,7 +867,7 @@ logging {
                 file "data/named.run";
                 severity dynamic;
         };
-  #本段参数解释，将日志写入工作目录下的named.run文件。注意：如果服务器用-f参数启动，则named.run会被stderr所代替，severity 按照服务器当前Debug级别记录日志
+  #本段参数解释，将日志写入工作目录下的named.run文件。注意：如果服务器用-f参数启动，则 named.run 会被 stderr 所代替，severity 按照服务器当前Debug级别记录日志
   #bind日志可以写到很多地方，具体写入方式可以参考https://blog.csdn.net/zhu_tianwei/article/details/45103455
 }; 
 
@@ -2548,7 +2548,21 @@ channel 还可以控制输出错误日志消息的格式，可以包含：响应
 > - `suffix` ：设定用来命名`log`文件的方式；
 
 - `syslog`：将通道定向到系统的日志文件流中； 常用的支持日志文件服务为：`dameon`、`syslog`、`local6`、`local7`；
-- `severity`：用来指定记录消息的级别，相当于 `syslog` - `priorities`。
+
+
+
+- `stderr`：将通道指向服务器的标准错误流。这是为了在服务器作为前台进程运行时使用；
+- `print-time`： `yes` / `no` / `local` / `iso8601` / `iso8061-utc` 可以设定不同的输出到日志文件的时间格式；
+- `print-category`：打印日志消息配置`category` 的信息到你设定的日志文件中；
+- `print-severity`： 打印日志的严重等级
+
+
+##### severity 日志级别
+参考：[# BIND Logging - some basic recommendations](https://kb.isc.org/docs/aa-01526)
+[Logging in BIND 8 and 9 docstore.mik.ua/orelly/networking_2ndEd/dns/ch07_05.htm](https://docstore.mik.ua/orelly/networking_2ndEd/dns/ch07_05.htm)
+
+
+`severity`：用来指定记录消息的级别，相当于 `syslog` - `priorities`。
 比如说定义了日志的严重级别为 `Debug`，那么会输出日志事件 `Debug` 以上的错误到文件中。按照严重性递减的顺序，如下所示：
 ```c
 1. critical
@@ -2556,18 +2570,20 @@ channel 还可以控制输出错误日志消息的格式，可以包含：响应
 3. warning
 4. notice
 5. info
-6. debug 
+6. debug [level]
 7. dynamic
 
 
-其中前5种级别和系统日志syslog系统相同，后两种(debug和dynamic) 是BIND独有，且debug还可以按照level进行细分。
-但是写日志是一项非常消耗性能的操作，所以默认都是定义在info级别上。在正常使用环境中，除了调试时可能需要记录debug或者dynamic级别信息，其余至少都记录到info级别甚至更严格的级别。
+其中前5种级别和系统日志syslog系统相同;
+后两种(debug和dynamic) 是BIND独有，且debug还可以按照level进行细分。
+但是写日志是一项非常消耗性能的操作，所以默认都是定义在info级别上。
+
+在正常使用环境中，除了调试时可能需要记录debug或者dynamic级别信息，其余至少都记录到info级别甚至更严格的级别。
 ```
 
-- `stderr`：将通道指向服务器的标准错误流。这是为了在服务器作为前台进程运行时使用；
-- `print-time`： `yes` / `no` / `local` / `iso8601` / `iso8061-utc` 可以设定不同的输出到日志文件的时间格式；
-- `print-category`：打印日志消息配置`category` 的信息到你设定的日志文件中；
-- `print-severity`： 打印日志的严重等级
+**`debug[level]` 和 dynamic 的区别**
+`dynamic` 是一个特殊的值，它匹配服务器当前的`debug`级别。而服务器当前的 debug 级别可调整。
+
 
 
 ### `category` 的配置

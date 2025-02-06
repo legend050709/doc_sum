@@ -72,15 +72,57 @@ echo 200000 | sudo tee /sys/class/net/eth02/gro_flush_timeout
 # dpdk-procinfo
 ## 介绍
 
-dpdk-procinfo是DPDK开发套件里面的一个工具，运行方式是DPDK的secondary 进程方式运行，它能够取回port的统计信息，重置port的统计信息，并且打印DPDK的内存信息等等。
-它是原来dump_cfg功能的一个扩展
+`dpdk-procinfo`是`DPDK`开发套件里面的一个工具，运行方式是DPDK的`secondary` 进程方式运行，它能够取回`port`的统计信息，重置`port`的统计信息，并且打印DPDK的内存信息等等。
+它是原来`dump_cfg`功能的一个扩展
 
-参考：[# dpdk-proc-info Application](https://doc.dpdk.org/guides-21.11/tools/proc_info.html)
+参考：[# dpdk-proc-info Application](https://doc.dpdk.org/guides-22.11/tools/proc_info.html)
+
+![](attachments/Pasted%20image%2020250102102802.png)
+
+
+
+## 使用限制
+
+![](attachments/Pasted%20image%2020250102102925.png)
+
+- dpdk-procinfo 应该与具有相同 DPDK 版本的主进程一起运行。
+- 当以共享库模式运行 dpdk-procinfo 时，需要传递与主应用程序相同的 NIC PMD 库。 PMD 库参数中的任何不匹配都可能导致未定义的行为和结果也影响主要应用程序。
+- PCAP 和 TAP 等虚拟设备不支持使用 dpdk-procinfo 检索统计信息。
+- 由于 dpdk-procinfo 的默认 DPDK EAL 参数是 `-c1、-n4 和 --proc-type=secondary`，因此不希望用户传递任何 EAL 参数。
+
+## 详细实现
+### 接口信息打印
+
+![](attachments/Pasted%20image%2020250102102234.png)
+
+### 内存信息打印
+`DPDK-22.11`中的信息打印。
+
+![](attachments/Pasted%20image%2020250102101329.png)
+
+![](attachments/Pasted%20image%2020250102101718.png)
+
+### PMD相关查看
+
+![](attachments/Pasted%20image%2020250102102325.png)
+
+
+## 使用
+```bash
+./<build_dir>/app/dpdk-proc-info -- -m | [-p PORTMASK] [--stats | --xstats |
+--stats-reset | --xstats-reset] [ --show-port | --show-tm | --show-crypto |
+--show-ring[=name] | --show-mempool[=name] | --iter-mempool=name |
+--show-port-private | --version | --firmware-version | --show-rss-reta |
+--show-module-eeprom | --show-rx-descriptor queue_id:offset:num |
+--show-tx-descriptor queue_id:offset:num ]
+```
+
 
 # dpdk-dumpcap  
-## 介绍
-功能：作为备程序，抓取dpdk主程序进入，出去的流量，写入到文件中。  
-前提条件：dpdk主程序中存在初始化包抓包框架，已知testpmd初始了该框架，其他的dpdk程序没有初始化。
+参考专门的文章 `pdump` 和 `dumpcap` 工具。
+
+# dpdk-pmdinfo
+
 
 # 参考
 ```bash

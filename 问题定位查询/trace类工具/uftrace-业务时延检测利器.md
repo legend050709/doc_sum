@@ -3,6 +3,7 @@
 # 背景
 # 应用
 **偶发的超时突刺**出现在哪；**微突发**
+
 # 使用
 ```bash
 # /usr/local/uftrace/bin/uftrace -h
@@ -137,4 +138,7 @@
 ```bash
 # 业务时延检测利器-uftrace
 https://www.cnblogs.com/t-bar/p/16898892.html
+
+# Uftrace：profiling 剖析程式的好工具，找出程式耗時的地方
+https://www.bigcatblog.com/uftrace/
 ```

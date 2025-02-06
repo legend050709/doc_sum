@@ -47,6 +47,9 @@ DPDK 提供了一套在指定 NUMA 节点上创建 memzone、ring, rte_malloc �
 `--socket-mem`: Memory to allocate from hugepages on specific sockets. In dynamic memory mode, this memory will also be pinned (i.e. not released back to the system until application closes).
 ```
 
+
+
+
 # 参考
 ```bash
 # DPDK 22.11内存管理变化解析

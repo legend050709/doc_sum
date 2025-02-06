@@ -316,7 +316,7 @@ service TripService {
 ```
 
 #### yaml文件定义
-trip.yaml
+trip.yaml：该 YAML 配置文件用于定义一个 Google API 服务，特别是将 gRPC 方法映射到 RESTful HTTP 接口。
 
 ```yaml
 type: google.api.Service
@@ -324,12 +324,57 @@ config_version: 3
 
 http:
   rules:
-    # selector定义：protoc定义的包名+service服务名+rpc方法名(coolcar.TripService.GetTrip)
+    # selector定义：protoc定义的包名+service服务名+rpc方法名.
+    # 即：此字段指定了要映射的 gRPC 方法，格式为 `package.service.method`。
+    # 此中为：coolcar.TripService.GetTrip
     - selector: coolcar.TripService.GetTrip
       # 向外暴露的REST API风格接口
       # get方法； urL: /trip/{id}; {id}是参数，基于id进行查找。
       get: /trip/{id}
 ```
+
+
+说明：
+**（1）type**:
+`type: google.api.Service` 表示该 YAML 文件定义的是一个 Google API Service(服务)。这是 Google API 的一种标准格式，通常用于描述 gRPC 和 RESTful API 的接口。在代码生成过程中（例如生成 gRPC 代码或 RESTful API 代码），此字段帮助生成相应的服务（Service）接口和实现。
+
+在 Google API 的配置文件中，`type` 除了 `google.api.Service`，还有其他一些常见的类型，具体包括：
+ **`google.api.Endpoint`**：
+    - **含义**：定义 API 的端点，通常用于描述 API 的访问地址和相关的配置。
+    - **作用**：用于指定 API 的 HTTP 路由、服务版本和其他相关信息。
+    
+**`google.api.Method`**：
+    - **含义**：定义 API 的方法，包括请求和响应的结构。
+    - **作用**：用于描述单个 API 方法的行为，通常与 `google.api.Service` 结合使用。
+    
+ **`google.api.Field`**：
+    - **含义**：用于定义消息中的字段。
+    - **作用**：描述数据结构中的字段，包括字段类型、标签等。
+
+**（2）config_version**：
+`config_version: 3` 表示该 YAML 配置文件遵循第三版的语法和结构，确保配置在不同工具和库中的兼容性和正确解析。
+
+
+**（3）http:**
+- **说明**：此字段定义了与 HTTP 相关的配置，主要用于设置 RESTful API 的路由规则。
+- **作用**：指定如何将 gRPC 方法映射到 HTTP REST 端点。
+- **使用场景**：在需要将 gRPC 服务暴露为 RESTful API 时使用，便于与不支持 gRPC 的客户端进行交互。
+    
+**（4）rules:**
+- **说明**：这是一个列表，定义了 HTTP 路由规则。
+- **作用**：每个规则指定了如何处理特定的 gRPC 方法，并将其映射到 HTTP 请求。
+- **使用场景**：在设计 API 时，开发者可以通过定义规则来控制 API 的行为和访问方式。
+
+ **（5）selector: coolcar.TripService.GetTrip**
+- **说明**：此字段指定了要映射的 gRPC 方法，格式为 `package.service.method`。
+- **作用**：用于唯一标识 gRPC 服务中的特定方法。
+- **使用场景**：在实现 API 的路由时，开发者使用 selector 来将 HTTP 请求与相应的 gRPC 方法关联。
+
+**（6）get: /trip/{id}**
+- **说明**：此字段定义了对应的 HTTP GET 请求的路径。
+- **作用**：指定了外部客户端可以使用的 RESTful API 端点，其中 `{id}` 是一个路径参数，用于动态替换为实际的值。
+- **使用场景**：当客户端发起 GET 请求到 `/trip/{id}` 时，API 会调用 `coolcar.TripService.GetTrip` 方法，基于提供的 `id` 查找并返回相应的资源。
+
 
 #### 代码生成脚本
 

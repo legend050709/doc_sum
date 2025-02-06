@@ -44,7 +44,7 @@ Don’t communicate by sharing memory, share memory by communicating.
 通过通信进行数据共享更加安全可靠，也更容易实现并发编程中的数据同步和通信需求。
 
 ## 小结
-channel的 设计目的 就是为了 避免并发编程中，加锁导致 data race，影响性能。
+channel的 设计目的 就是：==为了 避免并发编程中，加锁导致 `data race`，影响性能==。
 
 channel 类似于一个队列，数据可以从一个 goroutine 中发送到 channel，然后从另一个 goroutine 中接收。
 channel 可以是有缓冲的，这意味着可以在 channel 中存储一定数量的值，而不仅仅是一个。
@@ -54,12 +54,15 @@ channel 可以是有缓冲的，这意味着可以在 channel 中存储一定数
 # channel的特点
 
 ## 线程安全
- Golang的Channel,发送一个数据到Channel 和 从Channel接收一个数据 都是 原子性的。
- 
-### 内置同步机制
+
+ Golang的 ==Channel 是线程安全的==；
+ 发送一个数据到Channel 和 从Channel接收一个数据 都是 原子性的。
+
+### 内置同步机制(内置锁)
 
 在channel的底层实现中，所有对channel的操作（包括发送、接收、关闭等）都会被加锁，以防止多个goroutine同时操作channel时出现数据竞争。
-Go runtime为每个channel分配了一个`mutex`锁来保护channel的状态，从而保证了在多goroutine并发操作时的线程安全性。
+
+Go runtime为每个channel分配了一个`mutex`锁来保护`channel`的状态，从而保证了在多`goroutine`并发操作时的线程安全性。
 
  在向通道发送或接收数据时，会自动进行加锁和解锁操作，确保==每次操作的原子性和线程安全性==。
 
@@ -80,7 +83,9 @@ Go runtime为每个channel分配了一个`mutex`锁来保护channel的状态，�
 - 当通道为空（接收者尝试接收数据时），接收操作会阻塞直到有其他 goroutine 向通道中发送数据。
 - 这种阻塞特性可以有效避免并发读写冲突，保证了数据操作的线程安全性。
 
-
+### 多生产者和多消费者
+多个 goroutine 可以同时向同一个 channel 发送数据或从中接收数据，而不需要额外的锁机制。
+在多生产者多消费者场景中，多个生产者可以并发地向 channel 发送数据，多个消费者可以并发地从 channel 接收数据。Go 的 channel 会确保数据的正确传递。
 
 ## channel是引用类型
 `chan` 是一种类型（**引用类型**）,需要make初始化
@@ -1819,8 +1824,6 @@ func WriteChWithSelect(ch chan int) error {
 }
 
 ```
-
-# channel的生产者和消费者
 
 
 # channel的应用范例

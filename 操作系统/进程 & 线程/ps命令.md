@@ -302,7 +302,7 @@ Linux ps命令这种字段组合类选项一共15个。其中6个选项用途比
 - 选项 - e：显示所有进程的记录，记住这个参数就可以保证把当前系统的所有进程都输出。需要筛选进程时，可以结合 grep 等文本处理命令实现目的
 
 ## 应用场景
-### 查看进程的启动时间
+### 查看进程的启动时间(lstart/etime/start)
 一个进程启动的精确时间和进程启动后所流逝的时间。
 ```bash
        lstart      STARTED   time the command started.  See also bsdstart, start, start_time, and stime.
@@ -310,6 +310,8 @@ Linux ps命令这种字段组合类选项一共15个。其中6个选项用途比
 ```
 
 ![](attachments/Pasted%20image%2020240903145759.png)
+
+==注：正常情况下，我们只需要用到2个时间的输出，即 `lstart` 和 `etime` 即可==。
 
 
 查看 nginx 进程启动的精确时间和启动后所流逝的时间：
@@ -319,12 +321,44 @@ ps -eo pid,lstart,etime,cmd | grep nginx
 
 ![](attachments/Pasted%20image%2020240903145619.png)
 
+```
+分析：
+如上所示：
+lstart的输出：
+	Fri Mar 4 16:04:27 2016
+
+etime的输出：
+	41-21:14:04
+```
+
 ```bash
-# ps -eo pid,ppid,start,lstart,%cpu,start_time,etime,cmd | head -n 1 && ps -eo pid,ppid,start,lstart,%cpu,start_time,etime,cmd  | grep nginx
+# ps -eo pid,start,lstart,%cpu,start_time,etime,cmd | head -n 1 && ps -eo pid,start,lstart,%cpu,start_time,etime,cmd  | grep nginx
 ```
 
 ![](attachments/Pasted%20image%2020240903145954.png)
 
+```
+分析：
+如上所示：
+start 的输出：
+	20:37:01
+
+lstart 的输出：
+	Fri Jul 21 20:37:01 2023
+
+start_time 的输出：
+	20:37
+
+etime 的输出：
+	01:00:17
+	或
+	22-09:14:44
+```
+
+#### 使用范例
+```bash
+ps -Leo pid,ppid,psr,tid,state,lstart,etimes,bsdtime,pcpu,vsz,rss,cmd
+```
 
 # 常用字段
 
@@ -538,11 +572,11 @@ ps命令会提供一种选项容错机制。当用户输入的是一个SYSV风�
 ## ps -lax
 ## ps -o 常用字段
 ```bash
-ps -eo pid,ppid,psr,state,lstart,etimes,bsdtime,pcpu,vsz,rss,pmem,minflt,majflt,wchan:25,ucmd | column -t
+ps -eo pid,ppid,psr,tid,state,lstart,etimes,bsdtime,pcpu,vsz,rss,pmem,minflt,majflt,wchan:25,ucmd | column -t
 
 or
 
-ps -o pid,ppid,psr,state,lstart,etimes,bsdtime,pcpu,vsz,rss,pmem,minflt,majflt,wchan:25,ucmd | column -t
+ps -o pid,ppid,psr,tid,state,lstart,etimes,bsdtime,pcpu,vsz,rss,pmem,minflt,majflt,wchan:25,ucmd | column -t
 ```
 
 ```bash
@@ -555,6 +589,15 @@ lwp: 线程id；等价于 tid;
 nlwp： 线程个数；等价于  thcount;
 psr：使用的core；
 
+```
+
+## 展示进程的nice以及 pri
+```bash
+ps -eLo pid,ppid,psr,tid,nice,pri,start,lstart,%cpu,start_time,etime,cmd | sort -n -k3
+
+或者 
+
+ ps -eLo pid,ppid,psr,tid,nice,pri,start,lstart,%cpu,start_time,etime,cmd  |  sort -n -k3 | column -t
 ```
 
 # 参考

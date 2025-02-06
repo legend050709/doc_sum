@@ -124,16 +124,65 @@ irqbalance有一些参数可以用来调整它的行为，比如：
 #IRQBALANCE_ARGS=
 ```
 
-(1) IRQBALANCE_BANNED_CPUS
+**(1) IRQBALANCE_BANNED_CPUS**
 指定要从中断负载平衡中排除的CPU。如果你有某些特定的CPU核心不希望irqbalance对其进行负载均衡，你可以在这里指定。
 
 
 
+
+
 # 手动配置中断亲和性
-手动配置中断亲和性，需要停掉irqbalance,否则会覆盖掉手动配置。
+手动配置中断亲和性，需要停掉 irqbalance, 否则会覆盖掉手动配置。
+
+通过编辑：` /proc/irq/$i/smp_affinity_list` 文件，来手动设置某个中断的亲和性。
+而 `cat /proc/interrupts` 可以具体查询某个网卡的的收发包的中断号。
+
+# irqbalance 中的 IRQBALANCE_BANNED_CPUS 和 启动参数中的 isolcpus
+
+一般DPDK的程序在系统方面的设置，会进行如下的配置：
+```bash
+cat /etc/default/grub
+中 比如：
+
+default_hugepagesz=1G hugepagesz=1G hugepages=200 isolcpus=1,2,3,4,5,6,7,8,9,18,19,20,21,22,23,24,25,26
+```
+
+
+```bash
+大页内存：
+cat /etc/fstab
+nodev /mnt/huge_1GB hugetlbfs pagesize=1GB 0 0
+```
+
+
+```bash
+中断平衡绑定：
+# cat /etc/sysconfig/irqbalance
+IRQBALANCE_BANNED_CPUS=7fc03fe
+
+# systemctl status irqbalance
+
+注：十六进制数 `7FC03FE` 转换为二进制为：
+7FC03FE = 0111 1111 1100 0000 0011 1111 1110
+```
+
+```bash
+程序启动：
+	./dpvs -- -l 1,2,3,4,5,6,7,8,9,18,19,20,21,22,23,24,25,26 -w xxxx -w xxxx --syslog local5
+```
+
+## 对比
+（1）`isolcpus` 是为了防止后续 Linux 内核将 某些任务（task）度到这些CPU上。
+
+ （2）`irqbalance` 中的 `IRQBALANCE_BANNED_CPUS` 是为了禁止将某些中断（比如收到包之后的中断）绑定到某些cpu上。正常情况下，物理网口的 接收队列的中断都是绑定的 所有的`CPU`「实际选择的时候，好像还是会选择一个CPU」;
+ `IRQBALANCE_BANNED_CPUS`可以防止将中断选择到了这些被禁止的CPU上。
+
+
+因此，`isolcpus` 不仅仅是收包的中断事件，还有用户态程序的执行的调度CPU。
+`irqbalance` 中的 `IRQBALANCE_BANNED_CPUS`只是禁止了中断绑定。
 
 # 其他
-## 没有irqbalance 的情况
+## 没有 irqbalance 的情况
 如果 `irqbalance` 没有运行，也没有配置手动配置中断的绑定，则 CPU 核 0 通常会处理大多数中断。
 
 
