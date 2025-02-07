@@ -10,6 +10,7 @@
 在「设置->第三方插件」中进行插件的安装，点击「社区插件」后面的「浏览」按钮打开插件列表界面进行安装即可。安装插件前，需要先将安全模式的开关关闭。如下所示：
 ![](attachments/Pasted%20image%2020231125155649.png)
 
+
 ## 图片辅助类
 ### Clear Unused Images
 在写笔记时，经常会粘贴一些图片到笔记中，图片也会存储到Obsidian的附件文件夹 ，如果后期在笔记中删除了图片的引用，附件里面的图片并不会被删除，所以我们可以使用该插件清理没有引用到的图片，释放磁盘空间也避免杂乱无章。该插件支持的功能如下：
@@ -20,10 +21,15 @@
 使用方式：使用 CMD/Ctrl + P 打开命令，搜索Clear 就可以看到，执行后即可清除未引用的图片:
 ![](attachments/Pasted%20image%2020231127110815.png)
 
+
 ### Image auto upload Plugin
 
 上传图片插件，可以设置粘贴图片时直接上传到图床，也可以在某一篇笔记中使用命令执行上传文章内的图片。这个功能在我们将笔记发布到三方平台或者迁移的时候很有用，迁移的时候我们只需要将笔记文件单个markdown文件拷走就行，不用关注有哪些图片。
 
+设置如下所示：
+![[attachments/Pasted image 20250207130135.png]]
+
+#### 下面的暂时忽略（应该不用设置picgo）
 该插件使用的是Picgo去上传图片的，所以我们还需要在系统中安装Picgo并配置好图床，点击打开[Picgo下载地址](https://link.juejin.cn?target=https%3A%2F%2Fmolunerfinn.com%2FPicGo%2F "https://molunerfinn.com/PicGo/")，下载完成请查看[配置文档](https://link.juejin.cn?target=https%3A%2F%2Fpicgo.github.io%2FPicGo-Doc%2Fzh%2Fguide%2F "https://picgo.github.io/PicGo-Doc/zh/guide/")，Picgo是一个免费开源的图床软件支持将图片上传到多个平台。
 
 **注意：** 如果笔记开启了Wiki链接，可能会导致该插件找不到图片，无法上传。需要在设置中关闭Wiki链接后，重新粘贴图片或者将wiki链接修改为普通链接再进行上传。

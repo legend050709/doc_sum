@@ -4,17 +4,29 @@
 ## 方式一
 参考：[mac goland2023.3.4 快速激活到2099年](https://www.modb.pro/db/638074)
 ### 流程
-**激活包下载**：  
+**(1)goland pkg下载:**
+下载`goland`，参考 [goland的不同版本下载](https://www.jetbrains.com/go/download/other.html)
+
+先下载 `goland pkg`,然后安装，安装完成之后，提示需要进行激活。此时不进行激活，直接退出。然后下载激活包。
+
+
+**(2)激活包下载**：  
 
 网盘地址（2023/5/29 更新）：[百度网盘激活包下载地址](https://pan.baidu.com/s/1y8rBgngeQ7hXieaoFAf7lw)          
 提取码：4ltz
 激活包下载完之后，请 **解压** 并保持文件目录结构不变如下！（**注意：****激活包的文件路径中最好不要包含中文和特殊字符串**）
 
-**执行脚本**：
+**(3)执行脚本**：
 请确保 **goland** 软件处于关闭状态！这时候打开一个 **terminal（命令行控制端）**，并将工作目录切换到解压出来的脚本文件所在路径（此处请注意，破解文件夹的路径最好不要出现中文！！！）然后执行命令：**sh ./golandmacActive.sh** 得到如下提示即可！
+如果出现下面的情况，则有可能是`步骤(1)`没有执行。
+```bash
+# sh golandmacActive.sh
+/Users/liuchuanqi/Library/Application Support/JetBrains
+your OS dont install idea, pls install it and launch it!
+```
 
 
-**激活goland**: 
+**(4)激活goland**: 
 再次打开 **goland** ,新安装的用户会自动弹出注册页面，已经在使用中（临时激活码或其他方式进入**goland**）的找到顶部导航栏 **help -> register** 按钮打开注册页面，将破解包里面的 **激活码.txt** 复制进去即可（这里请各位大佬注意！下图中左下角已经登陆的朋友请点击 log out），然后点击 蓝色 **Activate** 按钮即可
 
 ### 其他
@@ -42,7 +54,7 @@ goland 需要激活码才可以激活。下面是goland的激活。
 ![](attachments/Pasted%20image%2020231208112127.png)
 > 在mac中选中字段，然后执行 `Shift+Shift`即可。
 
-要缩小搜索范围，请按 _⇥/Tab_ 在选项卡之间导航，或点击窗口工具栏上的筛选器图标并选择适当的选项。
+要缩小搜索范围，请按 `⇥/Tab` 在选项卡之间导航，或点击窗口工具栏上的筛选器图标并选择适当的选项。
 ![](attachments/Pasted%20image%2020231208112204.png)
 您可以在 _Find Tool Window_（查找工具窗口）的一个单独的选项卡中打开当前搜索结果并运行另一个查询。 只需点击 _Search Everywhere_（随处搜索）右侧的 _Open in Find Window_（在查找窗口中打开）图标即可。
 
