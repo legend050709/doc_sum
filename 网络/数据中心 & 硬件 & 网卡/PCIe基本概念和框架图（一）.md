@@ -1,3 +1,5 @@
+```table-of-contents
+```
 # 概述
 PCIe的全称是Peripheral Component Interconnect Express，是一种用于连接外设的总线。它于2003年提出来，作为替代PCI和PCI-X的方案，现在已经成了现代CPU和其他几乎所有外设交互的标准或者基石，比如，我们马上能想到的GPU，网卡，USB控制器，声卡，网卡等等，这些都是通过PCIe总线进行连接的，然后现在非常常见的基于m.2接口的SSD，也是使用NVMe协议，通过PCIe总线进行连接的，除此以外，Thunderbolt 3 ，USB4 ，甚至最新的CXL互联协议，都是基于PCIe的！
 
@@ -6,8 +8,8 @@ PCIe 1.0，一改之前PCI共享总线的架构，改为点对点（Point to Poi
 
 PCIe1.0的最大带宽为16Lane x 2.5Gbit/s=5GByte/s。或者鸡贼点可说PCIe 1.0的双向带宽最大为16Lane x 2.5Gbit/s x2 =10GByte/s
 
-![](attachments/Pasted%20image%2020230731204125.png)
-![](attachments/Pasted%20image%2020230731204201.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230731204125.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230731204201.png)
 ```c
 - PCIe 1.0, Gen1, 2.5Gbps/Lane
 - PCIe 2.0, Gen2, 5Gbps/Lane
@@ -18,10 +20,10 @@ PCIe1.0的最大带宽为16Lane x 2.5Gbit/s=5GByte/s。或者鸡贼点可说PCIe
 ```
 
 一个PCI Express连接可以被配置成x1， x2， x4， x8， x12， x16和x32的数据带宽。 (x2 and x12 link widths are optional) PCI-E 各种位宽Device可以自由搭配使用，比如x1 的卡可以插到x8的插槽中使用， x8 的卡可以插到x16的插槽中使用，升级方便。
-![](attachments/Pasted%20image%2020230731204532.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230731204532.png)
 
 一些常见的PCI-E设备如下图所示：
-![](attachments/Pasted%20image%2020230731204654.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230731204654.png)
 
 # 传统的PCI的架构图
 计算机网络的最主要的拓扑结构有总线型拓扑、环形拓扑、树形拓扑、星形拓扑、混合型拓扑以及网状拓扑。
@@ -32,7 +34,7 @@ PCI采用的是**总线型拓扑结构**，一条PCI总线上挂着若干个PCI�
 
 # PCIe架构图
 PCIe的架构主要由五个部分组成：Root Complex，PCIe Bus，Endpoint，Port and Bridge，Switch。其整体架构呈现一个**树形拓扑结构**，如下图所示：
-![](attachments/Pasted%20image%2020230801231604.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230801231604.png)
 
 
 ## link and lane
@@ -64,9 +66,9 @@ Collectors, and one or more Root Ports.
 Root Complex是整个PCIe设备树的根节点，CPU通过它与PCIe的总线相连，并最终连接到所有的PCIe设备上。
 
 由于Root Complex是管理外部IO设备的，所以在早期的CPU上，Root Complex其实是放在了北桥（MCU）上，后来随着技术的发展，现在已经都集成进了CPU内部了 。（注意下图的System Agent的部分，他就是PCIe Root Complex所在的位置。）
-![](attachments/Pasted%20image%2020230801231858.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230801231858.png)
 虽然是根节点，但是系统里面可以存在不只一个Root Complex。随着PCIe Lane的增加，PCIe控制器和Root Complex的数量也随之增加。比如，我的台式机的CPU是i9-10980xe，上面就有4个Root Complex，而我的笔记本是i7-9750H，上面就只有一个Root Complex。我们在Windows上可以通过设备管理器来查看：
-![](attachments/Pasted%20image%2020230802104429.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230802104429.png)
 
 
 
@@ -106,24 +108,24 @@ Host Bridge:
 
 ### 特点
 PCIe总线（Bus）,PCIe上的设备通过PCIe总线互相连接。虽然PCIe是从PCI发展而来的，并且甚至有很多地方是兼容的，但是它与老式的PCI和PCI-X有两点特别重要的不同：
-![](attachments/Pasted%20image%2020230801232411.png)
-![](attachments/Pasted%20image%2020230801232427.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230801232411.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230801232427.png)
 >1. PCIe的总线并不是我们传统意义上共享线路的总线（Bus），而是一个点对点的网络，我们如果把PCI比喻成网络中的集线器（Hub），那么PCIe对应的就是交换机了。换句话说，当Root Complex或者PCIe上的设备之间需要通信的时候，它们会与对方直接连接或者通过交换电路进行点对点的信号传输。
 >2. 老式的PCI使用的是单端并行信号进行连接，但是由于干扰过大导致频率无法提升，所以后来就演变成PCIe之后就开始使用了高速串行信号。这也导致了PCI设备和PCIe设备无法兼容，只能通过PCI-PCIe桥接器来进行连接。当然这些我们都不需要再去关心了，因为现在已经很少看见PCI的设备了。
 
 - PCIe总线的全双工和多通道Lane
 和很多的串行总线一样，PCIe采用了全双工的传输设计，即允许在同一时刻，同时进行发送和接收数据。如下图所示，设备A和设备B之间通过双向的Link相连接，每个Link支持1到32个通道（Lane）。由于是串行总线，因此所有的数据（包括配置信息等）都是以数据包为单位进行发送的。
-![](attachments/Pasted%20image%2020230731214951.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230731214951.png)
 
 与绝大部分的高速连接一样，PCIe采用了差分对进行收发，以提高总线的性能。一个PCIe Lane的例子如下图：
-![](attachments/Pasted%20image%2020230731215037.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230731215037.png)
 
 - PCIe总线的可扩展性
 PCIe相对于PCI总线的另一个大的优势是其的Scalable Performance，即可以根据应用的需要来调整PCIe设备的带宽。如需要很高的带宽，则采用多个Lane（比如显卡）；如果并不需要特别高的带宽，则只需要一个Lane就可以了（比如说网卡等）。
 
 - PCIe的点对点连接
 由于非常高的传输速度，PCIe是一种点对点连接的总线，而不像PCI那样的共享总线。但是PCIe总线系统可以通过Switch连接多个PCIe设备，也可以通过PCIe桥连接传统的PCI和PCI-X设备。一个简单的PCIe总线系统的拓扑结构图如下所示：
-![](attachments/Pasted%20image%2020230731215323.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230731215323.png)
 
 ## PCIe Device
 
@@ -163,7 +165,7 @@ $ lspci -t -v
 
 ```
 由于默认BDF的方式最多只支持8个Function，可能不够用，所以PCIe还支持另一种解析方式，叫做ARI（Alternative Routing-ID Interpretation），它将Device Number和Function Number合并为一个8bit的字段，只用于表示Function，所以最多可以支持256个Function，但是它是可选的，需要通过设备配置启用.
-![](attachments/Pasted%20image%2020230801233102.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230801233102.png)
 
 ### Type 0 Device和Endpoint
 所有连接到PCIe总线上的Type 0设备（终端设备），都可以来实现PCIe的Endpoint，用来发起或者接收PCIe的请求和消息。**每个设备可以实现一个或者多个Endpoint，每个Endpoint都对应着一个特定的功能Function**。比如：
@@ -188,7 +190,7 @@ $ lspci -t -v
 ### RCIE（Root Complex Integrated Endpoint）
 说到PCIe设备，脑海里面可能第一反应就是有一个PCIe的插槽，然后把显卡或者其他设备插在里面，就像我们上面看到的这样。但是其实系统中有大量的设备是主板上集成好了的，比如，内存控制器，集成显卡，Ethernet网卡，声卡，USB控制器等等。这些设备在连接PCIe的时候，可以直接连接到Root Complex上面。这种设备就叫做RCIE（Root Complex Integrated Endpoint），如果我们去查看的话，他们的Bus Number都是0，代表Root Complex。
 
-![](attachments/Pasted%20image%2020230802105415.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230802105415.png)
 
 ### root Port / Bridge
 
@@ -197,7 +199,7 @@ $ lspci -t -v
 其他的需要通过插槽连接的设备呢？这些设备就需要通过PCIe Port来连接了。
 在Root Complex上，有很多的Root Port，这些Port每一个都可以连接一个PCIe设备（Type 0或者Type 1）。
 
-![](attachments/Pasted%20image%2020230802105657.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230802105657.png)
 
 #### Pci Bridge
 
@@ -216,7 +218,7 @@ PCI桥主要包括以下三种：
 #### Root Port
 一个Root Port其实是靠两个Bridge来实现的：一个（共享的）Host Bridge（上游连接着CPU，下游连接着Bus 0）和一个PCI Bridge用来连接下游设备（上游连着的是Bus 0（Root Complex），下游连着的PCIe的设备（Bus Number在启动过程中自动分配））
 
-![](attachments/Pasted%20image%2020230802110004.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230802110004.png)
 
 **Root Port的概念：**一个位于Root Complex上通过相关联的虚拟PCI-PCI Bridge映射一个层次结构整体部分的的PCIE Port
 ```c
@@ -270,7 +272,7 @@ PCIe Switch内部主要有三个部分：
 - 一个Upstream Port和Bridge：用于连接到上游的Port，比如，Root Port或者上游Switch的Downstream Port
 - 一组Downstream Port和Bridge：用于连接下游的设备，比如，显卡，网卡，或者下游Switch的Upstream Port
 - 一根虚拟总线：用于将上游和下游的所有端口连接起来，这样，上游的Port就可以访问下游的设备了
-![](attachments/Pasted%20image%2020230802110759.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230802110759.png)
 另外，这里再说明一次 —— 由于PCIe的信号传输是点对点的，所以Switch中间的这个总线只是一个逻辑上的虚拟的总线，其实并不存在，里面真正的结构是一套用于转发的交换电路。
 
 
@@ -294,7 +296,7 @@ Switch扩展了PCIe端口，靠近RC的那个端口，我们叫上游端口（up
 
 ## 小结
 如果我们把所有这些部件连接在一起，那么其整体的结构就是这样的：
-![](attachments/Pasted%20image%2020230802111009.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230802111009.png)
 
 PCIe采用的是树形拓扑结构，RC是树的根，或者主干，它为CPU代言，与PCIe系统其它部分通讯，一般为通讯的发起者；Switch是树枝，树枝上有叶子（Endpoint），也可节外生枝，Switch上连Switch，归根结底，是为了连接更多的Endpoint。
 Switch为它下面的Endpoint或Switch提供路由转发服务；Endpoint是树叶，诸如SSD，网卡，显卡等等，实现某些特定功能（function）。
@@ -308,13 +310,13 @@ PCIe GEN1最大传输速率是2.5Gbps,PCIe GEN2最大传输速率是5Gbps，PCIe
 各种类型的数据，例如内存、I/O 或配置数据，通过 PCI Express 系统传输。大多数设计都专注于尽可能有效地传输数据 。就本白皮书而言，_性能_定义为 系统的有效数据传输。 此后， data统称有效数据。
 
 
-![](attachments/Pasted%20image%2020230731204733.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230731204733.png)
 **注：**这里的Switch实际上包含了多个类似于PCI总线中桥的概念。
 
 > 注意：PCIe1.0, PCIe2.0会存在20%的编码开销。即PCIe的带宽*80%=实际的bps。
 > 对于PCIe 3.0则，只有1.5%的开销。
 **Note:** The main difference between the generations besides the supported speed is the encoding overhead of the packet. For generations 1 and 2, each packet sent on the PCIe has 20% PCIe headers overhead. This was improved in **generation 3,** where the overhead was reduced to 1.5% (**2/130**). See the actual PCIe bandwidth calculation below for more details.
-![](attachments/Pasted%20image%2020230731230013.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230731230013.png)
 
 # PCIe和PCI区别
 对于一般用户来说，PCIe对用户可见的部分就是主板上大大小小的PCIe插槽了，有时还和PCI插槽混在一起，造成了一定的混乱，其实也很好区分：

@@ -562,7 +562,7 @@ static struct hostent *gngethostbyname(char *HostName, int timeout)
 
 # 多个IPv6 以及 IPv4和IPv6混合问题
 ## 背景
-![](attachments/Pasted%20image%2020240111141153.png)
+![](../../三层协议/ipv6/attachments/Pasted%20image%2020240111141153.png)
 
 在 IPv6+IPv4 双栈下，DNS查询会同时发送 AAAA 和 A 解析，无论访问域名有没有 AAAA 解析都会浪费一定时间去查询。如果访问的域名同时拥有 A 和 AAAA 解析，那么 Linux 系统会优先使用 AAAA 解析，也就是 IPv6 地址，同时网络出口的优先级都会比 IPv4 高。
 

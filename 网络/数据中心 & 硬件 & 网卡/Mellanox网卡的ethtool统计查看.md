@@ -1,3 +1,5 @@
+```table-of-contents
+```
 # ethtool的统计
 ![](attachments/Pasted%20image%2020230810153501.png)
 ## 统计范例

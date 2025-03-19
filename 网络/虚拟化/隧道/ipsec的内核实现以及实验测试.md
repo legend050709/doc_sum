@@ -4,15 +4,27 @@
 # 概述
 IPsec协议帮助IP层建立安全可信的数据包传输通道。当前已经有了如StrongSwan、OpenSwan等比较成熟的解决方案，而它们都使用了Linux内核中的XFRM框架进行报文接收发送。
 
-XFRM的正确读音是transform(转换), 这表示内核协议栈收到的IPsec报文需要经过转换才能还原为原始报文；同样地，要发送的原始报文也需要转换为IPsec报文才能发送出去。
+==XFRM的正确读音是transform(转换), 这表示内核协议栈收到的IPsec报文需要经过转换才能还原为原始报文==；同样地，要发送的原始报文也需要转换为IPsec报文才能发送出去。
 
 # 基本概念
 ## XFRM 实例
  IPsec中有两个重要概念：**安全关联(Security Association)** 和 **安全策略(Security Policy)**，  这两类信息都需要存放在内核XFRM。
- 内核XFRM使用**netns_xfrm**这个结构来组织这些信息，它也被称为xfrm instance(实例)。从它的名字也可以看出来，这个实例是与network namespace相关的，每个命名空间都有这样的一个实例，实例间彼此独立。所以同一台主机上的不同容器可以互不干扰地使用XFRM。
  
+ 内核XFRM使用**netns_xfrm**这个结构来组织这些信息，它也被称为`xfrm instance`(实例)。从它的名字也可以看出来，这个实例是与`network namespace`相关的，每个命名空间都有这样的一个实例，实例间彼此独立。所以同一台主机上的不同容器可以互不干扰地使用XFRM。
+```c
+struct net
+{
+    ......
+   #ifdef CONFIG_XFRM
+    struct netns_xfrm    xfrm;
+    #endif 
+    ......
+}
+
+```
+
 ## Netlink 通道
-上面提到了Security Association和Security Policy信息，这些信息一般是**由用户态IPsec进程(eg. _StrongSwan_)下发到内核`XFRM`** 的，这个下发的通道在network namespace初始化时创建。
+上面提到了`Security Association`和`Security Policy`信息，这些信息一般是**由用户态IPsec进程(eg：`StrongSwan`)下发到内核`XFRM`** 的，这个下发的通道在`network namespace`初始化时创建。
 
 ```c
 static int __net_init xfrm_user_net_init(struct net *net)
@@ -33,8 +45,8 @@ static int __net_init xfrm_user_net_init(struct net *net)
 
 ## XFRM State
 
-XFRM使用`xfrm_state`表示`IPsec`协议栈中的`Security Association`，它表示了一条单方向的`IPsec`流量所需的一切信息，包括模式(`Transport`或`Tunnel`)、密钥、`replay`参数等信息。用户态`IPsec`进程通过发送一个`XFRM_MSG_NEWSA`请求，可以让XFRM创建一个`xfrm_state`结构.
-
+XFRM使用`xfrm_state`表示`IPsec`协议栈中的`Security Association`，它表示了一条==单方向==的`IPsec`流量所需的一切信息，包括模式(`Transport`或`Tunnel`)、密钥、`replay`参数等信息。
+用户态`IPsec`进程通过发送一个`XFRM_MSG_NEWSA`请求，可以让XFRM创建一个`xfrm_state`结构.
 
 `xfrm_state`包含的字段很多，这里就不贴了，仅仅列出其中最重要的字段：
 - id: 它是一个`xfrm_id`结构，包含该SA的目的地址、SPI、和协议(AH/ESP);
@@ -171,6 +183,17 @@ IPv4 以及 ipv6相关的ipsec子系统目录。
 
 从整体上看，IPsec报文的接收是一个**迂回**的过程，IP层接收时，根据报文的protocol字段，如果它是IPsec类型(AH、ESP)，则会进入XFRM框架进行接收，在此过程里，比较重要的过程是`xfrm_state_lookup()`, 该函数查找SA，如果找到之后，再根据不同的协议和模式进入不同的处理过程，最终，将原始报文的信息获取出来，重入`ip_local_deliver()`.然后，**还需经历`XFRM Policy`的过滤**，最后再上送到应用层。
 
+### 收包和Tcpdump
+
+（1）存在 `esp_offload + gro`:
+    `tcpdump`看不到`esp`包，看到的是解封装之后的包。
+注：收包方向，`GRO`在`Tcpdump`之前。
+
+（2）不存在 `esp_offload + gro`:
+    `tcpdump`可以看到`esp`包，也可以看到解封装之后的包。
+
+
+![](attachments/image.png)
 
 
 ## 发送报文
@@ -181,6 +204,365 @@ IPv4 以及 ipv6相关的ipsec子系统目录。
 
 `XFRM`在报文路由查找后查找是否有满足条件的SA，如果没有，则直接走`ip_output()`,否则进入`XFRM`的处理过程，根据模式和协议做相应处理，最后殊途同归到`ip_output()` 。
 
+
+### 发包和Tcpdump
+
+![](attachments/image%20(16).png)
+
+如上所示，发包而言，`taps`是`tcpdump`的发包位置。
+`tcpdump`在封装之后，即`tcpdump`看到的是`ESP`封装之后的包。看不到原始包。
+
+
+# offload
+参考：[# XFRM device - offloading the IPsec computations](https://docs.kernel.org/networking/xfrm_device.html)
+
+![](attachments/Pasted%20image%2020250211122011.png)
+
+## esp4_offload
+
+
+### 注意
+esp_offload 是一个普通的内核模块，不是驱动中。
+收包而言 ，在tcpdump之前。
+为了达到最大带宽，需要开启网卡的`gro`、`gso`，`esp_offload` 可能是挂在`gro`上面，所以开启后收到的包是解封后的。`GRO`不开启，可能`esp_offload` 无法生效。
+
+### 安装
+```bash
+modprobe esp4_offload esp4
+```
+
+#### 查看
+
+加载 `esp4_offload`时，ipsec控制程序下发对应的规则之后，查看规则，以及内核模块。
+
+```bash
+
+1》 清除存量的规则
+# ip xfrm policy flush
+# ip xfrm state flush
+
+2》加载模块
+# modprobe esp6_offload esp6 esp4_offload esp4
+
+# lsmod |grep esp
+esp6_offload           16384  0
+esp6                   20480  1 esp6_offload
+esp4_offload           16384  0 # 没有state规则引用 esp4_offload
+esp4                   20480  1 esp4_offload
+
+
+3》 启动ipesc控制程序，下发对应的规则
+
+4》 规则查看
+# ip -s xfrm state
+src 12.32.32.1 dst 11.31.31.1
+  proto esp spi 0x00000001(1) reqid 0(0x00000000) mode tunnel
+  replay-window 0 seq 0x00000000 flag  (0x00000000)
+  aead rfc4106(gcm(aes)) 0x3132333435363738393031323334353637383930 (160 bits) 128
+  anti-replay context: seq 0x0, oseq 0x0, bitmap 0x00000000
+  sel src 0.0.0.0/0 dst 0.0.0.0/0 uid 0
+  lifetime config:
+    limit: soft (INF)(bytes), hard (INF)(bytes)
+    limit: soft (INF)(packets), hard (INF)(packets)
+    expire add: soft 0(sec), hard 0(sec)
+    expire use: soft 0(sec), hard 0(sec)
+  lifetime current:
+    17572(bytes), 382(packets)
+    add 2025-02-12 10:51:49 use 2025-02-12 10:51:52
+  stats:
+    replay-window 0 replay 0 failed 0
+src 11.31.31.1 dst 12.32.32.1
+  proto esp spi 0x00000001(1) reqid 0(0x00000000) mode tunnel
+  replay-window 0 seq 0x00000000 flag  (0x00000000)
+  aead rfc4106(gcm(aes)) 0x3132333435363738393031323334353637383930 (160 bits) 128
+  anti-replay context: seq 0x0, oseq 0x17e, bitmap 0x00000000
+  sel src 0.0.0.0/0 dst 0.0.0.0/0 uid 0
+  lifetime config:
+    limit: soft (INF)(bytes), hard (INF)(bytes)
+    limit: soft (INF)(packets), hard (INF)(packets)
+    expire add: soft 0(sec), hard 0(sec)
+    expire use: soft 0(sec), hard 0(sec)
+  lifetime current:
+    12664(bytes), 382(packets)
+    add 2025-02-12 10:51:49 use 2025-02-12 10:51:52
+  stats:
+    replay-window 0 replay 0 failed 0
+
+# ip xfrm policy
+....略大部分mark
+src 0.0.0.0/0 dst 192.20.13.2/32 uid 0
+  dir out action allow index 9056441 priority 0 ptype main share any flag  (0x00000000)
+  lifetime config:
+    limit: soft (INF)(bytes), hard (INF)(bytes)
+    limit: soft (INF)(packets), hard (INF)(packets)
+    expire add: soft 0(sec), hard 0(sec)
+    expire use: soft 0(sec), hard 0(sec)
+  lifetime current:
+    0(bytes), 0(packets)
+    add 2025-02-12 10:51:49 use -
+  mark 2/0xffffffff
+  tmpl src 11.31.31.1 dst 12.32.32.1
+    proto esp spi 0x00000001(1) reqid 0(0x00000000) mode tunnel
+    level required share any
+    enc-mask ffffffff auth-mask ffffffff comp-mask ffffffff
+-----
+src 0.0.0.0/0 dst 192.20.13.2/32 uid 0
+  dir out action allow index 9056433 priority 0 ptype main share any flag  (0x00000000)
+  lifetime config:
+    limit: soft (INF)(bytes), hard (INF)(bytes)
+    limit: soft (INF)(packets), hard (INF)(packets)
+    expire add: soft 0(sec), hard 0(sec)
+    expire use: soft 0(sec), hard 0(sec)
+  lifetime current:
+    0(bytes), 0(packets)
+    add 2025-02-12 10:51:49 use -
+  mark 1/0xffffffff
+  tmpl src 11.31.31.1 dst 12.32.32.1
+    proto esp spi 0x00000001(1) reqid 0(0x00000000) mode tunnel
+    level required share any
+    enc-mask ffffffff auth-mask ffffffff comp-mask ffffffff
+-----
+src 0.0.0.0/0 dst 0.0.0.0/0 uid 0
+  dir fwd action allow index 9056426 priority 0 ptype main share any flag  (0x00000000)
+  lifetime config:
+    limit: soft (INF)(bytes), hard (INF)(bytes)
+    limit: soft (INF)(packets), hard (INF)(packets)
+    expire add: soft 0(sec), hard 0(sec)
+    expire use: soft 0(sec), hard 0(sec)
+  lifetime current:
+    0(bytes), 0(packets)
+    add 2025-02-12 10:51:49 use -
+  tmpl src 0.0.0.0 dst 0.0.0.0
+    proto esp spi 0x00000000(0) reqid 0(0x00000000) mode tunnel
+    level use share any
+    enc-mask ffffffff auth-mask ffffffff comp-mask ffffffff
+-----
+src 0.0.0.0/0 dst 0.0.0.0/0 uid 0
+  dir in action allow index 9056416 priority 0 ptype main share any flag  (0x00000000)
+  lifetime config:
+    limit: soft (INF)(bytes), hard (INF)(bytes)
+    limit: soft (INF)(packets), hard (INF)(packets)
+    expire add: soft 0(sec), hard 0(sec)
+    expire use: soft 0(sec), hard 0(sec)
+  lifetime current:
+    0(bytes), 0(packets)
+    add 2025-02-12 10:51:49 use 2025-02-12 10:54:02
+  tmpl src 0.0.0.0 dst 0.0.0.0
+    proto esp spi 0x00000000(0) reqid 0(0x00000000) mode tunnel
+    level use share any
+    enc-mask ffffffff auth-mask ffffffff comp-mask ffffffff
+-----
+
+5》内核模块查看
+# lsmod |grep esp
+esp6_offload           16384  0
+esp6                   20480  1 esp6_offload
+esp4_offload           16384  2 # 此种的引用计数为2，因为有2个state。
+esp4                   20480  3 esp4_offload # 此中的引用计数为3，2个state + esp4_offload;
+```
+
+如上，所示，`ip xfrm state` 查看无法查看到是否加载 了 `esp4_offload`.
+可以通过 `lsmod | grep esp` 的引用计数来查看对应的规则是否引用 `esp4_offload` 。
+
+#### 抓包
+
+![](attachments/Pasted%20image%2020250212112325.png)
+
+### 卸载
+```bash
+1. 停掉 ipsec 控制程序，以及 bird 引流；
+
+2. 清理内核中存在的ipsec配置：
+   ip xfrm state flush
+   ip xfrm policy flush
+
+3. lsmod | grep esp
+# lsmod |grep -i esp
+esp6_offload           16384  0
+esp6                   20480  1 esp6_offload
+esp4_offload           16384  0
+esp4                   20480  1 esp4_offload
+
+4. rmmod esp4_offload
+```
+
+#### 查看
+不加载 `esp4_offload`时，ipsec控制程序下发对应的规则之后，查看规则，以及内核模块。
+
+```bash
+# 不加载 esp4_offload时，ipsec控制程序下发对应的规则之后，查看规则，以及内核模块。
+
+
+1》 清除存量的规则
+# ip xfrm policy flush
+# ip xfrm state flush
+
+2》卸载模块
+# rmmod esp6_offload esp6 esp4_offload esp4
+
+
+3》 启动ipesc控制程序，下发对应的规则
+
+4》 规则查看
+# ip -s xfrm state
+src 12.32.32.1 dst 11.31.31.1
+    proto esp spi 0x00000001(1) reqid 0(0x00000000) mode tunnel
+    replay-window 0 seq 0x00000000 flag  (0x00000000)
+    aead rfc4106(gcm(aes)) 0x3132333435363738393031323334353637383930 (160 bits) 128
+    anti-replay context: seq 0x0, oseq 0x0, bitmap 0x00000000
+    sel src 0.0.0.0/0 dst 0.0.0.0/0 uid 0
+    lifetime config:
+      limit: soft (INF)(bytes), hard (INF)(bytes)
+      limit: soft (INF)(packets), hard (INF)(packets)
+      expire add: soft 0(sec), hard 0(sec)
+      expire use: soft 0(sec), hard 0(sec)
+    lifetime current:
+      460(bytes), 10(packets)
+      add 2025-02-12 10:33:33 use 2025-02-12 10:33:36
+    stats:
+      replay-window 0 replay 0 failed 0
+src 11.31.31.1 dst 12.32.32.1
+    proto esp spi 0x00000001(1) reqid 0(0x00000000) mode tunnel
+    replay-window 0 seq 0x00000000 flag  (0x00000000)
+    aead rfc4106(gcm(aes)) 0x3132333435363738393031323334353637383930 (160 bits) 128
+    anti-replay context: seq 0x0, oseq 0xa, bitmap 0x00000000
+    sel src 0.0.0.0/0 dst 0.0.0.0/0 uid 0
+    lifetime config:
+      limit: soft (INF)(bytes), hard (INF)(bytes)
+      limit: soft (INF)(packets), hard (INF)(packets)
+      expire add: soft 0(sec), hard 0(sec)
+      expire use: soft 0(sec), hard 0(sec)
+    lifetime current:
+      328(bytes), 10(packets)
+      add 2025-02-12 10:33:33 use 2025-02-12 10:33:36
+    stats:
+      replay-window 0 replay 0 failed 0
+
+# ip xfrm policy
+....略大部分mark
+src 0.0.0.0/0 dst 192.20.13.2/32 uid 0
+  dir out action allow index 9049569 priority 0 ptype main share any flag  (0x00000000)
+  lifetime config:
+    limit: soft (INF)(bytes), hard (INF)(bytes)
+    limit: soft (INF)(packets), hard (INF)(packets)
+    expire add: soft 0(sec), hard 0(sec)
+    expire use: soft 0(sec), hard 0(sec)
+  lifetime current:
+    0(bytes), 0(packets)
+    add 2025-02-12 10:33:33 use -
+  mark 2/0xffffffff
+  tmpl src 11.31.31.1 dst 12.32.32.1
+    proto esp spi 0x00000001(1) reqid 0(0x00000000) mode tunnel
+    level required share any
+    enc-mask ffffffff auth-mask ffffffff comp-mask ffffffff
+----
+src 0.0.0.0/0 dst 192.20.13.2/32 uid 0
+  dir out action allow index 9049561 priority 0 ptype main share any flag  (0x00000000)
+  lifetime config:
+    limit: soft (INF)(bytes), hard (INF)(bytes)
+    limit: soft (INF)(packets), hard (INF)(packets)
+    expire add: soft 0(sec), hard 0(sec)
+    expire use: soft 0(sec), hard 0(sec)
+  lifetime current:
+    0(bytes), 0(packets)
+    add 2025-02-12 10:33:33 use -
+  mark 1/0xffffffff
+  tmpl src 11.31.31.1 dst 12.32.32.1
+    proto esp spi 0x00000001(1) reqid 0(0x00000000) mode tunnel
+    level required share any
+    enc-mask ffffffff auth-mask ffffffff comp-mask ffffffff
+----
+src 0.0.0.0/0 dst 0.0.0.0/0 uid 0
+  dir fwd action allow index 9049554 priority 0 ptype main share any flag  (0x00000000)
+  lifetime config:
+    limit: soft (INF)(bytes), hard (INF)(bytes)
+    limit: soft (INF)(packets), hard (INF)(packets)
+    expire add: soft 0(sec), hard 0(sec)
+    expire use: soft 0(sec), hard 0(sec)
+  lifetime current:
+    0(bytes), 0(packets)
+    add 2025-02-12 10:33:33 use -
+  tmpl src 0.0.0.0 dst 0.0.0.0
+    proto esp spi 0x00000000(0) reqid 0(0x00000000) mode tunnel
+    level use share any
+    enc-mask ffffffff auth-mask ffffffff comp-mask ffffffff
+----
+src 0.0.0.0/0 dst 0.0.0.0/0 uid 0
+  dir in action allow index 9049544 priority 0 ptype main share any flag  (0x00000000)
+  lifetime config:
+    limit: soft (INF)(bytes), hard (INF)(bytes)
+    limit: soft (INF)(packets), hard (INF)(packets)
+    expire add: soft 0(sec), hard 0(sec)
+    expire use: soft 0(sec), hard 0(sec)
+  lifetime current:
+    0(bytes), 0(packets)
+    add 2025-02-12 10:33:33 use 2025-02-12 10:39:24
+  tmpl src 0.0.0.0 dst 0.0.0.0
+    proto esp spi 0x00000000(0) reqid 0(0x00000000) mode tunnel
+    level use share any
+    enc-mask ffffffff auth-mask ffffffff comp-mask ffffffff
+
+
+5》内核模块查看
+# 如下，下发规则，自动加载了esp4模块。
+# lsmod |grep -i esp
+esp4                   20480  2 # 两个state规则使用esp4
+```
+
+#### 抓包
+
+![](attachments/image%201.png)
+
+
+### 规则下发
+```bash
+./ip xfrm state add src 192.21.7.27 dst 192.21.8.27 proto esp spi 0x321 mode tunnel aead 'rfc4106(gcm(aes))' 0x44434241343332312423222114131211f4f3f2f1 128 offload dev eth03 dir out
+
+./ip xfrm state add src 192.21.8.27 dst 192.21.7.27 proto esp spi 0x123 mode tunnel aead 'rfc4106(gcm(aes))' 0x44434241343332312423222114131211f4f3f2f1 128 offload dev eth03 dir in
+
+./ip xfrm policy add src 192.21.10.0/24  dst 192.21.8.133 dir in  tmpl src 192.21.8.27 dst 192.21.7.27 proto esp spi 0x123  mode tunnel
+
+./ip xfrm policy add src 192.21.8.133 dst 192.21.10.0/24  dir out tmpl src 192.21.7.27 dst 192.21.8.27 proto esp spi 0x321  mode tunnel
+
+```
+
+如上所示，添加`state` 时，设置了 `offload` 标记，即使用 `esp_offload`.
+如果机器的`iproute`包的版本太低，`ip xfrm`命令无法设置`esp_offload`，需要更新`iproute`版本，就可以做`offload [dev] dir DIR`的配置，
+配置完，通过`lsmod | grep esp`查看`esp_offload`的引用计数，可以发现自动加载了`esp_offload`模块。
+
+### 其他
+#### 内核中的esp_offload 导致的问题
+
+##### 加载了`esp_offload`模块后，导致内核crash问题
+参考：[esp: remove the skb from the chain when it's enqueued in cryptd_wq](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/net/xfrm/xfrm_device.c?h=v6.1-rc8&id=d1d17a359ce6901545c075d7401c10179d9cedfd)
+
+##### 加载了`esp_offload`模块后，`ip xfrm state` 中的 `output_mark`不生效
+
+**(1)问题**
+看出目前主机上有两条state，分别打上了0x300和0x400的mark
+![](attachments/Pasted%20image%2020250212114934.png)
+
+如下所示，规则引用了 esp_offload 模块：
+![](attachments/Pasted%20image%2020250212115008.png)
+
+为了方便观察skb是否打上mark，我们写一个iptables如下：
+```bash
+iptables -t mangle -I FORWARD -s 193.8.0.1 -j LOG
+```
+
+然后dmesg看一下: 发现没有打上mark。
+![](attachments/image%20(3).png)
+
+将`esp_offload` 卸载，如下所示：
+![](attachments/Pasted%20image%2020250212115232.png)
+
+再次查看dmesg，如下所示，出现了mark。
+![](attachments/image%20(5).png)
+
+
+**(2)解决**
+内核5.4版本修复了该问题。
+[xfrm: support output_mark for offload ESP packets](https://lore.kernel.org/stable/20200128135828.650597485@linuxfoundation.org/)
 
 # ipsec应用strngswan理解
 

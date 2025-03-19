@@ -168,6 +168,25 @@ $3 = 0x55ec16cc7430 "hello, gdb"
 此时，查看系统当前的 `net.core.rmem_max` 以及 `net.core.wmem_max`，但是程序启动时候的  `net.core.rmem_max` 以及 `net.core.wmem_max` 可能不是当前值，那么如何获取到程序启动时候的   `net.core.rmem_max` 以及 `net.core.wmem_max`的值呢。
 
 #### 思路
+##### 思路一：
+```bash
+ss -nump : 查看udp的socket
+ss -ntmp : 查看tcp的socket
+```
+
+```bash
+# ss -nump
+Recv-Q Send-Q                                                      Local Address:Port                                                                     Peer Address:Port
+0      0                                                           10.52.145.147:34953                                                                       223.5.5.5:53
+	 skmem:(r0,rb16000000,t0,tb262144000,f0,w0,o0,bl0)
+0      0                                                           10.52.145.147:58997                                                                       223.5.5.5:53
+	 skmem:(r0,rb16000000,t0,tb262144000,f0,w0,o0,bl0)
+```
+
+rb16000000：表示这个socket的接受缓冲区的大小为：16000000B.
+tb262144000: 表示这个socket的发送缓冲区的大小为：262144000B.
+
+##### 思路二：
 一个已经运行的进程，查看某个socket fd的 option信息。一般情况下，
 `cat /proc/net/udp` 或者 `netstat -apn` 或者 `cat /proc/PID/net/udp` 或者
 `ll /proc/PID/fd/`等等都是无法查看的。

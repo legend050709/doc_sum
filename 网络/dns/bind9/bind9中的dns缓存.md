@@ -91,9 +91,9 @@ rndc dumpdb -cache
 在 /etc/named/named.conf.options中指定了cache的保存文件。
 ```
 
-![](attachments/Pasted%20image%2020241206183735.png)
+![](../dns基础/attachments/Pasted%20image%2020241206183735.png)
 
-![](attachments/Pasted%20image%2020241206183821.png)
+![](../dns基础/attachments/Pasted%20image%2020241206183821.png)
 
 
 

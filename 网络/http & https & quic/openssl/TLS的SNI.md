@@ -29,7 +29,7 @@
 - 当页面请求`API`时，会发生`TLS`连接
     
 建立连接的过程被称为**TLS握手**，根据`TLS`版本不同，握手的步骤会有所区别。
-![](attachments/Pasted%20image%2020230926100515.png)
+![](../attachments/Pasted%20image%2020230926100515.png)
 但总体来说，**TLS握手**是为了达到三个目的：
 
 1. 协商协议和加密套件：通信的两端确认接下来使用的`TLS`版本及加密套件
@@ -79,10 +79,10 @@
 - 客户端支持`ECH`
 
 比如，[cloudflare SNI测试页](https://link.juejin.cn/?target=https%3A%2F%2Fcrypto.cloudflare.com%2Fcdn-cgi%2Ftrace "https://crypto.cloudflare.com/cdn-cgi/trace")支持`ECH`扩展，当你的浏览器不支持`ECH`时，访问该网站`sni`会返回`plaintext`：
-![](attachments/Pasted%20image%2020230926102656.png)
+![](../attachments/Pasted%20image%2020230926102656.png)
 
 对于`chrome`，在[chrome://flags/#encrypted-client-hello](https://link.juejin.cn/?target=)中，配置`ECH`支持：
-![](attachments/Pasted%20image%2020230926102710.png)
+![](../attachments/Pasted%20image%2020230926102710.png)
 
 再访问上述网站，`sni`如果返回`encrypted`则代表支持`ECH`。
 # 总结

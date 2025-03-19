@@ -1,3 +1,5 @@
+```table-of-contents
+```
 # 使用方法
 ```c
 # 查看是否支持，一般是Mellanox网卡才支持

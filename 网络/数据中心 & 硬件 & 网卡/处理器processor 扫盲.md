@@ -1,3 +1,6 @@
+```table-of-contents
+```
+
 # scalar and vector processor
 标量处理器和向量处理器是两种计算机处理器的类型，它们之间的主要区别在于它们处理数据的方式。
 A processor is an essential component of a computer system, responsible for carrying out instructions in order to facilitate various computer operations. 

@@ -1,0 +1,9 @@
+{
+  "newFileLocation": "current",
+  "newLinkFormat": "relative",
+  "useMarkdownLinks": true,
+  "attachmentFolderPath": "./attachments",
+  "alwaysUpdateLinks": true,
+  "livePreview": false,
+  "showLineNumber": true
+}

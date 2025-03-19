@@ -46,7 +46,7 @@ HTTP代理服务器会自动提取请求数据包的HTTP Request数据，然后�
 #### 环境变量形式
 有关网络代理的几个环境变量
 ![](attachments/Pasted%20image%2020240110144235.png)
-all_proxy指定了全部协议都可以通过这个代理，它的优先级要低于其他变量。例如系统配置了http_proxy和all_proxy变量，则curl在进行http访问的时候会通过http_proxy指定的代理，在进行https访问的时会首先尝试通过https_proxy指定的代理，但是由于并没有设置https_proxy，最终all_proxy指定的代理生效。
+`all_proxy`指定了全部协议都可以通过这个代理，它的优先级要低于其他变量。例如系统配置了`http_proxy`和`all_proxy`变量，则`curl`在进行`http`访问的时候会通过`http_proxy`指定的代理，在进行https访问的时会首先尝试通过https_proxy指定的代理，但是由于并没有设置`https_proxy`，最终`all_proxy`指定的代理生效。
 
 **理解**
 ```bash
@@ -66,6 +66,7 @@ ssr://
 vmess://
 ```
 
+##### 设置
 **设置代理**
 ```bash
 (1) 设置临时代理（仅在当前shell会话生效）
@@ -82,6 +83,17 @@ export https_proxy=http://ip:port
 (3)取消代理
 # unset http_proxy
 # unset https_proxy
+```
+
+
+
+##### `http_proxy` 和 `no_proxy` 宏
+日常通过配置服务器的yum源文件(`xxx.repo`)文件时，有些源需要使用公司内的rpm文件，有些公司的rpm仓库内不存在的，需要通过代理的方式来访问外网，使用外部网络的rpm文件。那么，如何识别到公司的rpm，使用公司内部的源呢。通过`no_proxy`来设置。
+```bash
+export http_proxy=http://10.74.176.8:11080 && export https_proxy=http://10.74.176.8:11080
+export HTTP_PROXY=http://10.74.176.8:11080 && export HTTPS_PROXY=http://10.74.176.8:11080
+export no_proxy=".corp.kuaishou.com,10.*.*.*,172.*.*.*,.local,localhost,127.0.0.1"
+export NO_PROXY=".corp.kuaishou.com,10.*.*.*,172.*.*.*,.local,localhost,127.0.0.1"
 ```
 
 #### 其他形式

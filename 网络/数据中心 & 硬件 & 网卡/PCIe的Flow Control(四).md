@@ -1,3 +1,5 @@
+```table-of-contents
+```
 # 概述
 ## 可靠传输
 可靠传输，可以分为两个方面
@@ -12,7 +14,7 @@
 对于大部分的串行传输协议而言，发送方能够有效地将数据发送至接收方的前提是，接收方有足够的接收Buffer来接收数据。在PCI总线中，发送方在发送前并不知道接收法是否有足够的Buffer来接收数据（即接收方是否就绪），因此经常需要一些Disconnects和Retries的操作，这将会严重地影响到总线的传输效率（性能）。
 
 PCIe总线为了解决这一问题，提出了Flow Control的概念，如下图所示。
-![](attachments/Pasted%20image%2020230731220244.png)
+![](../限速%20&%20流控/attachments/Pasted%20image%2020230731220244.png)
 >注：采用Flow Control机制的PCIe总线，相对于PCI总线获得了更高的总线利用率。虽然增加了Flow Control DLLP，但是这些DLLP对带宽的占用极小，几乎对总线利用率没有什么影响。
 
 PCIe Spec规定，PCIe设备的每一个端口（Ports）都必须支持Flow Control机制，在发送TLP之前，Flow Control必须先检查接收端口是否有足够的Buffer空间来接收这个TLP。当PCIe设备支持多个VC（Virtual Channel）时，Flow Control机制可以显著地提高总线的传输效率。

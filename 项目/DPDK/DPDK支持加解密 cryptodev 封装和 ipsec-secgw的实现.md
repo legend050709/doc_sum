@@ -348,7 +348,7 @@ cryptodev 库目前支持以下对称加密操作：密码、身份验证，包�
 
 如下图，展示了DPDK中的CryptoDev库的信息，其中展示了 AES-GCM 提供了加密以及验证的功能。
 
-![](attachments/Pasted%20image%2020241127100744.png)
+![](../../网络/虚拟化/隧道/attachments/Pasted%20image%2020241127100744.png)
 
 #### AEAD 介绍
 单一的看，数据保密性通常由加密算法提供；完整性可由两类hash算法提供，即摘要算法如md5, sha-1等，另一类则是消息认证码(MAC-message authentication code)；真实性通常也由MAC提供。
