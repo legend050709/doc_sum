@@ -13,7 +13,7 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "高性能网络/RDMA/RDMA入门之二：1-软件栈篇.md",
+                "file": "高性能网络/RDMA基础和理论/RDMA入门之二：1-软件栈篇.md",
                 "mode": "source",
                 "source": true
               },
@@ -22,147 +22,147 @@
             }
           },
           {
-            "id": "4a78520ca41df41a",
+            "id": "3fb04c9b790d6b0c",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "高性能网络/RDMA/RDMA性能优化：1-代码优化的建议和技巧.md",
-                "mode": "source",
+                "file": "高性能网络/RDMA基础和理论/RDMA入门之一：1-内存地址基础知识.md",
+                "mode": "preview",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA性能优化：1-代码优化的建议和技巧"
+              "title": "RDMA入门之一：1-内存地址基础知识"
             }
           },
           {
-            "id": "992c727de3961fe7",
+            "id": "4b55d7a8190d2f65",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "高性能网络/RDMA/RDMA入门之四：5-阿里RDMA通信库X-RDMA.md",
+                "file": "高性能网络/RDMA基础和理论/RDMA通信中间件：2-UCX.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA入门之四：5-阿里RDMA通信库X-RDMA"
+              "title": "RDMA通信中间件：2-UCX"
             }
           },
           {
-            "id": "db246ea596d2b2ff",
+            "id": "e96eb46de977e871",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "高性能网络/RDMA/RDMA入门之四：4-UCX.md",
+                "file": "高性能网络/RDMA基础和理论/RDMA入门之0：2-总体介绍.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA入门之四：4-UCX"
+              "title": "RDMA入门之0：2-总体介绍"
             }
           },
           {
-            "id": "224191e84844f277",
+            "id": "c0a86a954fdbff8d",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "高性能网络/RDMA/RDMA入门之一：2-RDMA内存.md",
+                "file": "高性能网络/RDMA基础和理论/RDMA入门之四：7-async-rdma.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA入门之一：2-RDMA内存"
+              "title": "RDMA入门之四：7-async-rdma"
             }
           },
           {
-            "id": "bc546aca595a59f6",
+            "id": "79972fd6988fb81f",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "高性能网络/RDMA/RDMA拥塞控制：1-拥塞控制概述.md",
+                "file": "项目/DPDK/DPDK特性：10-rte_ring无锁环形队列的理解和使用.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA拥塞控制：1-拥塞控制概述"
+              "title": "DPDK特性：10-rte_ring无锁环形队列的理解和使用"
             }
           },
           {
-            "id": "887f1664ab1b9f37",
+            "id": "edd1cf682be71f90",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "高性能网络/RDMA/RDMA性能优化：2-设计一个高性能的RDMA系统.md",
+                "file": "项目/DPDK/DPDK特性：13-telementry的理解和使用.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA性能优化：2-设计一个高性能的RDMA系统"
+              "title": "DPDK特性：13-telementry的理解和使用"
             }
           },
           {
-            "id": "aba1c96401b885f7",
+            "id": "d2781e5a03e91ade",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "高性能网络/RDMA/RDMA入门之0：1-内存地址基础知识.md",
+                "file": "项目/DPDK/DPDK项目：2-内核管理的Linux C程序使用dpdk中库.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA入门之0：1-内存地址基础知识"
+              "title": "DPDK项目：2-内核管理的Linux C程序使用dpdk中库"
             }
           },
           {
-            "id": "3725a269d315ba67",
+            "id": "d5f237f19cbdde88",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "高性能网络/RDMA/RDMA拥塞控制：2-拥塞控制之PFC.md",
-                "mode": "source",
+                "file": "语言/C和C++/C函数：4-POSIX下非线程安全以及性能差的函数.md",
+                "mode": "preview",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA拥塞控制：2-拥塞控制之PFC"
+              "title": "C函数：4-POSIX下非线程安全以及性能差的函数"
             }
           },
           {
-            "id": "a9de52f763cd6922",
+            "id": "5fad01521e8a70da",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "高性能网络/RDMA/RDMA拥塞控制：4-拥塞控制之DCQCN.md",
+                "file": "高性能网络/RDMA基础和理论/RDMA入门之一：6-RDMA的操作.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA拥塞控制：4-拥塞控制之DCQCN"
+              "title": "RDMA入门之一：6-RDMA的操作"
             }
           },
           {
-            "id": "5bafc8e79d89d610",
+            "id": "9679d3fb38ad4950",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "高性能网络/RDMA/RDMA入门之一：4-RDMA单边和双边操作.md",
+                "file": "高性能网络/RDMA基础和理论/RDMA通信库中间件：5-rsocket.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA入门之一：4-RDMA单边和双边操作"
+              "title": "RDMA通信库中间件：5-rsocket"
             }
           }
         ],
-        "currentTab": 10
+        "currentTab": 5
       }
     ],
     "direction": "vertical"
@@ -194,8 +194,8 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "epoll_ctl",
-                "matchingCase": false,
+                "query": "glibc",
+                "matchingCase": true,
                 "explainSearch": false,
                 "collapseAll": false,
                 "extraContext": false,
@@ -219,7 +219,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 467.5
+    "width": 460.5
   },
   "right": {
     "id": "a93c1244e0a44ed2",
@@ -310,53 +310,53 @@
       "command-palette:打开命令面板": false
     }
   },
-  "active": "5bafc8e79d89d610",
+  "active": "79972fd6988fb81f",
   "lastOpenFiles": [
-    "高性能网络/RDMA/RDMA入门之一：3-RDMA服务类型.md",
-    "高性能网络/RDMA/RDMA入门之一：4-RDMA单边和双边操作.md",
-    "高性能网络/RDMA/RDMA入门之一：2-RDMA内存.md",
-    "高性能网络/RDMA/RDMA入门之一：1-RDMA QP和CQ.md",
-    "网络/socket/socket option之SO_REUSEADDR和SO_REUSEPORT.md",
-    "高性能网络/RDMA/RDMA入门之四：4-UCX.md",
-    "问题定位查询/trace类工具/brendangregg的 perf-tools 分析工具.md",
-    "网络/四层协议/UDP/单机多IP时SIP的选择问题.md",
-    "操作系统/IO/网络模型：1-Reactor 和 Proactor.md",
-    "操作系统/IO/异步IO之io_uring ：2-实现.md",
-    "操作系统/IO/异步IO之io_uring ：1-介绍与理解.md",
-    "操作系统/IO/异步IO：1-介绍与理解.md",
-    "操作系统/IO/零拷贝：1-sendfile和splice.md",
-    "高性能网络/RDMA/RDMA入门之0：1-内存地址基础知识.md",
-    "高性能网络/RDMA/attachments/Pasted image 20250319104327.png",
-    "高性能网络/RDMA/RDMA拥塞控制：1-拥塞控制概述.md",
-    "高性能网络/RDMA/RDMA负载均衡：1-负载均衡概述.md",
-    "高性能网络/RDMA/RDMA组网：3-有损lossy网络.md",
-    "高性能网络/RDMA/RDMA拥塞控制：4-拥塞控制之DCQCN.md",
-    "高性能网络/RDMA/RDMA拥塞控制：3-拥塞控制之ECN.md",
-    "高性能网络/RDMA/RDMA拥塞控制：2-拥塞控制之PFC.md",
-    "高性能网络/GPU相关技术栈/AI 技术原理与应用场景系列文章.md",
-    "高性能网络/GPU相关技术栈/高性能以太网络测试.md",
-    "高性能网络/高性能网络综述.md",
-    "高性能网络/RDMA/RDMA入门之0：2-总体介绍.md",
-    "高性能网络/RDMA/RDMA入门之一：0-基本概念篇.md",
-    "高性能网络/RDMA/RDMA的应用：2-NVME和SPDK和DPDK以及RDMA的关系.md",
-    "高性能网络/RDMA/attachments/Pasted image 20250319063957.png",
-    "高性能网络/RDMA/attachments/Pasted image 20250319063911.png",
-    "高性能网络/RDMA/attachments/Pasted image 20250319062444.png",
-    "高性能网络/RDMA/attachments/Pasted image 20250319062437.png",
-    "高性能网络/RDMA/attachments/Pasted image 20250319060428.png",
-    "高性能网络/RDMA/attachments/Pasted image 20250319060413.png",
-    "高性能网络/RDMA/attachments/Pasted image 20250319054952.png",
-    "高性能网络/RDMA/attachments/Pasted image 20250318165131.png",
-    "高性能网络/RDMA/attachments/Pasted image 20250318164756.png",
+    "项目/DPDK/attachments/Pasted image 20250413211044.png",
+    "项目/DPDK/attachments/Pasted image 20250413211042.png",
+    "项目/DPDK/attachments/Pasted image 20250413211039.png",
+    "项目/DPDK/attachments/Pasted image 20250413211004.png",
+    "项目/DPDK/attachments/Pasted image 20250413210737.png",
+    "项目/DPDK/attachments/Pasted image 20250413210719.png",
+    "项目/DPDK/attachments/Pasted image 20250413210649.png",
+    "项目/DPDK/attachments/Pasted image 20250413200725.png",
+    "项目/DPDK/attachments/Pasted image 20250413200511.png",
+    "项目/DPDK/DPDK特性：11-rte_stack的理解和使用.md",
+    "项目/DPDK/DPDK特性：12-rte_mempool的理解和使用.md",
+    "项目/DPDK/DPDK特性：13-telementry的理解和使用.md",
+    "高性能网络/RDMA基础和理论/RDMA入门之一：3-RDMA内存.md",
+    "语言/预处理 & 编译 & 汇编 & 链接/GLIC：高版本的glibc的安装和使用.md",
+    "语言/预处理 & 编译 & 汇编 & 链接/GCC：gcc命令使用.md",
+    "语言/预处理 & 编译 & 汇编 & 链接/GCC：高版本的gcc和cmake以及clang.md",
+    "语言/预处理 & 编译 & 汇编 & 链接/pkg-config：pkg-config命令使用.md",
+    "语言/预处理 & 编译 & 汇编 & 链接/meson：ninja 和 meson命令.md",
+    "语言/预处理 & 编译 & 汇编 & 链接/make：1-makefile和make命令.md",
+    "语言/预处理 & 编译 & 汇编 & 链接/动态库和静态库/动态库：5-程序找不到动态库.so的解决办法.md",
+    "语言/预处理 & 编译 & 汇编 & 链接/编译环境查看&版本查看.md",
+    "高性能网络/RDMA基础和理论/RDMA工具：3-perftest工具集.md",
+    "高性能网络/RDMA基础和理论/RDMA工具：1-工具概述.md",
+    "项目/DPDK/DPDK特性：10-rte_ring无锁环形队列的理解和使用.md",
+    "项目/DPDK/DPDK特性：14-DPDK的中断机制.md",
+    "高性能网络/RDMA基础和理论/RDMA通信库中间件：5-rsocket.md",
+    "性能/锁/原子操作：2-原子操作和内存模型.md",
+    "性能/锁/attachments/Pasted image 20250412151904.png",
+    "性能/锁/attachments/Pasted image 20250412151326.png",
+    "性能/锁/原子操作：1-原子变量和原子操作.md",
+    "性能/锁/Linux锁的应用：linux内核sock相关锁lock_sock()与bh_lock_sock().md",
+    "性能/锁/自旋锁：1-自旋锁的介绍和使用.md",
+    "性能/锁/自旋锁：2-公平性问题.md",
+    "性能/锁/无锁操作：1-概述.md",
+    "性能/锁/原子操作：3-无锁删除之refcnt.md",
+    "性能/锁/无锁操作：3-RCU的理解.md",
+    "高性能网络/GPU相关技术栈/NCCL",
+    "高性能网络/RDMA应用",
     "高性能网络/GPU相关技术栈",
-    "高性能网络/RDMA/RDMA监控和运维",
+    "高性能网络/RDMA基础和理论/RDMA监控和运维",
     "高性能网络/RDMA/RDMA通讯库",
     "高性能网络/DPDK用户态协议栈",
-    "高性能网络/RDMA/attachments",
+    "高性能网络/RDMA基础和理论/attachments",
     "高性能网络/RDMA拥塞控制",
     "高性能网络/通讯库",
-    "高性能网络/RDMA",
-    "高性能网络",
-    "网络/容器网络/未命名"
+    "高性能网络/RDMA基础和理论"
   ]
 }

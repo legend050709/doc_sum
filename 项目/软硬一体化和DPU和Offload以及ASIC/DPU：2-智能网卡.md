@@ -1,0 +1,22 @@
+```table-of-contents
+```
+
+# 参考  
+```bash
+# 智能网卡笔记1-知识体系 (有1，2，3三个系列)
+https://zhuanlan.zhihu.com/p/544444149
+
+第四章云网络4.9.5.1节下一代智能网卡——DPU综述
+https://cloud.tencent.com/developer/article/2101722
+
+第四章云网络4.9.4.3节——智能网卡使用场景-网络加速实现
+https://cloud.tencent.com/developer/article/2101721
+
+第四章云网络4.9.4.2节——智能网卡实现
+https://cloud.tencent.com/developer/article/2099530
+
+第四章云网络4.9.4.1节——智能网卡SmartNIC方案综述
+https://cloud.tencent.com/developer/article/2099708
+
+
+```

@@ -1480,6 +1480,7 @@ ExecStart=/path/to/start-my-service.sh
 [root@localhost ~]# service httpd start
 Redirecting to /bin/systemctl start  httpd.service
 ```
+
 ![](attachments/Pasted%20image%2020230627121521.png)
 
 # 参考

@@ -43,10 +43,10 @@ CONFIG_HUGETLB_PAGE=y
 |hugepagesz|单个`HugePages`字节大小|
 |default_hugepagesz|默认`HugePages`字节大小|
 
->注意： 如果系统不支持设置的默认`HugePages`内存页大小，实际的`HugePages`内存页大小会保持2M。
+>注意： **如果系统不支持设置的默认`default_hugepagesz`内存页大小，实际的`HugePages`内存页大小会保持2M**。
 
 以下是2MB大页命令行的参数。  
-Huagepage=1024  
+`Huagepage=1024`  
 对于其他大小的大页，比如1GB，其大小必须显示地在命令行指定，并且命令行还可以指定默认的大页大小。比如，我们想预留4GB内存作为大页使用，大页的大小为1GB，那么可以用以下的命令行：  
 ```c
 default_hugepagesz=1G hugepagesz=1G hugepages=4
@@ -107,7 +107,8 @@ default_hugepagesz=1G hugepagesz=1G hugepages=16 hugepagesz=2M hugepages=2048 io
 在大页预留之后，接下来则涉及使用的问题。我们以DPDK为例来说明如何使用大页。  
 DPDK也是使用HUGETLBFS来使用大页。
 ### 动态设置
-首先，它需要把大页mount到某个路径，比如/mnt/huge，以下是命令：  
+首先，它需要把大页mount到某个路径，比如`/mnt/huge`。`/mnt/huge`这个目录必须存在。
+以下是命令：  
 ```c
 mkdir /mnt/huge  
 mount -t hugetlbfs nodev /mnt/huge  
@@ -121,7 +122,7 @@ mkdir -p /mnt/huge_2mb
 mount -t hugetlbfs nodev /mnt/huge_2mb -o pagesize=2MB（-o参数指定挂载2M的hugepage大小）
 ```
 注：需要指出的是，在mount之前，要确保之前已经成功预留内存，否则之上命令会失败。
-如下所示，是挂载到了 /dev/hugepages 目录下。
+如下所示，是挂载到了 `/dev/hugepages` 目录下。
 ![](attachments/Pasted%20image%2020230904161424.png)
 
 ### 启动设置

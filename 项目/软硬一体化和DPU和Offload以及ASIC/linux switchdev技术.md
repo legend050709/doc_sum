@@ -36,8 +36,6 @@ switchdev起源于Open vSwitch项目，由Jiři Pirko在2014年9月首次提出�
 **switchdev驱动模型出现之前，Linux需要交换机厂商的专门工具套件操作交换机，而在switchdev驱动模型之后，通用接口被实现，交换机正式纳入Linux网络设备体系，Linux可以用标准接口实现交换机的控制面和管理面**。
 
 
-
-
 ## 架构
 
 ![](attachments/Pasted%20image%2020240709120004.png)
