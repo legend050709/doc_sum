@@ -21,12 +21,12 @@ Wireshark 可以用时序图的方式显示数据包交互的过程，从菜单�
 
 你可以更清晰的看到，整个过程中 TCP 流的执行过程：
 
-![](../../网络/四层协议/TCP/attachments/Pasted%20image%2020240513195500.png)
+![](../../网络之物理网络/四层协议/TCP/attachments/Pasted%20image%2020240513195500.png)
 
 
 **时序图展示TCP重传**：
 
-![](../../网络/四层协议/TCP/attachments/Pasted%20image%2020240513195523.png)
+![](../../网络之物理网络/四层协议/TCP/attachments/Pasted%20image%2020240513195523.png)
 
 ## I/O Graph 
 ### 介绍
