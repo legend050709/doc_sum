@@ -49,7 +49,7 @@ int main(){
 我们发现三个符号的类型均为大写字母T或D，说明他们是global的符号，全局可见。 因此我们的`main`函数可以打印出`5`。
 
 ## 隐藏符号的可见性
-如果我们想要隐藏`a.so`中的所有符号，只需要加上`-fvisibility=hidden`的Compiler flag即可，此时`a.so`中的所有符号都变成了不可见
+如果我们想要隐藏`a.so`中的所有符号，只需要加上`-fvisibility=hidden`的`Compiler flag`即可，此时`a.so`中的所有符号都变成了不可见
 ```shell
 > clang -fPIC -shared -fvisibility=hidden a.c -o a.so
 > nm a.so
@@ -62,7 +62,7 @@ int main(){
 
 由于这种方式会一次性hide掉所有符号，因此不够灵活，假如我们的动态库只需要导出`func1`，而隐藏`func0`和`myintvar`，该怎么做呢？我们至少有三种方法，包括使用`static`关键字，定义符号的`GNU visibility`，以及使用exported symbol list。每种方式都有各自的优缺点，我们接下来一一讨论
 
-### 使用static关键字
+### 编译时：使用static关键字
 在C/C++中被`static`声明的变量符号类型会变成local，也就是说禁止该符号被外部链接，则编译器不会为该符号生成任何信息，因此这种方式是一种最简单的方式，我们修改`a.c`如下
 ```cpp
 static int myintvar = 5;
@@ -106,10 +106,11 @@ ld: symbol(s) not found for architecture x86_64
 ```
 
 
-小结一下：
-使用`static`这种方式更多的是用于控制文件内的符号可见性，而不用于控制低级别的符号可见性。实际上，大多数函数或者变量不会依赖于static来控制符号可见性。
+小结一下：==使用`static`这种方式更多的是用于控制文件内的符号可见性，而不用于控制低级别的符号可见性==。
+实际上，大多数函数或者变量不会依赖于static来控制符号可见性。
 
-### 使用`visibility`关键字
+### 编译时：使用`visibility`关键字
+
 
 更常用的方法是使用GNU的visibility关键字，常用的有两个
 
@@ -139,9 +140,18 @@ int __attribute__ ((visibility ("hidden"))) func0 () {
 
 > 注意，对于用 visibility 属性指定的变量，将它声明为 static 可能会让编译器感到混淆
 
-### 使用Symbol List
+#### 小结
+ **使用编译器属性：**
+（1）在头文件中声明需要导出的函数和结构体时，使用`__attribute__((visibility("default")))`。
+（2）在编译时添加`-fvisibility=hidden`选项，隐藏所有未明确标记为导出的符号。
 
-对于符号的可见性，我们可以通过Symbol list来控制。具体来说，对于上面例子，我们可以使用下面的列表
+### 链接时：使用Symbol List
+
+对于符号的可见性，我们可以在链接时。
+通过==链接器脚本/版本脚本（version script）来控制。
+版本脚本通过global和local两个段来定义符号的可见性，global段中的符号会被导出，而local段中的符号则被隐藏== 。
+
+具体来说，对于上面例子，我们可以使用下面的列表。
 ```shell
 //exportmap.map
 {

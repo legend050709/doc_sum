@@ -39,7 +39,14 @@ git clone https://github.com/brendangregg/FlameGraph.git
 
 ### 获取堆栈
 ```bash
+// 指定某个coreid
 perf record -F 99 -C 1 --call-graph dwarf -- sleep 30
+
+// 指定某个进程id
+perf record -F 99 -p xxx --call-graph dwarf -- sleep 30
+
+// 指定某个线程id
+perf record -F 99 -t xxx --call-graph dwarf -- sleep 30
 
 默认在当前路径下生成一个 perf.data 文件
 ```
@@ -61,6 +68,27 @@ perf record -F 99 -C 1 --call-graph dwarf -- sleep 30
 最后在谷歌浏览器上打开该火焰图文件（perf.svg）：
 ![](attachments/Pasted%20image%2020240130153922.png)
 
+
+### 小结
+```bash
+(1) 先执行perf record, 默认生成了  ./perf.data
+perf record -F 99 -C 1 --call-graph dwarf -- sleep 30
+
+
+(2) 然后执行脚本生成svg
+# cat get_perf_graph.sh
+
+outfile=$1
+perf script -i ./perf.data &> ./${outfile}.unfold
+./FlameGraph/stackcollapse-perf.pl ./${outfile}.unfold &> ./${outfile}.folded
+./FlameGraph/flamegraph.pl ./${outfile}.folded > ./${outfile}.svg
+
+
+(3) perf report 直接读取 perf.data
+perf report -i ./perf.data --sort comm,dso,symbol
+
+perf report -i ./perf.data 
+```
 
 # off-cpu火焰图
 ## 场景

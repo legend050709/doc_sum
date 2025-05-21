@@ -60,8 +60,8 @@ install:
 ### `make VERBOSE=1`
 可以在执行 `make` 时设置这个变量为 `1`，以显示详细的编译命令。
 
-
 ![](attachments/Pasted%20image%2020250214155758.png)
+
 
 
 ### `make -d`

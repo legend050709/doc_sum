@@ -1,9 +1,11 @@
+```table-of-contents
+```
 # 关系
 ![](attachments/Pasted%20image%2020230605152131.png)
 
 其实`sockaddr` 和 `sockaddr_in` 之间的转化很容易理解，因为他们开头一样，内存大小也一样，但是`sockaddr`和`sockaddr_in6`之间的转换就有点让人搞不懂了，
 其实你有可能被结构所占的内存迷惑了，这几个结构在作为参数时基本上都是以指针的形式传入的，我们拿函数`bind()`为例。
-这个函数一共接收三个参数，第一个为监听的文件描述符，第二个参数是sockaddr*类型，第三个参数是传入指针原结构的内存大小，所以有了后两个信息，无所谓原结构怎么变化，因为他们的头都是一样的，也就是uint16 sa_family，那么我们也能根据这个头做处理，原本我没有看过bind()函数的源代码，但是可以猜一下:
+这个函数一共接收三个参数，第一个为监听的文件描述符，第二个参数是`sockaddr*`类型，第三个参数是传入指针原结构的内存大小，所以有了后两个信息，无所谓原结构怎么变化，因为他们的头都是一样的，也就是`uint16 sa_family`，那么我们也能根据这个头做处理，原本我没有看过`bind()`函数的源代码，但是可以猜一下:
 ```c
 int bind(int socket_fd, sockaddr* p_addr, int add_size)
 {
@@ -24,12 +26,12 @@ int bind(int socket_fd, sockaddr* p_addr, int add_size)
 }
 ```
 - 小结
->- 通过等价替换的方式我们可以更好的了解sockaddr、sockaddr_in、sockaddr_in6之间的异同。
->- 网路接口函数针对于IPv4和IPv6虽然有不同的结构(struct sockaddr_in 和 struct sockaddr_in6)，但是接口基本相同(在使用地址的时候需要强转为struct sockaddr*结 构)，主要是为了用户（开发者）使用方便吧。
+>- 通过等价替换的方式我们可以更好的了解`sockaddr`、`sockaddr_in`、`sockaddr_in6`之间的异同。
+>- 网路接口函数针对于`IPv4`和`IPv6`虽然有不同的结构(`struct sockaddr_in` 和 `struct sockaddr_in6`)，但是接口基本相同(在使用地址的时候需要强转为`struct sockaddr*`结 构)，主要是为了用户（开发者）使用方便吧。
 
 
 # 数据结构
-## ipv4
+## ipv4：`struct sockaddr_in`
 ```c
    typedef unsigned short int sa_family_t;
 
@@ -50,7 +52,7 @@ int bind(int socket_fd, sockaddr* p_addr, int add_size)
         in_addr_t s_addr;                    /* IPv4 address */
     };
 ```
-## ipv6
+## ipv6：`struct sockaddr_in6`
 ```c
    struct sockaddr_in6 {
 	   sa_family_t     sin6_family;   /* AF_INET6 */
@@ -80,9 +82,14 @@ int bind(int socket_fd, sockaddr* p_addr, int add_size)
 	   char        sun_path[108];            /* Pathname */
    };
 ```
-## 通用
-通用结构体1: struct sockaddr, 16个字节
+## 通用结构
+### `struct sockaddr`
+通用结构体1: `struct sockaddr`, 16个字节
 ```c
+typedef unsigned short __kernel_sa_family_t;
+
+typedef __kernel_sa_family_t sa_family_t;
+
 
 struct sockaddr {
   sa_family_t sa_family;  /* address family, AF_xxx */
@@ -90,8 +97,8 @@ struct sockaddr {
 };
 
 ```
-
- 通用结构体2: struct sockaddr_storage,128个字节
+### `struct sockaddr_storage`
+ 通用结构体2: `struct sockaddr_storage`,128个字节
 ```c
 /* Structure large enough to hold any socket address (with the historical exception of AF_UNIX). 128 bytes reserved. */
 

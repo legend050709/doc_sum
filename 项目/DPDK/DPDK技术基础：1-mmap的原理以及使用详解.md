@@ -1,6 +1,17 @@
 ```table-of-contents
 ```
 
+# 介绍
+```c
+#include <sys/mman.h>
+void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+```
+`mmap`函数根据指定的长度**将用户空间的一段内存区域映射到内核空间**，映射成功后，用户对这段内存区域的修改可以直接反映到内核空间；
+同样，内核空间对这段区域的修改也直接反映用户空间。
+mmap调用成功的返回值就是用户空间内存的起始地址，这个地址是一个虚地址。
+
+
+
 # mmap和大页内存
 ## 大页内存申请
 ```c

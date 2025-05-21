@@ -5,8 +5,98 @@ UCL(unified communication library) 是 RDMA 统一通讯库中间件。
 业务使用RDMA，可以发挥RDMA的`kernel bypss`,  `offload cpu`、`zero-copy`的特性。
 通过`UCL`，屏蔽了底层RDMA编程的众多概念以及编程复杂性，为业务提供`类socket`编程的接口，让业务快速、简易的享受到`RDMA`带来的低时延、高带宽的高性能网络服务。
 
+# 内核相关的socket接口
+## 参考
+### rsocket 接口
+rsocket 接口 如下所示：
+
+```c
+int rsocket(int domain, int type, int protocol);  
+int rbind(int socket, const struct sockaddr *addr, socklen_t addrlen);  
+int rlisten(int socket, int backlog);  
+int raccept(int socket, struct sockaddr *addr, socklen_t *addrlen);  
+int rconnect(int socket, const struct sockaddr *addr, socklen_t addrlen);  
+int rshutdown(int socket, int how);  
+int rclose(int socket);  
+  
+ssize_t rrecv(int socket, void *buf, size_t len, int flags);  
+ssize_t rrecvfrom(int socket, void *buf, size_t len, int flags,  
+    struct sockaddr *src_addr, socklen_t *addrlen);  
+ssize_t rrecvmsg(int socket, struct msghdr *msg, int flags);  
+ssize_t rsend(int socket, const void *buf, size_t len, int flags);  
+ssize_t rsendto(int socket, const void *buf, size_t len, int flags,  
+  const struct sockaddr *dest_addr, socklen_t addrlen);  
+ssize_t rsendmsg(int socket, const struct msghdr *msg, int flags);  
+ssize_t rread(int socket, void *buf, size_t count);  
+ssize_t rreadv(int socket, const struct iovec *iov, int iovcnt);  
+ssize_t rwrite(int socket, const void *buf, size_t count);  
+ssize_t rwritev(int socket, const struct iovec *iov, int iovcnt);  
+  
+int rpoll(struct pollfd *fds, nfds_t nfds, int timeout);  
+int rselect(int nfds, fd_set *readfds, fd_set *writefds,  
+     fd_set *exceptfds, struct timeval *timeout);  
+  
+int rgetpeername(int socket, struct sockaddr *addr, socklen_t *addrlen);  
+int rgetsockname(int socket, struct sockaddr *addr, socklen_t *addrlen);  
+  
+#define SOL_RDMA 0x10000  
+enum {  
+ RDMA_SQSIZE,  
+ RDMA_RQSIZE,  
+ RDMA_INLINE,  
+ RDMA_IOMAPSIZE,  
+ RDMA_ROUTE  
+};  
+  
+int rsetsockopt(int socket, int level, int optname,  
+  const void *optval, socklen_t optlen);  
+int rgetsockopt(int socket, int level, int optname,  
+  void *optval, socklen_t *optlen);  
+int rfcntl(int socket, int cmd, ... /* arg */ );  
+  
+off_t riomap(int socket, void *buf, size_t len, int prot, int flags, off_t offset);  
+int riounmap(int socket, void *buf, size_t len);  
+size_t riowrite(int socket, const void *buf, size_t count, off_t offset, int flags);
+
+```
+## socket的创建和关闭
+### 定义
+### 使用
+
+## readv 和 writev
+### 定义
+```c
+#include <sys/uio.h>
+
+ssize_t readv(int fd, const struct iovec *iov, int iovcnt);
+ssize_t writev(int fd, const struct iovec *iov, int iovcnt);
+
+struct iovec {
+   void  *iov_base;    /* Starting address */
+   size_t iov_len;     /* Number of bytes to transfer */
+};
+```
+### 使用
+
 
 # 内存管理
+## 读写零拷贝
+读写零拷贝，就涉及到什么时候进行内存的释放的问题？
+那么，就需要通过异步的方式来进行释放内存。
+**对于读来说**：
+
+**对于写来说**：
+
+### 问题
+#### 解决方法
+##### 回调函数
+传递读和写完成的释放回调函数。
+
+（1）发送完成，会在`send cq`中产生`cqe`， 则此时可以调用回调函数进行释放。
+（2）接收完成，会在`recv cq`中产生`cqe`，自己定义一个类`skb`的结构，其中包含`addr, len, wr_id 等等信息`；基于`cqe 的 wr_id` 查找对应的类`skb`的结构，然后应用程序完成读取之后，调用读完成的回调函数进行释放。
+
+
+## 内存模型
 
 # 连接管理
 
@@ -59,11 +149,27 @@ QP的 max_send_sge不可以设置为1。因为对于发送message类型的消息
 
 
 # io模型
+## 事件
+### 可读事件
+`recv cq` 产生一个`cqe`，说明`receive queue`消耗了一个`wqe`, 即收到了一份数据。那么此时就是一个可读事件, 同时还需要继续给`receive queue`补充一个`wqe`「类似于令牌桶需要补充tokens」。
+
+### 可写事件
+`send cq` 产生一个`cqe`，说明`send queue`消耗了一个`wqe`, 即发送数据完成。那么此时就是一个可写事件。此时不需要给`send queue`补充`wqe`。
+业务需要发送数据的时候，会自动实时的给`send queue`进行`post WR「即补充wqe」`。
+
+
+## 非阻塞异步IO
 ## 异步polling模式
 ## 异步epoll事件模式
 
 
+# 资源管理
 
+## 资源优化
+### SRQ
+### QP复用
+#### DCT方式
+#### 多个连接复用QP
 
 # 参考
 ```bash

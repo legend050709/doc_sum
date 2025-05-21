@@ -54,12 +54,14 @@ DPDK 提供了一套在指定 NUMA 节点上创建 memzone、ring, rte_malloc �
 
 # 参考
 ```bash
-
 # DPDK内存管理概述
 https://zhuanlan.zhihu.com/p/658824633
 
-# DPDK 22.11内存管理变化解析
+# DPDK 22.11内存管理变化解析 [++++++++]
 http://blog.chinaunix.net/uid-28541347-id-5877488.html
+
+# 深入理解DPDK：内存管理模块整体分析 （代码级别讲解；+++++）
+https://zhuanlan.zhihu.com/p/712450456
 
 # DPDK内存管理——全网最全篇
 https://zhuanlan.zhihu.com/p/702445686

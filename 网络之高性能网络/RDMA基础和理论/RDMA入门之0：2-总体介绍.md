@@ -879,9 +879,6 @@ UD：Unreliable Datagram，不可靠数据报传输。类似UDP。
 **Unreliable Connection (UC)**：不可靠连接模式。
 类似于 UD，但通常用于流式传输，允许在不保证可靠性的情况下进行数据传输。
 
-## DCT
-**DCT（Datagram Connection Transport）**：数据报连接传输（Datagram Connection Transport）。
-
 ## UB
 
 

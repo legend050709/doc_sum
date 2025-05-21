@@ -13,6 +13,11 @@
 # PFC的问题
 ## PFC unfairness 不公平问题
 ## PFC HOL 对头阻塞问题
+![](attachments/Pasted%20image%2020250425022046.png)
+
+ PFC基于优先级的流量控制协议可能如上图所示，当Port4流量达到阈值后，向Port1和Port2发送Pause Frame，但导致Port1与Port3的数据传输暂停，从而影响整体。
+因此，由于RoCE缺乏类似TCP的流量控制和拥塞控制算法，在丢包情况下，性能表现极差。
+
 ## PFC DeadLock 死锁问题
 ## PFC Storm 风暴问题
 

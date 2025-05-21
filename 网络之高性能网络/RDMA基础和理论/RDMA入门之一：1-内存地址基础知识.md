@@ -178,7 +178,7 @@ MMIO是一种用于进行输入输出操作的技术。它通过将外围设备�
 
 ### MMIO和IOMMU
 MMIO是让CPU通过内存地址访问设备寄存器，进而给设备下发命令或者执行操作。
-而IOMMU是让设备在访问内存时通过地址转换得到设备的物理地址来进行访问。
+而IOMMU是让IO设备在访问主机内存时通过地址转换得到主机的物理地址来进行访问。
 换句话说，**MMIO是CPU到设备的访问，而IOMMU是设备到内存的访问**。
 它们可能在某些情况下一起使用，比如当一个设备需要通过MMIO被CPU访问，同时该设备执行DMA时又需要IOMMU来转换地址。
 
@@ -375,7 +375,71 @@ Gather：聚合
 
 Linux 在内核 2.4 版本里引入了 DMA 的 scatter/gather – 分散/收集功能，只要确保 Linux 版本高于 2.4 即可。
 
-### 场景1：Scatter Transfer
+### scatter/gather介绍
+
+从软件层面来说，对于存在虚拟内存管理的系统而言，由应用程序创建的大内存块在虚拟地址空间中是连续的，但是在物理内存的层面，大概率是离散的，而如果想要在一个单独的I/O操作中搬运这些由应用层创建的物理非连续buffer，比较笨重的办法是申请与其大小相当的连续物理页面，并将数据先拷贝到这些物理页面上，然后再进行DMA操作。
+
+但是这样做的缺陷也很明显，一方面是增加了数据拷贝的过程，性能较差；
+另一方面是增加了对连续物理页面资源的要求，在长时间使用过后碎片化严重的物理内存中，申请一大块连续物理内存会非常困难。
+使用scatterlist，结合DMA的SG功能，能够非常有效的节省对大块连续物理内存的要求，也避免了不必要的额外拷贝过程。
+
+#### gather和scather
+（1）gather
+ Gather是将多个离散的buffers拷贝到一个连续的buffer中
+![](attachments/Pasted%20image%2020250425160842.png)
+
+（2）scather
+Scatter是将一个连续的buffer拷贝到多个离散的buffers中
+![](attachments/Pasted%20image%2020250425160858.png)
+
+#### scatterlist 和 sg_table
+
+刚接触`scatterlist`的朋友可能容易被这个结构体的名字误导，==`scatterlist`本身并不是一种链表结构，而只是用于描述一个单独的内存块==。
+```c
+#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
+typedef u64 dma_addr_t;
+#else
+typedef u32 dma_addr_t;
+#endif
+
+struct scatterlist {
+#ifdef CONFIG_DEBUG_SG
+        unsigned long   sg_magic;
+#endif
+        unsigned long   page_link;
+        unsigned int    offset;
+        unsigned int    length;
+        dma_addr_t      dma_address;
+#ifdef CONFIG_NEED_SG_DMA_LENGTH
+        unsigned int    dma_length;
+#endif
+};
+```
+
+`page_link`用于记录该内存块所在的页面号，`page_link`的`bit[0]`和`bit[1]`有特殊用途，因此页面必须是4字节对齐的。
+`bit[0]`为1表示该节点是一个铰链，为0表示一个普通内存节点，铰链是用于将多个链串成一个更大的链。
+`bit[1]`为1表示该节点是尾节点，为0表示一个普通节点。
+`offset`表示内存块在页面内的偏移，
+`length`表示内存块长度，
+`dma_address`表示物理地址
+
+要使用`scatterlist`，开发者可以自己定义一个`scatterlist`的数组
+```c
+struct scatterlist sgt[8];
+```
+
+也可以使用内核提供好的封装后的`sg table`结构
+```c
+struct sg_table {
+	struct scatterlist *sgl;	/* the list */
+	unsigned int nents;		/* number of mapped entries */
+	unsigned int orig_nents;	/* original size of list */
+};
+```
+其中`sgl`是一个指向`scatterlist`数组的指针，`nents`是`scatterlist`数组的实际长度，`orig_nents`是`scatterlist`的原始长度
+
+### SG的应用场景
+#### 场景1：Scatter Transfer
 **场景1：将一片连续内存数据搬运到一片不连续的的内存空间（且间隔是相等的）**
 源内存：连续
 目的内存：离散
@@ -384,7 +448,7 @@ Linux 在内核 2.4 版本里引入了 DMA 的 scatter/gather – 分散/收集�
 ![](attachments/Pasted%20image%2020250313202630.png)
 
 
-### 场景2：Gather transfer
+#### 场景2：Gather transfer
 **场景2：将一片内存区域中等间隔的多段数据拷贝到一段连续内存中。（常见的2D矩形抠图就是这种场景的典型应用）**
 
 源内存：分散
@@ -396,7 +460,8 @@ Linux 在内核 2.4 版本里引入了 DMA 的 scatter/gather – 分散/收集�
 
 ### scatter/gather DMA 与 block DMA
 
-在DMA传输数据的过程中，要求源物理地址和目标物理地址必须是连续的。但是在某些计算机体系中，如IA架构，连续的存储器地址在物理上不一定是连续的（CPU以虚拟地址寻址），所以DMA传输要分成多次完成。
+在DMA传输数据的过程中，要求源物理地址和目标物理地址必须是连续的。
+但是在计算机体系中，程序看到的连续的虚拟地址，在物理上不一定是连续的，所以DMA传输要分成多次完成。
 
 #### block DMA
 DMA控制器在传输完一块物理上连续的数据后引起一次中断，然后再由CPU触发进行下一块物理存储空间上的数据传输，这种方式被称为 Block DMA。
@@ -496,7 +561,7 @@ tx-checksumming: off
         tx-checksum-ipv6: off [fixed]
         tx-checksum-fcoe-crc: off [fixed]
         tx-checksum-sctp: off [fixed]
-scatter-gather: on
+scatter-gather: on  # 支持sg
         tx-scatter-gather: on
         tx-scatter-gather-fraglist: off [fixed]
 tcp-segmentation-offload: off

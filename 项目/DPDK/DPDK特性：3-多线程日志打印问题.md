@@ -583,7 +583,7 @@ size_t attribute_hidden __stdio_fwrite(const unsigned char * __restrict buffer,
 ```
 
 ### 小结
-如下所示，感觉 dpdk 的 rte_vlog的实现不是很合理。如果 dpvs 使用 syslog，通过如下的方式来使用：
+如下所示，感觉 dpdk 的 `rte_vlog`的实现不是很合理。如果 dpvs 使用 syslog，通过如下的方式来使用：
 ```c
 dpvs -- -l 1,2,3,4,5,6,7,8,9,10,22,23,24,25,26,27,28,29,30 -w 0000:3b:00.1 -w 0000:3b:00.0 --syslog local5
 
@@ -591,16 +591,100 @@ dpvs -- -l 1,2,3,4,5,6,7,8,9,10,22,23,24,25,26,27,28,29,30 -w 0000:3b:00.1 -w 00
 # cat /etc/rsyslog.d/xxx.conf
 local5.* /xxx/xxxx/dpvs.log
 
+比如：local5.* /data/log/xxx/dpvs.log
 ```
-rte_vlog 中的  vfprintf 没啥意义。console_log_write 中的 fwrite 也是没意义的。
+`rte_vlog` 中的  `vfprintf` 感觉没啥意义。`console_log_write` 中的 `fwrite` 感觉也是没意义的。
 ![](attachments/1682505894903.jpg)
 
 ![](attachments/1682504833067.jpg)
-虽然，这些函数的调用是没有意义的，但是却消耗的CPU。另外，比如，vfprintf  以及  fwrite 都是加锁的，但是实际没有任何作用。
+虽然，这些函数的调用是没有意义的，但是却消耗的CPU。另外，比如，`vfprintf`  以及  `fwrite` 都是加锁的，但是实际没有任何作用。
 
+# 其他
+## syslog的facility
+Syslog 的 **facility（设施）** 是用于标识日志消息来源的类别，帮助对系统或应用程序产生的**日志分类管理**。
+每个 facility 对应一个预定义的数字（0-23），代表不同的系统组件或功能模块。
+
+### 作用
+通过合理使用 `facility`，可以将不同模块或服务的日志分类存储，便于后续分析和监控。
+
+### 常见的 facility
+**（1）核心系统设施（0-15）**
+
+|设施名称|数值|说明|
+|---|---|---|
+|**kern**|0|内核产生的消息（如硬件错误、驱动问题）。|
+|**user**|1|用户级进程或应用程序的默认分类（未指定 facility 时的默认值）。|
+|**mail**|2|邮件系统相关（如 Postfix、Sendmail）。|
+|**daemon**|3|系统守护进程（如 sshd、cron）。|
+|**auth**|4|认证/安全日志（如用户登录、sudo 操作）。|
+|**syslog**|5|syslog 服务自身产生的消息（如配置错误）。|
+|**lpr**|6|打印服务（已较少使用）。|
+|**news**|7|新闻组服务（如 Usenet，现较少使用）。|
+|**uucp**|8|UUCP 协议（旧式 Unix 系统间通信，已废弃）。|
+|**cron**|9|定时任务（如 cron 或 systemd-timers）。|
+|**authpriv**|10|与 `auth` 类似，但用于记录敏感信息（如 SSH 密钥认证）。|
+|**ftp**|11|FTP 服务日志。|
+|**ntp**|12|网络时间协议（NTP）日志。|
+|**security**|13|安全审计日志（部分系统可能归为 `auth` 或 `authpriv`）。|
+|**console**|14|控制台输出的日志。|
+|**mark**|15|由 syslog 内部生成的时间戳标记（用于日志轮转等）。|
+
+
+**（2）用户自定义设施（16-23）**
+
+|设施名称|数值|说明|
+|---|---|---|
+|**local0**|16|保留给用户自定义使用（如自定义应用、服务）。|
+|**local1**|17|同上，常用于第三方服务（如 Apache/Nginx 日志）。|
+|**local2**|18|用户自定义分类。|
+|**local3**|19|用户自定义分类。|
+|**local4**|20|用户自定义分类。|
+|**local5**|21|用户自定义分类。|
+|**local6**|22|用户自定义分类。|
+|**local7**|23|用户自定义分类（部分系统默认用于引导消息 `boot.log`）。|
+
+### facility 的使用
+
+```c
+#include <syslog.h>
+#include <unistd.h>
+
+int main() {
+    // 初始化日志连接：程序名设为 "demo", 默认设施为 LOG_LOCAL0
+    openlog("demo", LOG_PID | LOG_CONS, LOG_LOCAL0);
+
+    // 记录一条日志（使用默认设施 LOG_LOCAL0）
+    syslog(LOG_INFO, "Application started");
+
+    // 动态指定设施为 LOG_LOCAL1
+    syslog(LOG_LOCAL1 | LOG_WARNING, "Disk space low");
+
+    // 关闭日志连接
+    closelog();
+    return 0;
+}
+```
+1. **默认设施**：如果未调用 `openlog`，首次调用 `syslog` 时默认设施为 `LOG_USER`。
+2. **线程安全**：`syslog` 函数是线程安全的，但 `openlog`/`closelog` 需自行处理多线程调用。
+
+
+
+### facility 和 日志文件的对应关系
+程序在使用`syslog`进行打印日志的时候，不可以指定`syslog`对应的文件，只能指定`syslog`的`facility`。
+然后在`syslog`程序的配置文件`rsyslog.conf`中，指定 `facility` 和 具体的文件的关联关系。
+
+**rsyslog.conf**的部分内容，如下所示：
+
+```bash
+# 将 mail 设施的日志写入单独文件
+mail.*      /var/log/mail.log
+
+# 将自定义应用的日志（local0）记录到 app.log
+local0.*    /var/log/app.log
+```
 
 # 解决方法
 DPDK转发线程不应该打印任何的日志。
 - 转发线程中添加统计日志
 - 设置专门打日志的线程，转发线程将日志格式化，通过rte_ring(或者链表) 传递给日志线程. 日志线程从rte_ring（或者cas取链表头）的方式获取到日志，然后进行打印。
-- 自己单独写一个写日志的函数，不使用dpdk的 rte_vlog。自己进行类似于syslog日志的切割等维护管理
+- 自己单独写一个写日志的函数，不使用`dpdk`的 `rte_vlog`，而是自己写入到指定的文件或自己调用syslog的接口等。然后自己进行类似于`syslog`日志的切割等维护管理。

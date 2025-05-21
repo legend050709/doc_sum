@@ -114,6 +114,8 @@ meson setup <options> build
 其中`"build"`是所需的输出构建目录，`"<options>"`可以为空或是一些`meson`的构建选项或`DPDK`特定的构建选项。
 配置结束（configuration finish）后，将汇总要编译(build)和安装(install)的DPDK库和驱动程序，并对每个被禁用的项目提供禁用的原因。例如，可以使用这些信息来识别任何缺失的驱动所需的软件包。
 
+
+
 ### 调整构建选项(build options)
 DPDK有许多选项可以在构建配置（build config）过程中进行调整。可以通过在配置的构建文件夹中运行`meson configure`命令来列出这些选项。
 
@@ -274,6 +276,21 @@ $ meson compile -C build
 
 （2）方式二：
  在初始的`meson`运行之后，在构建文件夹中运行`meson configure -Dbuildtype=debug`命令。
+
+
+#### 开启 lto 编译优化
+
+![](attachments/Pasted%20image%2020250420190944.png)
+
+
+使用范例，如下所示：
+```bash
+DPDK_VERSION=22.11;  mkdir -p dpdkbuild ; mkdir -p /usr/local/lib/dpdklib-${DPDK_VERSION}-nodebug-with-lto
+meson -Ddisable_libs= -Denable_kmods=true -Db_lto=true -Dprefix=/usr/local/lib/dpdklib-${DPDK_VERSION}-nodebug-with-lto dpdkbuild
+cd dpdkbuild
+ninja -j8
+ninja install
+```
 
 
 #### 调整构建的平台(platform)以及指令集

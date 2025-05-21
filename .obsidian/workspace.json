@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "项目/DPDK/DPDK项目：2-内核管理的Linux C程序使用dpdk中库.md",
-                "mode": "source",
+                "file": "日常效率工具/画图工具：1-draw.io 和 github结合.md",
+                "mode": "preview",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "DPDK项目：2-内核管理的Linux C程序使用dpdk中库"
+              "title": "画图工具：1-draw.io 和 github结合"
             }
           },
           {
@@ -55,15 +55,198 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "网络之高性能网络/RDMA基础和理论/RDMA通信库中间件：5-rsocket.md",
+                "file": "网络之高性能网络/RDMA基础和理论/RDMA通信库中间件：6-rsocket.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA通信库中间件：5-rsocket"
+              "title": "RDMA通信库中间件：6-rsocket"
+            }
+          },
+          {
+            "id": "305d2654d1ca6dc6",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "网络之高性能网络/RDMA基础和理论/RDMA通信库中间件：4-阿里RDMA通信库X-RDMA.md",
+                "mode": "preview",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "RDMA通信库中间件：4-阿里RDMA通信库X-RDMA"
+            }
+          },
+          {
+            "id": "8b590cb26e21ff14",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "网络之高性能网络/RDMA基础和理论/RDMA入门之一：1-内存地址基础知识.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "RDMA入门之一：1-内存地址基础知识"
+            }
+          },
+          {
+            "id": "efe6dfcb73075b28",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "网络之高性能网络/RDMA基础和理论/RDMA通信库中间件：4-阿里RDMA通信库X-RDMA.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "RDMA通信库中间件：4-阿里RDMA通信库X-RDMA"
+            }
+          },
+          {
+            "id": "90156792f77318aa",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "语言/C和C++/C函数：6-sprintf和snprintf.md",
+                "mode": "preview",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "C函数：6-sprintf和snprintf"
+            }
+          },
+          {
+            "id": "aeb6bc1de7c5b891",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "语言/预处理 & 编译 & 汇编 & 链接/make：2-缺乏make clean导致的问题.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "make：2-缺乏make clean导致的问题"
+            }
+          },
+          {
+            "id": "f95aa50c483ee9c2",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "网络之物理网络/四层协议/UDP/单机多IP时SIP的选择问题.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "单机多IP时SIP的选择问题"
+            }
+          },
+          {
+            "id": "4371444e67136640",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "项目/DPDK/DPDK技术基础：1-mmap的原理以及使用详解.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "DPDK技术基础：1-mmap的原理以及使用详解"
+            }
+          },
+          {
+            "id": "ba83976f59ccf260",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "网络之高性能网络/RDMA基础和理论/RDMA入门之一：4-RDMA QP和CQ.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "RDMA入门之一：4-RDMA QP和CQ"
+            }
+          },
+          {
+            "id": "d4a87f6d35a1cd89",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "操作系统/IO/网络IO模型：3-IO多路复用epoll的原理和使用介绍.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "网络IO模型：3-IO多路复用epoll的原理和使用介绍"
+            }
+          },
+          {
+            "id": "3f5304be4335d4d6",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "操作系统/IO/网络IO模型：3-IO多路复用epoll的原理和使用介绍.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "网络IO模型：3-IO多路复用epoll的原理和使用介绍"
+            }
+          },
+          {
+            "id": "e41c69385aa49a06",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "网络之高性能网络/RDMA基础和理论/RDMA通信库中间件：7-设计自定义的中间件.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "RDMA通信库中间件：7-设计自定义的中间件"
+            }
+          },
+          {
+            "id": "39f93a19541041a5",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "语言/C和C++/Linux内核数据结构：2-TAILQ和STAILQ.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "Linux内核数据结构：2-TAILQ和STAILQ"
+            }
+          },
+          {
+            "id": "476538ff7a170df4",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "操作系统/IO/网络IO模型：3-IO多路复用epoll的原理和使用介绍.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "网络IO模型：3-IO多路复用epoll的原理和使用介绍"
             }
           }
-        ]
+        ],
+        "currentTab": 12
       }
     ],
     "direction": "vertical"
@@ -82,7 +265,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "",
+                "query": "EPOLLHUP",
                 "matchingCase": true,
                 "explainSearch": false,
                 "collapseAll": false,
@@ -121,7 +304,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 460.5
+    "width": 526.5
   },
   "right": {
     "id": "a93c1244e0a44ed2",
@@ -212,49 +395,49 @@
       "command-palette:打开命令面板": false
     }
   },
-  "active": "4b107eb767b2d84e",
+  "active": "d4a87f6d35a1cd89",
   "lastOpenFiles": [
-    "Linux工具/未命名.md",
-    "项目/DPDK/DPDK项目：2-内核管理的Linux C程序使用dpdk中库.md",
-    "Linux工具/编排工具/awk的常见使用.md",
-    "Linux工具/编排工具/未命名 1.md",
-    "Linux工具/编排工具/未命名.md",
-    "项目/DPDK/DPDK特性：13-telementry的理解和使用.md",
-    "2025-04-14.md",
+    "语言/预处理 & 编译 & 汇编 & 链接/动态库和静态库/静态库：5-高效生成动态库以及静态库供其他程序使用.md",
+    "操作系统/IO/网络IO模型：3-IO多路复用epoll的原理和使用介绍.md",
+    "操作系统/IO/attachments/Pasted image 20250520104748.png",
+    "网络之物理网络/四层协议/UDP/单机多IP时SIP的选择问题.md",
+    "网络之物理网络/dns/bind9/bind9的转发器forwarder.md",
+    "语言/C和C++/Linux内核数据结构：2-TAILQ和STAILQ.md",
+    "问题定位查询/抓包/tcpdump常见命令.md",
+    "网络之物理网络/虚拟化/ipvlan的理解.md",
+    "网络之物理网络/数据中心 & 硬件 & 网卡/网卡的虚拟化技术.md",
+    "网络之物理网络/虚拟化/macvlan的理解.md",
+    "操作系统/IO/网络IO模型：2-阻塞io和非阻塞 IO.md",
+    "Linux工具/代码管理工具/git的配置以及使用.md",
+    "Linux工具/打流工具/外部拨测网站.md",
+    "Linux工具/代码管理工具.md",
+    "Linux工具/代码管理工具",
+    "语言/预处理 & 编译 & 汇编 & 链接/make：2-缺乏make clean导致的问题.md",
+    "语言/预处理 & 编译 & 汇编 & 链接/make：1-makefile和make命令.md",
+    "项目/DPDK/DPDK特性：12-rte_mempool的理解和使用.md",
+    "项目/DPDK/DPDK特性：16-DPDK的dmadev.md",
+    "项目/DPDK/DPDK技术基础：1-mmap的原理以及使用详解.md",
+    "网络之高性能网络/RDMA基础和理论/RDMA通信库中间件：7-设计自定义的中间件.md",
+    "语言/C和C++/C函数：7-exit函数.md",
+    "语言/C和C++/C函数：6-sprintf和snprintf.md",
+    "网络之物理网络/三层协议/Linux下IP层的常见数据结构.md",
+    "网络之物理网络/四层协议/TCP/TCP 四次挥手，可以变成三次吗？--转.md",
+    "项目/LB/UOA模块的理解.md",
+    "问题定位查询/gdb and SystemTap/gdb学习：3-gdb常用方法.md",
+    "操作系统/IO/attachments/Pasted image 20250513163433.png",
+    "操作系统/IO/attachments/Pasted image 20250513163246.png",
+    "操作系统/IO/attachments/Pasted image 20250513163147.png",
+    "操作系统/IO/attachments/Pasted image 20250512114757.png",
+    "操作系统/IO/attachments/Pasted image 20250512114224.png",
+    "操作系统/IO/attachments/Pasted image 20250511222753.png",
+    "操作系统/IO/attachments/Pasted image 20250511222417.png",
+    "操作系统/IO/attachments/Pasted image 20250510172726.png",
+    "项目/DPDK/attachments/Pasted image 20250509122525.png",
     "未命名 3.canvas",
     "未命名 2.canvas",
     "未命名 1.canvas",
     "未命名.canvas",
     "网络之云网络",
-    "项目/DPDK/DPDK特性：10-rte_ring无锁环形队列的理解和使用.md",
-    "项目/DPDK/attachments/Pasted image 20250413211044.png",
-    "项目/DPDK/attachments/Pasted image 20250413211042.png",
-    "项目/DPDK/attachments/Pasted image 20250413211039.png",
-    "项目/DPDK/attachments/Pasted image 20250413211004.png",
-    "项目/DPDK/attachments/Pasted image 20250413210737.png",
-    "项目/DPDK/attachments/Pasted image 20250413210719.png",
-    "项目/DPDK/attachments/Pasted image 20250413210649.png",
-    "项目/DPDK/attachments/Pasted image 20250413200725.png",
-    "项目/DPDK/attachments/Pasted image 20250413200511.png",
-    "项目/DPDK/DPDK特性：11-rte_stack的理解和使用.md",
-    "项目/DPDK/DPDK特性：12-rte_mempool的理解和使用.md",
-    "网络之高性能网络/RDMA基础和理论/RDMA入门之一：3-RDMA内存.md",
-    "语言/预处理 & 编译 & 汇编 & 链接/GLIC：高版本的glibc的安装和使用.md",
-    "语言/预处理 & 编译 & 汇编 & 链接/GCC：gcc命令使用.md",
-    "语言/预处理 & 编译 & 汇编 & 链接/GCC：高版本的gcc和cmake以及clang.md",
-    "语言/预处理 & 编译 & 汇编 & 链接/pkg-config：pkg-config命令使用.md",
-    "语言/预处理 & 编译 & 汇编 & 链接/meson：ninja 和 meson命令.md",
-    "语言/预处理 & 编译 & 汇编 & 链接/make：1-makefile和make命令.md",
-    "语言/预处理 & 编译 & 汇编 & 链接/动态库和静态库/动态库：5-程序找不到动态库.so的解决办法.md",
-    "语言/预处理 & 编译 & 汇编 & 链接/编译环境查看&版本查看.md",
-    "网络之高性能网络/RDMA基础和理论/RDMA工具：3-perftest工具集.md",
-    "网络之高性能网络/RDMA基础和理论/RDMA工具：1-工具概述.md",
-    "项目/DPDK/DPDK特性：14-DPDK的中断机制.md",
-    "网络之高性能网络/RDMA基础和理论/RDMA通信库中间件：5-rsocket.md",
-    "性能/锁/原子操作：2-原子操作和内存模型.md",
-    "性能/锁/attachments/Pasted image 20250412151904.png",
-    "性能/锁/原子操作：1-原子变量和原子操作.md",
-    "性能/锁/Linux锁的应用：linux内核sock相关锁lock_sock()与bh_lock_sock().md",
     "网络之高性能网络/GPU相关技术栈/NCCL",
     "网络之高性能网络/RDMA应用",
     "网络之高性能网络/GPU相关技术栈",
@@ -262,7 +445,6 @@
     "高性能网络/RDMA/RDMA通讯库",
     "网络之高性能网络/DPDK用户态协议栈",
     "网络之高性能网络/RDMA基础和理论/attachments",
-    "高性能网络/RDMA拥塞控制",
-    "高性能网络/通讯库"
+    "高性能网络/RDMA拥塞控制"
   ]
 }

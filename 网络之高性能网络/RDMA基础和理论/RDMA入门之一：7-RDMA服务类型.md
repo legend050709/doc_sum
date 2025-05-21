@@ -19,8 +19,16 @@
 
 # 复用QP
 ## 多个连接共享QP
+### 适用场景
+某个client 和 某个server端存在多个连接，多个连接复用一个QP。
+如果每个 client 和 server 都只是存在一个连接，都将消耗一个QP，那么就无法多个连接共享QP。
+
 ## DCT
-DCT（Dynamic Connected Transport）
+RDMA DCT（Dynamic Connected Transport）是一种用于提升RDMA（远程直接内存访问）连接可扩展性和资源效率的动态连接管理机制。
+### 核心概念
+
+### 适用场景
+
 
 # 参考
 ```bash

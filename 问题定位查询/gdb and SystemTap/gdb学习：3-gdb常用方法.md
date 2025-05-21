@@ -522,6 +522,115 @@ type = struct {
 $1 = (void *) 0x850e
 ```
 
+# 反汇编
+
+# 寄存器
+## 查看寄存器的值
+### 查看所有寄存器的值
+`info registers` 可以查看所有寄存器的值，如下所示：
+
+```bash
+(gdb) info registers
+rax            0x450640            4523584
+rbx            0x7ffd2afda9e0      140725324720608
+rcx            0x0                 0
+rdx            0x0                 0
+rsi            0x80                128
+rdi            0x0                 0
+rbp            0x1401b3d10         0x1401b3d10
+rsp            0x7ffd2afda7c0      0x7ffd2afda7c0
+r8             0x0                 0
+r9             0x7ffd2afda5f0      140725324719600
+r10            0x0                 0
+r11            0x7f2441dcfab0      139793700551344
+r12            0xb                 11
+r13            0x1401b3cd0         5370494160
+r14            0x0                 0
+r15            0xffffffff          4294967295
+rip            0x41614a            0x41614a <rdma_fcntl+634>
+eflags         0x10206             [ PF IF RF ]
+cs             0x33                51
+ss             0x2b                43
+ds             0x0                 0
+es             0x0                 0
+fs             0x0                 0
+gs             0x0                 0
+k0             0x12012001          302063617
+k1             0x1                 1
+k2             0xfefe0000          4278059008
+k3             0x0                 0
+k4             0xfffffffb          4294967291
+k5             0x0                 0
+k6             0x0                 0
+k7             0x0                 0
+```
+
+### 查看指定寄存器的值
+`info registers [xxx] [yyy] ...` 可以查看寄存器 xxx, yyy的值。
+```bash
+(gdb) info registers rdi rsi
+rdi            0x0                 0
+rsi            0x80                128
+(gdb) info registers rbp rbx
+rbp            0x1401b3d10         0x1401b3d10
+rbx            0x7ffd2afda9e0      14072532472060
+```
+
+或者 通过`p/x $xxx`的方式，查看某个寄存器的值。
+```bash
+(gdb) p/x $rdi
+$5 = 0x0
+(gdb) p/x $rsi
+$6 = 0x80
+(gdb) p/x $rbp
+$7 = 0x1401b3d10
+(gdb) p/x $rbx
+$8 = 0x7ffd2afda9e0
+```
+
+## 变量优化
+### 范例
+```c
+(gdb) bt
+#0  0x00007f2441dcfaca in ibv_create_cq () from /usr/lib64/libibverbs.so.1
+#1  0x000000000041614a in rdma_create_comp_channel (cntl=<optimized out>, conn=0x1401b3d10)
+    at rdma/rdma_cq.c:61
+#2  rdma_comp_channel_ctl (cntl=0x7ffd2afda9e0, conn=0x1401b3d10) at rdma/rdma_cq.c:86
+#3  rdma_fcntl (data=0x1401b3d10, type=<optimized out>, cntl=0x7ffd2afda9e0) at rdma/rdma.c:188
+#4  0x0000000000412ea6 in kucl_epoll_create (size=100) at socket/poll.c:56
+#5  main (argc=<optimized out>, argv=<optimized out>) at ibv_test_server.c:172
+
+```
+如上所示，f1中的 cntl 被优化了，其实根据`f2`可知道，其值为 `0x7ffd2afda9e0`，那么假装不知道，来进行分析。
+
+实际的函数原型为：`int rdma_comp_channel_ctl(struct kucl_rdma_conn *conn, kucl_cntl_data *cntl);`
+函数参数的位置和`bt`中的函数参数的顺序好像不太对应（应该是编译器的优化导致）。
+
+#### 分析
+在x86_64中，前六个整数或指针参数依次通过`rdi、rsi、rdx、rcx、r8、r9`传递。
+函数可能在进入时已经将参数存到了其他寄存器或栈上，所以可能需要查看函数入口处的汇编代码，确认参数是否被移动到了其他位置。用户可以使用`disassemble`命令反汇编函数（重点查看，是否存在反汇编开头的 mov指令，比如`mov %rdi,%rax` 或`mov %rsi,%rbx`），看看`rdi`的值是否被保存到其他地方，比如rax或其他寄存器，然后查看对应的寄存器。
+
+#### 查看
+(1) 查看反汇编：
+![](attachments/Pasted%20image%2020250422153714.png)
+
+(2) 查看寄存器的值
+```bash
+(gdb) info registers rdi rsi
+rdi            0x0                 0
+rsi            0x80                128
+(gdb) info registers rbp rbx
+rbp            0x1401b3d10         0x1401b3d10
+rbx            0x7ffd2afda9e0      140725324720608
+(gdb) p *(kucl_cntl_data *)0x7ffd2afda9e0
+$4 = {
+  op = 1,
+  epfd = 11,
+  data = 0x1401b3cd0,
+  events = 2147483653
+}
+```
+
 
 # 其他
 ## 非交互式设置与打印
