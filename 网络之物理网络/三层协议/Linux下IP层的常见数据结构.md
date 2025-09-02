@@ -33,6 +33,8 @@ int bind(int socket_fd, sockaddr* p_addr, int add_size)
 # 数据结构
 ## ipv4：`struct sockaddr_in`
 ```c
+#include <netinet/in.h>
+
    typedef unsigned short int sa_family_t;
 
    struct sockaddr_in {
@@ -54,6 +56,8 @@ int bind(int socket_fd, sockaddr* p_addr, int add_size)
 ```
 ## ipv6：`struct sockaddr_in6`
 ```c
+#include <netinet/in.h>
+
    struct sockaddr_in6 {
 	   sa_family_t     sin6_family;   /* AF_INET6 */
 	   in_port_t       sin6_port;     /* port number */
@@ -86,6 +90,8 @@ int bind(int socket_fd, sockaddr* p_addr, int add_size)
 ### `struct sockaddr`
 通用结构体1: `struct sockaddr`, 16个字节
 ```c
+/* /usr/include/bits/socket.h */
+
 typedef unsigned short __kernel_sa_family_t;
 
 typedef __kernel_sa_family_t sa_family_t;

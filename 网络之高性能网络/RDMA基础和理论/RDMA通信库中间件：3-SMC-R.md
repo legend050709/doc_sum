@@ -23,4 +23,9 @@ https://www.ieisystem.com/keyarchos/news/12927.html
 
 # alibaba: 共享内存通信（SMC）适用性说明
 https://www.alibabacloud.com/help/zh/alinux/user-guide/smc-applicability
+
+
+# 基于 RDMA 的共享内存通信 (SMC-R) 【图不错；】
+https://www.ibm.com/docs/zh/aix/7.3.0?topic=access-shared-memory-communications-over-rdma-smc-r
+https://www.ibm.com/docs/en/aix/7.2.0?topic=access-shared-memory-communications-over-rdma-smc-r
 ```

@@ -244,6 +244,31 @@ struct rte_mempool * rte_mempool_create(const char *name, unsigned n, unsigned e
 	int socket_id, unsigned flags);
 ```
 
+### obj_init：创建mempoll的同时设置每个对象的回调函数进行对象的初始化
+```c
+/**
+ * An object callback function for mempool.
+ *
+ * Used by rte_mempool_create() and rte_mempool_obj_iter().
+ */
+typedef void (rte_mempool_obj_cb_t)(struct rte_mempool *mp,
+        void *opaque, void *obj, unsigned obj_idx);
+typedef rte_mempool_obj_cb_t rte_mempool_obj_ctor_t; /* compat */
+
+参数：
+	obj: 这个对象的地址
+	obj_idx：对象的索引，比如mempool中含有n个对象+m个cache；该对象的索引。
+```
+
+#### mempool含有cache与否是否影响实体初始化时实体的idx？
+测试：可以写个程序测试下，打印出idx，看看idx的最大值，是否等于`实体个数+缓存个数*lcore个数`。
+
+
+#### 使用场景
+比如：正常情况下，创建一个实体大小为`4k`，一共有N个实体的`mempool`，那么`mempool`的每个元素的大小就是`4k`。
+另外，一种方法，也可以是提前通过`rte_malloc`申请`4k*N`的空间，然后`mempool`中的每个元素只是一个包含其对应实体地址的结构体，`mempool`一共有N个这样的元素。创建`mempool`的同时，通过元素初始化的回调函数`obj_init`来初始化每个元素中对应实体地址。
+
+
 ## rte_mempool_get
 ## rte_mempool_put
 

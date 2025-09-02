@@ -43,10 +43,13 @@ libibverbs-utils-50mlnx1-1.50218.x86_64
 ```
 
 ### 工具
+
 #### ibv_devices
+
 - **ibv_devices**：列出系统中所有的 IB 设备
 
 #### ibv_devinfo
+
 - **ibv_devinfo**：显示 IB 设备的详细信息
 
 #### ibv_rc_pingpong
@@ -516,8 +519,8 @@ infiniband-diags-50mlnx1-1.50218.x86_64
 ```
 
 ### 工具
+
 - **rdma**：RDMA 子系统管理工具
-    
 - **rxe_cfg**：软件 RDMA 配置工具，弃用，逐步被 rdma 命令替代
     
 
@@ -564,7 +567,143 @@ infiniband-diags-50mlnx1-1.50218.x86_64
 - **ib_read_lat**：RDMA read 延迟测试
     
 - **ib_write_lat**：RDMA write 延迟测试
-    
+
+## qperf
+### 介绍
+网络性能主要有两个指标是带宽和延时。`qperf`和`iperf/netperf`一样可以评测两个节点之间的带宽和延时。可以在测试`tcp/ip`协议和`RDMA`传输。不过相比`netperf`和`iperf`，支持`RDMA`是`qperf`工具的独有特性。
+
+
+
+### 包内容
+```bash
+# yum install -y qperf
+
+# rpm -ql qperf
+/usr/bin/qperf
+/usr/share/doc/qperf-0.4.9
+/usr/share/doc/qperf-0.4.9/COPYING
+/usr/share/man/man1/qperf.1.gz
+
+
+# rpm -qR qperf
+libc.so.6()(64bit)
+libc.so.6(GLIBC_2.14)(64bit)
+libc.so.6(GLIBC_2.15)(64bit)
+libc.so.6(GLIBC_2.2.5)(64bit)
+libc.so.6(GLIBC_2.3)(64bit)
+libc.so.6(GLIBC_2.3.4)(64bit)
+libc.so.6(GLIBC_2.4)(64bit)
+libc.so.6(GLIBC_2.8)(64bit)
+libibverbs.so.1()(64bit)
+libibverbs.so.1(IBVERBS_1.0)(64bit)
+libibverbs.so.1(IBVERBS_1.1)(64bit)
+librdmacm.so.1()(64bit)
+librdmacm.so.1(RDMACM_1.0)(64bit)
+rpmlib(CompressedFileNames) <= 3.0.4-1
+rpmlib(FileDigests) <= 4.6.0-1
+rpmlib(PayloadFilesHavePrefix) <= 4.0-1
+rtld(GNU_HASH)
+rpmlib(PayloadIsXz) <= 5.2-1
+
+如上所示，安装qperf，同时会安装两个依赖包(libibverbs, librdmacm),是直接和rdma功能相关的，不然无法启动rdma功能。
+```
+
+### 使用
+`qperf`是测试两个节点之间的带宽和延时的，为此需要一个当作服务端，一个当作客户端。
+
+其中服务端直接运行`qperf`, 无需任何参数。
+```bash
+#qperf  
+默认开启端口号：19765  
+通过netstat查看，如下:  
+#netstat –tunlup  
+tcp 0 0 0.0.0.0:19765 0.0.0.0:* LISTEN 53755/qperf
+```
+
+客户端运行获取带宽、延时情况，运行过程中不需要指定端口号，只要指定主机名或者`ip`地址即可。
+
+![](attachments/Pasted%20image%2020250720124903.png)
+
+```bash
+RDMA Send/Receive
+    rc_bi_bw                RC streaming two way bandwidth
+    rc_bw                   RC streaming one way bandwidth
+    rc_lat                  RC one way latency
+    uc_bi_bw                UC streaming two way bandwidth
+    uc_bw                   UC streaming one way bandwidth
+    uc_lat                  UC one way latency
+    ud_bi_bw                UD streaming two way bandwidth
+    ud_bw                   UD streaming one way bandwidth
+    ud_lat                  UD one way latency
+    xrc_bi_bw               XRC streaming two way bandwidth
+    xrc_bw                  XRC streaming one way bandwidth
+    xrc_lat                 XRC one way latency
+RDMA  write/read
+    rc_rdma_read_bw         RC RDMA read streaming one way bandwidth
+    rc_rdma_read_lat        RC RDMA read one way latency
+    rc_rdma_write_bw        RC RDMA write streaming one way bandwidth
+    rc_rdma_write_lat       RC RDMA write one way latency
+    rc_rdma_write_poll_lat  RC RDMA write one way polling latency
+    uc_rdma_write_bw        UC RDMA write streaming one way bandwidth
+    uc_rdma_write_lat       UC RDMA write one way latency
+    uc_rdma_write_poll_lat  UC RDMA write one way polling latency
+InfiniBand Atomics
+    rc_compare_swap_mr      RC compare and swap messaging rate
+    rc_fetch_add_mr         RC fetch and add messaging rate
+Verification
+    ver_rc_compare_swap     Verify RC compare and swap
+    ver_rc_fetch_add        Verify RC fetch and add
+```
+
+![](attachments/Pasted%20image%2020250720125455.png)
+
+![](attachments/Pasted%20image%2020250720131043.png)
+
+#### RDMA测试
+如果网卡支持RDMA功能，例如IB卡，那么可以进行RDMA性能测试：
+为了使用 RoCE 运行 qperf，应该在客户端添加 -cm1 标志。(mellonx)
+```bash
+-cm, --use_cm OnOff
+	  Use the RDMA Connection Manager (CM) if OnOff is non-zero.  It is necessary to  use  the  CM
+	  for  iWARP  devices.  The default is to establish the connection without using the CM.  This
+	  only works for the tests that use the RC transport.
+
+-cm1   Use RDMA Connection Manager.
+```
+
+
+```bash
+服务端：
+`qperf`
+
+客户端
+send/receive
+`qperf -cm1 172.17.31.51 rc_lat`
+`qperf -cm1 172.17.31.51 rc_bw`
+
+write/read
+`qperf -cm1 172.17.31.51`rc_rdma_write`_lat`
+`qperf -cm1 172.17.31.51`rc_rdma_write_bw
+
+数据包size： -m 
+qperf -cm1 172.17.31.51 -m 1M rc_bw
+
+数据包数量： -n
+qperf -cm1 172.17.31.51 -m 1M -n 1000 rc_bw
+
+polling或者wait event模式, -cq 1: 开始polling模式。
+qperf -cm1 172.17.31.51 -m 1M -cp 0  rc_bw
+
+设置持续时间：-t 默认是s， 加m、h、d 可表示分钟、小时、天
+qperf  -cm1 172.17.31.51 -m 1M -t 20 rc_bw #20s
+qperf  -cm1 172.17.31.51 -m 1M -t 20m rc_bw #20分钟
+```
+
+### 源码
+参考：[linux-rdma/qperf](https://github.com/linux-rdma/qperf)
+
+
+
 ## iproute2 包
 iproute2是一个强大的网络管理工具集(ip, tc, rdma, devlink等)，其中包括许多用于配置和管理网络设备的工具。iproute2套件中的RDMA 工具为管理和配置 RDMA 设备提供了强大和丰富的功能。
 
@@ -832,6 +971,14 @@ Usage: rdma resource
           resource show pd dev [DEV] [FILTER-NAME FILTER-VALUE]
           resource show mr dev [DEV]
           resource show mr dev [DEV] [FILTER-NAME FILTER-VALUE]
+
+使用：
+/opt/mellanox/iproute2/sbin/rdma resource show
+/opt/mellanox/iproute2/sbin/rdma resource show qp
+/opt/mellanox/iproute2/sbin/rdma resource show cq
+/opt/mellanox/iproute2/sbin/rdma resource show mr
+/opt/mellanox/iproute2/sbin/rdma resource show pd
+
 ```
 
 ```bash
@@ -872,9 +1019,12 @@ rdma system set netns exclusive
 
 
 #### rdma statistic
-用于查询和配置 RDMA 设备的统计信息
+用于查询和配置 RDMA 设备的统计信息。
+
+注：==`rdma statistic show` 其实读取的是`/sys/class/infiniband/xx/hw_counters「比如：/sys/class/infiniband/mlx5_0/ports/1/hw_counters/」`目录下的统计数据==。
 
 ```bash
+# man 8 rdma-statistic
 # /opt/mellanox/iproute2/sbin/rdma statistic help
 Usage: rdma [ OPTIONS ] statistic { COMMAND | help }
        rdma statistic OBJECT show
@@ -961,9 +1111,69 @@ librdmacm-utils-58mlnx43-1.58101.x86_64
 #### rdma_client/rdma_server
 - **rdma_client/rdma_server**：RDMA 客户端/服务器测试程序
 
-## mlnx-ofa_kernel 包
+
+## mlnx工具包：mlnx-ofa_kernel 包或者 mlnx-tools包
+```bash
+(1) 设备一
+# which show_gids
+/sbin/show_gids
+
+# rpm -qf /sbin/show_gids
+mlnx-tools-5.2.0-0.54310.x86_64
+
+
+
+（2）设备二
+# which show_gids
+/sbin/show_gids
+
+# rpm -qf /sbin/show_gids
+mlnx-ofa_kernel-5.1-OFED.5.1.2.3.7.1.rhel7u4.x86_64
+```
 ### 包内容
 ![](attachments/Pasted%20image%2020250403113036.png)
+
+
+```bash
+# rpm -ql mlnx-tools-5.2.0-0.54310.x86_64
+/lib/udev/mlnx_bf_udev
+/sbin/mlnx-sf
+/sbin/mlnx_bf_configure
+/sbin/mlnx_bf_configure_ct
+/sbin/sysctl_perf_tuning
+/usr/bin/mlnx_dump_parser
+/usr/bin/mlnx_perf
+/usr/bin/mlnx_qos
+/usr/bin/mlx_fs_dump
+/usr/bin/tc_wrap.py
+/usr/lib/python2.7/site-packages/dcbnetlink.py
+/usr/lib/python2.7/site-packages/dcbnetlink.pyc
+/usr/lib/python2.7/site-packages/dcbnetlink.pyo
+/usr/lib/python2.7/site-packages/genetlink.py
+/usr/lib/python2.7/site-packages/genetlink.pyc
+/usr/lib/python2.7/site-packages/genetlink.pyo
+/usr/lib/python2.7/site-packages/mlnx_tools-5.2.0-py2.7.egg-info
+/usr/lib/python2.7/site-packages/netlink.py
+/usr/lib/python2.7/site-packages/netlink.pyc
+/usr/lib/python2.7/site-packages/netlink.pyo
+/usr/sbin/cma_roce_mode
+/usr/sbin/cma_roce_tos
+/usr/sbin/common_irq_affinity.sh
+/usr/sbin/compat_gid_gen
+/usr/sbin/ib2ib_setup
+/usr/sbin/mlnx_affinity
+/usr/sbin/mlnx_tune
+/usr/sbin/set_irq_affinity.sh
+/usr/sbin/set_irq_affinity_bynode.sh
+/usr/sbin/set_irq_affinity_cpulist.sh
+/usr/sbin/show_counters
+/usr/sbin/show_gids
+/usr/sbin/show_irq_affinity.sh
+/usr/sbin/show_irq_affinity_hints.sh
+/usr/share/doc/mlnx-tools-5.2.0
+/usr/share/doc/mlnx-tools-5.2.0/ib2ib_setup.txt
+/usr/share/man/man8/ib2ib_setup.8.gz
+```
 
 ### 工具
 #### ibdev2netdev
@@ -980,7 +1190,216 @@ mlx5_3 port 1 ==> eth04 (Up)
 其中 mlx5_0 对应以太网端口 eth01 (ifconfig 可以看出来)
 ```
 
+#### show_gids
+##### 介绍
+```bash
+# which show_gids
+/sbin/show_gids
+
+# file /sbin/show_gids
+/sbin/show_gids: Bourne-Again shell script, ASCII text executable
+
+
+```
+##### 使用场景
+```c
+（1）如下所示，本端获取gid时，需要指定 port_num, gid index。
+/**
+ * ibv_query_gid - Get a GID table entry.
+ * ibv_query_gid() : returns the value of an index in The GID table of an RDMA device port's.
+ */
+int ibv_query_gid(struct ibv_context *context, uint8_t port_num,
+          int index, union ibv_gid *gid);
+
+
+
+
+(2) 如下所示，设置RTR时，需要设置 sgid_index。
+struct ibv_qp_attr attr_rtr = {
+    .qp_state = IBV_QPS_RTR,
+    .path_mtu = IBV_MTU_1024,
+    .rq_psn = 0,
+    .dest_qp_num = dst.qp_num,
+    .max_dest_rd_atomic = 1,
+    .min_rnr_timer = 12,
+    .ah_attr = {
+        .is_global = 1,
+        .port_num = 1,
+        .grh = {.sgid_index = 1, .dgid = dst.gid},
+    }};
+
+ret = ibv_modify_qp(ib_qp, &attr_rtr,
+                    IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU |
+                        IBV_QP_DEST_QPN | IBV_QP_RQ_PSN |
+                        IBV_QP_MIN_RNR_TIMER | IBV_QP_MAX_DEST_RD_ATOMIC);
+```
+
+##### gid的选择
+`gid`的选择，需要保持可路由性。
+如下所示：对于设备一，则选择 index为2或者3均可「存在对外可路由的 ipv4 地址」。对于设备二，则 hrn3_bond_0 网卡选择 index 为 1.
+
+**选择的原则**
+（1）一个RDMA设备可能有多个端口（但通常我们使用端口1）。
+（2）每个端口可能有多个GID（Global Identifier），每个GID对应一个IP地址（IPv4或IPv6）。
+（3）在连接建立时，客户端和服务器端需要选择兼容的GID（例如，相同的IP版本和网络可达性）。
+（4）常见的做法是选择与连接对端IP地址类型相匹配的GID（例如，如果对端是IPv4，则选择IPv4 GID；如果是IPv6，则选择IPv6 GID）。
+（5）另外，我们可能希望选择与对端IP地址在同一个子网的GID，或者选择RoCEv2的GID（因为RoCEv2同时支持IPv4和IPv6，但实际上RoCEv2使用IPv4或IPv6作为网络层，但数据包格式是固定的）。
+
+
+##### 范例
+```bash
+（1）设备一：
+# show_gids
+DEV	PORT	INDEX	GID					IPv4  		VER	DEV
+---	----	-----	---					------------  	---	---
+mlx5_bond_0	1	0	fe80:0000:0000:0000:0e42:a1ff:fead:479a			v1	bond0
+mlx5_bond_0	1	1	fe80:0000:0000:0000:0e42:a1ff:fead:479a			v2	bond0
+mlx5_bond_0	1	2	0000:0000:0000:0000:0000:ffff:0a60:531a	10.96.83.26  	v1	bond0
+mlx5_bond_0	1	3	0000:0000:0000:0000:0000:ffff:0a60:531a	10.96.83.26  	v2	bond0
+n_gids_found=4
+
+注：如上所示, v1、v2应该是指的是 ROCEV1(基于ethernet), ROCEV2(基于ipv4/ipv6).
+
+（2）设备二：
+# show_gids
+DEV	PORT	INDEX	GID					IPv4  		VER	DEV
+---	----	-----	---					------------  	---	---
+hrn3_bond_0	1	0	fe80:0000:0000:0000:aedc:caff:fe6c:9312			v2	bond0
+hrn3_bond_0	1	1	0000:0000:0000:0000:0000:ffff:1b69:b403	27.105.180.3  	v2	bond0
+mlx5_bond_0	1	0	fe80:0000:0000:0000:0ac0:ebff:fe8c:3b44			v1	bond1
+mlx5_bond_0	1	1	fe80:0000:0000:0000:0ac0:ebff:fe8c:3b44			v2	bond1
+n_gids_found=4
+```
+
+##### 华为网卡的：hiroce3 gids
+```bash
+# which hiroce3
+/usr/local/bin/hiroce3
+
+# file /usr/local/bin/hiroce3
+/usr/local/bin/hiroce3: Bourne-Again shell script, ASCII text executable
+
+# rpm -qf /usr/local/bin/hiroce3
+hiroce3-17.7.7.2_4.18.0_2.4.3.3.kwai.x86_64-1.el7.centos.x86_64
+
+# rpm -ql hiroce3
+/etc/depmod.d/hiroce3.conf
+/etc/libibverbs.d/hrn3.driver
+/etc/modules-load.d/hiroce3-modules.conf
+/lib/modules/4.18.0-2.4.3.3.kwai.x86_64/extra/hiroce3/hiroce3.ko
+/usr/lib64/libhrn3-rdmav.so
+/usr/lib64/libhrn3-rdmav34.so
+/usr/local/bin/hiroce3
+```
+
+```bash
+# hiroce3 -h
+	Usage: hiroce3 <major_cmd> [option]
+		-h, --help	show help info
+
+	Major Commands:
+		gids	show all gids
+
+# hiroce3 gids
+ib_dev    	net_dev   	port idx  gid                                      type     ip              link
+----------	----------	---- ---  ---------------------------------------  -------  --------------  ----
+hrn3_bond_0	bond0     	1    0    fe80:0000:0000:0000:aedc:caff:fe6c:9312  RoCE v2                  up
+hrn3_bond_0	bond0     	1    1    0000:0000:0000:0000:0000:ffff:1b69:b403  RoCE v2  27.105.180.3    up
+mlx5_0    	eth02     	1    0    fe80:0000:0000:0000:0ac0:ebff:fe8c:3b44  RoCE v1                  down
+mlx5_0    	eth02     	1    1    fe80:0000:0000:0000:0ac0:ebff:fe8c:3b44  RoCE v2                  down
+mlx5_1    	eth03     	1    0    fe80:0000:0000:0000:0ac0:ebff:fe8c:3b45  RoCE v1                  down
+mlx5_1    	eth03     	1    1    fe80:0000:0000:0000:0ac0:ebff:fe8c:3b45  RoCE v2                  down
+```
+
 #### show_counters
+```bash
+(1) 脚本文件
+# which show_counters
+/sbin/show_counters
+
+# file /sbin/show_counters
+/sbin/show_counters: Bourne-Again shell script, ASCII text executable
+
+
+（2）使用方法
+# show_counters
+Valid command is: show_rdma_counters <rdma_device_name>
+Example:
+show_rdma_counters mlx5_0
+
+
+# show_counters mlx5_bond_0
+Port 1 hw counters:
+duplicate_request: 0
+implied_nak_seq_err: 0
+lifespan: 10
+local_ack_timeout_err: 0
+np_cnp_sent: 1052612505
+np_ecn_marked_roce_packets: 21278189006
+out_of_buffer: 0
+out_of_sequence: 1811101
+packet_seq_err: 0
+req_cqe_error: 0
+req_cqe_flush_error: 0
+req_remote_access_errors: 0
+req_remote_invalid_request: 0
+resp_cqe_error: 3293504
+resp_cqe_flush_error: 3211234
+resp_local_length_error: 0
+resp_remote_access_errors: 0
+rnr_nak_retry_err: 0
+roce_adp_retrans: 0
+roce_adp_retrans_to: 0
+roce_slow_restart: 0
+roce_slow_restart_cnps: 0
+roce_slow_restart_trans: 0
+rp_cnp_handled: 0
+rp_cnp_ignored: 0
+rx_atomic_requests: 0
+rx_dct_connect: 0
+rx_icrc_encapsulated: 0
+rx_read_requests: 0
+rx_write_requests: 2402134794
+
+
+（3）原理
+读取下面的文件的内容：
+
+# ll /sys/class/infiniband/mlx5_bond_0/ports/1/hw_counters/
+total 0
+-r--r--r-- 1 root root 4096 Jul  1 14:38 duplicate_request
+-r--r--r-- 1 root root 4096 Jul  1 14:38 implied_nak_seq_err
+-rw-r--r-- 1 root root 4096 Jul  1 14:38 lifespan
+-r--r--r-- 1 root root 4096 Jul  1 14:38 local_ack_timeout_err
+-r--r--r-- 1 root root 4096 Jul  1 14:38 np_cnp_sent
+-r--r--r-- 1 root root 4096 Jul  1 14:38 np_ecn_marked_roce_packets
+-r--r--r-- 1 root root 4096 Jul  1 14:38 out_of_buffer
+-r--r--r-- 1 root root 4096 Jul  1 14:38 out_of_sequence
+-r--r--r-- 1 root root 4096 Jul  1 14:38 packet_seq_err
+-r--r--r-- 1 root root 4096 Jul  1 14:38 req_cqe_error
+-r--r--r-- 1 root root 4096 Jul  1 14:38 req_cqe_flush_error
+-r--r--r-- 1 root root 4096 Jul  1 14:38 req_remote_access_errors
+-r--r--r-- 1 root root 4096 Jul  1 14:38 req_remote_invalid_request
+-r--r--r-- 1 root root 4096 Jul  1 14:38 resp_cqe_error
+-r--r--r-- 1 root root 4096 Jul  1 14:38 resp_cqe_flush_error
+-r--r--r-- 1 root root 4096 Jul  1 14:38 resp_local_length_error
+-r--r--r-- 1 root root 4096 Jul  1 14:38 resp_remote_access_errors
+-r--r--r-- 1 root root 4096 Jul  1 14:38 rnr_nak_retry_err
+-r--r--r-- 1 root root 4096 Jul  1 14:38 roce_adp_retrans
+-r--r--r-- 1 root root 4096 Jul  1 14:38 roce_adp_retrans_to
+-r--r--r-- 1 root root 4096 Jul  1 14:38 roce_slow_restart
+-r--r--r-- 1 root root 4096 Jul  1 14:38 roce_slow_restart_cnps
+-r--r--r-- 1 root root 4096 Jul  1 14:38 roce_slow_restart_trans
+-r--r--r-- 1 root root 4096 Jul  1 14:38 rp_cnp_handled
+-r--r--r-- 1 root root 4096 Jul  1 14:38 rp_cnp_ignored
+-r--r--r-- 1 root root 4096 Jul  1 14:38 rx_atomic_requests
+-r--r--r-- 1 root root 4096 Jul  1 14:38 rx_dct_connect
+-r--r--r-- 1 root root 4096 Jul  1 14:38 rx_icrc_encapsulated
+-r--r--r-- 1 root root 4096 Jul  1 14:38 rx_read_requests
+-r--r--r-- 1 root root 4096 Jul  1 14:38 rx_write_requests
+```
+
+
 
 ### 范例
 （1） 基础信息
@@ -1210,6 +1629,27 @@ hca_id:	mlx5_3
 			port_lid:		0
 			port_lmc:		0x00
 			link_layer:		Ethernet
+```
+
+
+## 华为工具包：hinicadm3
+```bash
+# which hinicadm3
+/sbin/hinicadm3
+
+# rpm -qf /sbin/hinicadm3
+hinicadm3-17.7.7.2-1.x86_64
+```
+### 包内容
+```bash
+# rpm -ql hinicadm3-17.7.7.2-1.x86_64
+/opt/hinic/driver/libhicsrdump.so
+/usr/sbin/hinicadm3
+```
+### 工具
+#### hinicadm3
+```bash
+hinicadm3 counter -i hinic0 -t 1 -x 4
 ```
 
 

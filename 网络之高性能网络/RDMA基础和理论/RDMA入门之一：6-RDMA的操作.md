@@ -22,6 +22,9 @@ RDMA API (Verbs)主要有两种Verbs：
 
 在实际中， SEND /RECEIVE多用于连接控制类报文，而数据报文多是通过READ/WRITE来完成的 。
 
+- **双边操作**（Send/Send with Imm）：依赖接收方缓冲区 → **通用性强**（支持所有类型）。
+- **单边操作**（Read/Write/Atomic）：需主动访问远程内存 → **依赖连接状态**（RC/UC/XRC）。
+
 ### 单边操作（One-Sided）
 
 - **定义**：**仅需单端CPU参与**，远程端无需感知操作。数据直接从本地内存写入/读取远程内存。
@@ -46,6 +49,8 @@ RDMA API (Verbs)主要有两种Verbs：
     - **延迟较高**：涉及接收方CPU参与（缓冲区准备、确认）。
 - **适用场景**：
     - 传统消息传递（如MPI）、需要握手的协议。
+
+
 
 ## 单向操作和双向操作
 ### 单向操作（Unidirectional）
@@ -73,13 +78,13 @@ RDMA API (Verbs)主要有两种Verbs：
 - **单边/双边**：取决于**是否需要远程CPU参与**（单边操作完全绕过远程CPU）。
 - **单向/双向**：取决于**数据是否双向流动**（如Read需要双向交互）。
 
-# 操作的整体介绍
+# 操作的整体流程
 
 ![](attachments/Pasted%20image%2020250323232553.png)
 
-1. 提交任务：App 通过将 WQE 放入 SQ / RQ 来提交一个任务。
-2. 完成任务：RNIC 根据 WQE 执行任务，然后生成一个 CQE，包含该任务的完成信息，并放入 CQ。
-3. 检查结果：App 检查 CQ，确认任务完成情况。如果失败，则可以查看 CQE 信息来了解失败的原因。
+2. 提交任务：App 通过将 WQE 放入 SQ / RQ 来提交一个任务。
+3. 完成任务：RNIC 根据 WQE 执行任务，然后生成一个 CQE，包含该任务的完成信息，并放入 CQ。
+4. 检查结果：App 检查 CQ，确认任务完成情况。如果失败，则可以查看 CQE 信息来了解失败的原因。
 
 
 # 单边(one-side)操作（Memory verbs）
@@ -129,6 +134,18 @@ Write API：单端操作，Sender 主动执行，只需要本端明确源和目�
 
 ![](attachments/Pasted%20image%2020250323232653.png)
 
+### write操作的保序
+默认乱序，需FENCE标志保序。
+
+#### 带 fence的 write
+
+### write的原子操作
+#### Compare-and-Swap
+#### Fetch-and-Add
+
+
+## RDMA write with imm
+
 # 双边(two-side)操作（Messaging verbs）
 
 SEND/RECEIVE是双边操作，即需要通信双方的参与，并且RECEIVE要先于SEND执行（先下发 Receive WQE，然后 Sender 才会下发 Send WQE）。
@@ -150,18 +167,26 @@ SEND/RECEIVE是双边操作，即需要通信双方的参与，并且RECEIVE要�
 （10）App A 接受到 CQE 的反馈。
 
 
-## RDMA Send 
+## Send 
+
+## Send with Immediate
+
 ## RDMA Receive
 
 ## 单边和双边的关系
+
+### 单边和双边的组合
 通常在进行 Read / Write API 等单边操作之前，都需要先完成 Send-Receive API 双边操作，交换一些 QP 配置控制信令，包括：
 （1）Local 和 Remote Memory Region 信息
 （2）Local 和 Remote rkey（内存钥匙，控制内存的访问权限）信息
 （3）etc…
 
 
+# 服务类型(RC/UD等)和单边/双边操作的关系
+## 各个服务类型支持的操作
+![](attachments/Pasted%20image%2020250709195855.png)
 
-# 服务类型(RC/UD)和单边/双边操作的关系
+![](attachments/Pasted%20image%2020250709195934.png)
 
 ## 服务类型和单边/双边操作的组合如何选择?
 

@@ -30,6 +30,12 @@ struct rte_mempool * rte_pktmbuf_pool_create_by_ops(const char *name, unsigned i
 struct rte_mempool * rte_pktmbuf_pool_create(const char *name, unsigned int n,
     unsigned int cache_size, uint16_t priv_size, uint16_t data_room_size,
     int socket_id);
+
+struct rte_mempool * rte_pktmbuf_pool_create_extbuf(const char *name, unsigned int n,
+  unsigned int cache_size, uint16_t priv_size,
+  uint16_t data_room_size, int socket_id,
+  const struct rte_pktmbuf_extmem *ext_mem,
+  unsigned int ext_num);
 ```
 rte_pktmbuf_pool_create_by_ops()和rte_pktmbuf_pool_create()的差异在于前者指定了rte_mempool_ops的名字。
 如果上层应用自己没有实现 rte_mempool_ops，或者在eal层初始化时没有指定，则用rte_pktmbuf_pool_create()创建时，默认会使用 ring_mp_mc(支持多生产者多消费者)。
@@ -376,6 +382,49 @@ rte_mbuf结构体使用 hash.rss 来存放网卡计算的RSS hash值, 它是一�
 Mbuf报头包含包处理所需的所有数据，对于单个Mbuf存放不下的巨型帧（Jumbo Frame），Mbuf还有指向下一个Mbuf结构的指针来形成帧链表结构。
 因此，rte_mbuf中有个next域段，如果一个报文只有一个mbuf，则mbuf中的next为NULL;如果一个报文由多个mbuf构成，则mbuf的next被用来指向下一个mbuf。
 ![](attachments/Pasted%20image%2020231025111907.png)
+
+# 外部内存
+## 背景
+比如：存储场景中，在一个程序中，网络层面使用DPDK收到数据，然后直接零拷贝的将数据通过SPDK写入到磁盘。
+那么就可以考虑，通过spdk的接口开辟一块内存空间，然后在网络层面DPDK中，将这块内存进行注册，作为网卡收发包的内存，网卡DMA直接访问这块内存。
+
+## 操作
+```c
+(1) 方式一：
+// 外部内存申请
+void *mmap(void *addr, size_t length, int prot, int flags,
+		  int fd, off_t offset);
+
+// 外部内存管理
+int rte_malloc_heap_create(const char *heap_name);
+
+int rte_malloc_heap_memory_add(const char *heap_name, void *va_addr, size_t len,
+    rte_iova_t iova_addrs[], unsigned int n_pages, size_t page_sz);
+
+int rte_malloc_heap_get_socket(const char *name);
+
+
+// 外部内存关联 mbuf pool;
+const struct rte_memzone *rte_memzone_reserve(const char *name, size_t len, int socket_id,
+        unsigned flags);
+
+struct rte_mempool * rte_pktmbuf_pool_create_extbuf(const char *name, unsigned int n,
+  unsigned int cache_size, uint16_t priv_size,
+  uint16_t data_room_size, int socket_id,
+  const struct rte_pktmbuf_extmem *ext_mem,
+  unsigned int ext_num);
+
+（2）方式二：
+rte_extmem_register
+rte_dev_dma_map
+
+
+(3) 考虑：
+收方向的零拷贝；
+发方向的零拷贝；
+两者的实现是不是不太一样。
+```
+
 
 # rte_mbuf 操作
 ## rte_pktmbuf_alloc

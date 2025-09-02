@@ -12,7 +12,9 @@
 
 # 拥塞分类
   网络中的拥塞整体可用分为两种，如下图所示。
-  （1）第一种是在端侧的拥塞（Endpoint Congestion），常见于  **多打一的incast场景  **，这种方式通常就要看各种各样的CC算法来使对应的发送端减速来解决。
+  （1）第一种是在端侧的拥塞（Endpoint Congestion），常见于  **多打一的incast场景**，
+  这种方式通常就要看各种各样的CC算法来使对应的发送端减速来解决。
+![](attachments/Pasted%20image%2020250723200244.png)
 
   （2）另一种就是Fabric Congestion，即网络中因为**hash不均导致的拥塞**。
 

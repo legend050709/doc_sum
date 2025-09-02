@@ -12,7 +12,7 @@
 # rpm -qf /sbin/ethtool
 ethtool-4.8-1.el7.x86_64
 ```
-## 查看包中的文件
+## 查看包中的文件：`rpm -ql`
 ```bash
 # rpm -qpl uoa-dkms-1.0.3-1.x86_64.rpm
 /usr/src/uoa-1.0.3/Makefile
@@ -21,7 +21,7 @@ ethtool-4.8-1.el7.x86_64
 /usr/src/uoa-1.0.3/uoa.h
 /usr/src/uoa-1.0.3/uoa_extra.h
 ```
-## 查看包关联的脚本
+## 查看包关联的脚本：`rpm -q --scripts`
 要查看某个 RPM 包中关联的脚本，可以使用 `rpm` 命令的 `-q` 选项与 `--scripts` 参数。这个命令可以显示与指定 RPM 包相关的所有脚本，包括安装、卸载、升级等脚本。
 ```bash
 rpm -q --scripts <package-name>
@@ -68,6 +68,45 @@ if [  "$(dkms status -m $DKMS_NAME -v $DKMS_VERSION)" ]; then
 fi
 ```
 
+## 查看安装包的依赖
+### 已安装包的前向依赖和反向依赖
+查看一个包依赖哪些其他包（前向依赖）：  
+查看一个包被哪些其他包依赖（反向依赖）：  
+
+```bash
+# 查看前向依赖 
+rpm -qR <installed-package-name> 
+注意：`rpm -qR`, 需要该包已经安装。
+
+如果未安装，可以先下载rpm文件然后使用下面的命令，查看前向依赖；
+rpm -qpR <package_file>.rpm
+
+# 查看反向依赖 
+rpm -q --whatrequires <installed-package-name>
+注：同样，这只能查询已安装的包。如果要查询仓库中的包，需要结合其他工具（如repoquery）。
+```
+
+
+### 未安装包的前向依赖和反向依赖
+对于未安装的包，我们通常使用`yum`工具（需要配置好仓库）：
+```bash
+前向依赖：
+yum deplist <package>
+
+反向依赖：
+yum install yum-utils -y
+repoquery --whatrequires <package>
+```
+
+### 依赖递归树
+```bash
+# 递归查看所有依赖
+repoquery --tree-requires <package-name>
+
+# 递归查看被依赖关系
+repoquery --tree-whatrequires <package-name>
+```
+
 # 查看命令的源码
 ##  查看二进制文件/命令的位置
 ```c
@@ -76,7 +115,7 @@ fi
 
 ```
 
-## 查看对应的rpm包
+## 查看对应的rpm包：`rpm -qf`
 ```c
 #rpm -qf /usr/bin/ls
 coreutils-8.22-24.el7_9.2.x86_64

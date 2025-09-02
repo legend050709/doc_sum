@@ -236,25 +236,7 @@ scale-out网络，根植于传统数据中心网络，其设计初衷在于连�
 
 Scale up范围内进行大带宽的TP、EP、CP等通信，多个Scale up域通过Scale out互联，进行DP、PP等通信，跨Scale up实现合理的带宽收敛即可。同时，独立Scale out网卡+网络的成本也不容小觑，如果将 Scale up 和Scale out 的以太网融合为一张网，通过将不同的Scale up域进行Scale out互联组网，不但少了一张网络和网卡的投入，在运维、扩展上也将更加统一高效。
 
-# RoCE Bonding
-## 普通网卡的bond
-我们知道操作系统里面，可以将2个实际的物理网卡，合体形成一个“逻辑网卡”，从而达到如主备/提升带宽等目的。
 
-![](attachments/Pasted%20image%2020250314195703.png)
-
-## RNIC的bond
-但是RoCE网卡，是否也跟普通网卡一样，支持Bond能力呢？答案是的，RoCE也可以组Bond，只是比普通网卡多了一些约束。
-
-RoCE LAG 是一种用于模拟 IB 设备的以太网绑定的功能，仅适用于双端口卡。
-根据资料 Mellnox Cx4/Cx6/Cx5， RoCE网卡的Bond，只支持3种模式：
-
-```bash
-- active-backup (主备模式：mode 1)
-- balance-xor (负载均衡模式：mode 2)
-- 802.3ad (链路聚合模式：LACP) (mode 4)
-```
-相比普通网卡总共0-6共七种模式而言，算是打了大折。
-在 mode4 模式下，进行数据传输的始终只有一个端口，带宽与一个端口传输一样，但是将其中任意一个端口拔掉后，数据传输切换到另一个端口，实际业务不受影响。也是一种主备模式。
 
 # 参考
 ```bash

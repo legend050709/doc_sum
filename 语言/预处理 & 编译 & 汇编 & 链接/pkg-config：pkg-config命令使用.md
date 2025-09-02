@@ -9,6 +9,31 @@
 
 # pkg-congfig的使用
 ## 查看
+
+### 查看是否存在某个lib库
+
+`pkg-config --exists libdpdk` 不会存在任何输出，只能通过命令的执行结果来判断是否存在。
+
+```bash
+# 存在
+$ pkg-config --exists libdpdk; echo $?
+0
+
+# 不存在
+# pkg-config --exists libdpdk; echo $?
+1
+```
+
+#### 应用
+```bash
+ifneq ($(shell pkg-config --exists libdpdk && echo 0),0)
+    INCDIRS += -I $(DPDKDIR)/include
+    CXXFLAGS += -include $(DPDKDIR)/include/rte_config.h
+else
+    CXXFLAGS += $(shell pkg-config --cflags libdpdk)
+endif
+```
+
 ### 查看所有pkg-config管理的库
 ```bash
 pkg-config --list-all

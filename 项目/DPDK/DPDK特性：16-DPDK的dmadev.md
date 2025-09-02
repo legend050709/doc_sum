@@ -136,7 +136,7 @@ ioctl(container, VFIO_IOMMU_MAP_DMA, &dma_map);
 dpdk有两种内存需要dma map，一是提前申请好的大页内存，二是**临时mmap**出来的小页内存。
 
 #### 大页内存dma map
-对于提前申请好的大页内存，dpdk在调用rte_eal_init初始化时就通过`标准dma map流程`的方式建立好了dma地址到物理内存地址的映射，并将映射表存在`iommu`内。调用链见下图。
+对于提前申请好的大页内存，dpdk在调用`rte_eal_init`初始化时就通过`标准dma map流程`的方式建立好了dma地址到物理内存地址的映射，并将映射表存在`iommu`内。调用链见下图。
 ![](attachments/Pasted%20image%2020250424104002.png)
 
 
@@ -172,7 +172,7 @@ rte_dev_dma_map
                 --> ioctl
 ```
 
-
+**dma map跨页**
 考虑这样一个场景，如果`mmap`的长度为8k，且是按页对齐的，也就是说`mmap`了两个页，要求不同的页需要使用不同的`rte_mbuf`，这个时候`buf_addr`和`buf_iova`应该怎么填写。
 
 ![](attachments/Pasted%20image%2020250424105411.png)
@@ -187,7 +187,10 @@ rte_dev_dma_map
 参考：`app/test/test_external_mem.c`
 ## rte_dev_dma_map 和 rte_dev_dma_unmap
 ### 介绍
-网卡设备dma映射外部内存。
+网卡设备dma映射外部内存。这样可以进行零拷贝。
+比如：存储场景，一个程序里，网络方面使用用户态协议栈，存储使用spdk进行存储。
+将从spdk中申请的内存，在 dpdk中通过 `rte_extmem_register` 以及 `rte_dev_dma_map`进行注册。
+
 
 ### 使用
 参考：`app/test-pmd/testpmd.c`

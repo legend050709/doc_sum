@@ -98,21 +98,24 @@ RC在总线架构中只有一个，用于处理器和内存子系统与I/O设备
 
 
 
-## RDMA的优点
+## RDMA的技术特点
 
 ![](attachments/Pasted%20image%2020250323225228.png)
-
-### zero-copy
-
-RDMA的网络收发接口可以直接把用户态的buffer地址交给RDMA网卡，网卡负责将buffer中的数据发送到远端，或将收到的远端数据写入buffer。这就避免了socket网络收发接口中需要先将数据复制到收发缓冲区的一次数据拷贝操作。
-
-一些用户态协议栈和内核零拷贝特性（SOCK_ZEROCOPY）也能实现数据收发的零拷贝，但在接口和使用模式上目前还没有RDMA的自然和高效。这是因为RDMA是基于这个目标设计的，而普通的socket接口和TCP/IP协议栈设计时就没有考虑过这个目标。此外RDMA的零拷贝特性是与硬件实现相关的，普通网卡的收发功能是无法支持RDMA语义中收发操作的零拷贝的。
-
-RDMA的每个应用程序都能直接访问集群中的设备的虚拟内存，这意味着应用程序能够直接执行数据传输，在不涉及到网络软件栈的情况下，数据能够被直接发送到缓冲区或者能够直接从缓冲区里接收，而不需要被复制到网络层。
 
 ### kernel-bypass
 ![](attachments/Pasted%20image%2020250305194825.png)
 RDMA 提供一个专有的 Verbs interface 而不是传统的TCP/IP Socket interface。应用程序可以直接在用户态执行数据传输，不需要在内核态与用户态之间做上下文切换。
+
+### zero-copy
+
+RDMA的网络收发接口可以直接把用户态的buffer地址交给RDMA网卡，网卡负责将buffer中的数据发送到远端，或将收到的远端数据写入buffer。这就避免了socket网络收发接口中需要先将数据复制到内核的收发缓冲区的一次数据拷贝操作。
+
+> 注：因为`bypass kernel`, 所以做到了零拷贝。即：用户空间的地址进行了注册之后，硬件DMA到用户空间的地址进行读写。
+
+一些用户态协议栈和内核零拷贝特性（`SOCK_ZEROCOPY`）也能实现数据收发的零拷贝，但在接口和使用模式上目前还没有RDMA的自然和高效。这是因为RDMA是基于这个目标设计的，而普通的`socket`接口和`TCP/IP`协议栈设计时就没有考虑过这个目标。
+
+此外RDMA的零拷贝特性是与硬件实现相关的，普通网卡的收发功能是无法支持RDMA语义中收发操作的零拷贝的。
+RDMA的每个应用程序都能直接访问集群中的设备的虚拟内存，这意味着应用程序能够直接执行数据传输，在不涉及到网络软件栈的情况下，数据能够被直接发送到缓冲区或者能够直接从缓冲区里接收，而不需要被复制到网络层。
 
 ### hardware-offloading(cpu offload)
 #### 概述
@@ -149,14 +152,14 @@ RDMA协议不是一种单一的协议，而是能够实现RDMA功能的一套协
 
 ![](attachments/Pasted%20image%2020250303175509.png)
 
-## RDMA带来的好处
-### 节省CPU
+## RDMA的优势
+### 低CPU开销
 相对于 TCP，在使用 RDMA 的 100Gbps 场景下，CPU 占用率从 100% 下降到 10%。CPU 处理能力不再是带宽的限制，网卡自身的硬件规格才是。
 
 （1）TCP 网络中，100Gbps 网络带宽处理需要消耗 64 颗 2.5GHz Core（按 1MHz CPU 处理 1Mbps Net I/O 计算）；
 （2）RDMA 网络中，CPU 无需再做收发包中断处理，不仅降低延迟，也节省了 CPU。
 
-### 大带宽
+### 高吞吐（大带宽）
 
 ### 低时延
 相对于 TCP，网络时延从 ms 级降低到 10μs 以下。
@@ -314,7 +317,10 @@ RoCE 将 Infiniband 的数据格式（IB Payload）“移植”到以太网，�
 在2011年接触到RDMA网络时，使用的是`Mellanox`的`Infiniband`卡，这种IB卡使用的协议从链路层开始就是IB专用协议。因此使用这种网卡时，需要使用专门的IB交换机和带IB光模块的IB连接线，那时一条不长的IB连接线就要数千元。组建一套IB网络成本很高，还需要额外的网络规划部署工作，因此在一段时间后我们的产品中就不再使用IB网络了。`RoCE`和`iWARP`都是为了解决IB网络的成本和部署问题而产生的技术。通过在`2/3/4`层采用通用的`ethernet/ip/tcp/udp`协议，采用RoCE和iWARP技术的RDMA报文可以在普通的`ethernet/ip`网络环境和硬件设备下传输，避免了专门建设IB网络的成本和工作。
 
 ### ROCE的两个版本
-RoCE有两个版本，v1版本只有链路层使用了`ethernet`协议，v2版本则使用了`ethernet/ip/udp`作为链路层/网络层/传输层协议，协议规定了`RoCEv2`使用UDP端口4791。由于v2版本使用了ip协议，可以复用普通的ip路由器，因此得到了较广泛的应用。
+RoCE有两个版本，v1版本是基于以太网链路层（L2）实现的RDMA协议，v2版本则使用了`ethernet/ip/udp/ib数据`作为链路层/网络层/传输层协议，可实现跨三层流量转发，当前数据中心主推方案，v2协议规定了`RoCEv2`使用UDP端口4791。==由于v2版本使用了ip协议，可以复用普通的ip路由器，因此得到了较广泛的应用==。
+
+**RDMA技术，最大的突破是将网络层和传输层放到了硬件中（服务器的网卡上）来实现，数据报文进入网卡后，在网卡硬件上就完成四层解析，直接上送到应用层软件，四层解析CPU无需干预**。
+
 
 因此：
 - **RoCEv1**：基于二层以太网，仅限于同一子网内通信，无法跨子网传输；
@@ -392,11 +398,16 @@ rxe模拟实现了ROCEv2设备，并且在`libibverbs`中也提供了相应的�
 # 相关组织
 ## 标准和生态组织
 ### IBTA
-IBTA：Infiniband Trade Association，IB行业协会，由IB行业的主要厂商构成，负责制定和维护Infiniband协议标准,以及设备认证。IB协议与RoCE协议就是IBTA制定的。
+IBTA：`Infiniband Trade Association`，IB行业协会，由IB行业的主要厂商构成，**负责制定和维护`Infiniband`协议标准(IB Spec),以及设备认证**。IB协议与RoCE协议就是IBTA制定的。
 
 IBTA独立于各个厂商，通过赞助技术活动和推动资源共享来将整个行业整合在一起，并且通过线上交流、营销和线下活动等方式积极推广IB和RoCE。
 
 **IBTA会对商用的IB和RoCE设备进行协议标准符合性和互操作性测试及认证**，由很多大型的IT厂商组成的委员会领导，其主要成员包括博通，HPE，IBM，英特尔，Mellanox和微软等，华为也是IBTA的会员。
+
+#### IB Spec规范文档
+[IB Specification Release 1.4 英文版](https://gitcode.com/Open-source-documentation-tutorial/5c371/blob/main/IB%20Specification%20Vol%201-Release-1.4.pdf)
+
+
 
 ### IETF
 IETF：Internet Engineering Task Force，互联网工程任务组。
@@ -408,14 +419,30 @@ Verbs和iWARP初始版本的规范就是这个组织设计和提交给IETF的。
 
 
 ### OFA和OFED
+#### OFA
+OFA(OpenFabrics Alliance) 是一个基于开源的，非盈利组织，负责开发、测试、认证、支持和分发==独立于厂商的开源跨平台的RDMA/Advanced Networks 软件和OFED软件==，该联盟的使命是开发和推广软件，通过以最小的 CPU 开销直接向应用程序提供线速消息传递、超低延迟和最大带宽来实现最大的应用程序效率。
 
-OFA(OpenFabrics Alliance) 是一个基于开源的，非盈利组织，负责开发、测试、认证、支持和分发独立于厂商的开源跨平台的RDMA/Advanced Networks 软件和OFED软件，该联盟的使命是开发和推广软件，通过以最小的 CPU 开销直接向应用程序提供线速消息传递、超低延迟和最大带宽来实现最大的应用程序效率。
+该联盟成立于2004年6月，当时名为OpenIB联盟，最初专注于开发独立于供应商、基于Linux的InfiniBand软件堆栈。
+2005年，该联盟承诺支持Windows，此举将使软件堆栈真正跨平台。
+2006年，该组织再次扩大其章程，包括对iWARP的支持，并在2010年增加了对RoCE（融合以太网上的RDMA）的支持，用于通过以太网提供高性能RDMA和内核旁路解决方案。
+2014年，联盟再次扩大，成立了OpenFabrics接口工作组，以整合对其它高性能网络的支持。
 
-该联盟成立于2004年6月，当时名为OpenIB联盟，最初专注于开发独立于供应商、基于Linux的InfiniBand软件堆栈。2005年，该联盟承诺支持Windows，此举将使软件堆栈真正跨平台。2006年，该组织再次扩大其章程，包括对iWARP的支持，并在2010年增加了对RoCE（融合以太网上的RDMA）的支持，用于通过以太网提供高性能RDMA和内核旁路解决方案。2014年，联盟再次扩大，成立了OpenFabrics接口工作组，以整合对其它高性能网络的支持。
+#### OFED
+OFED 是由 OFA 推出的一个开源软件包，全称是 `OpenFabrics Enterprise Distribution`。
+它包含了 **支持 RDMA 的内核模块、驱动程序、库、工具、API（如 libibverbs、librdmacm 等）**。
+
+##### MLNX-OFED（Mellanox OFED）
+MLNX-OFED 是 Mellanox（已被 NVIDIA 收购）基于 OFED 的一个定制版本。
+它是 Mellanox 专为其自家硬件（Infiniband/RoCE 网卡等）优化的版本。
+在 OFED 的基础上加入了 Mellanox 的驱动、工具（如 `ibstat`、`ibdev2netdev`）、优化配置脚本等。
+**性能和兼容性通常优于通用 OFED，但仅适用于 Mellanox 的硬件**。
+
+
 
 ####  OFA和IBTA
-上述两个组织是配合关系，IBTA主要负责开发、维护和增强Infiniband协议标准；
-OFA负责开发和维护Infiniband协议和上层应用API。
+上述两个组织是配合关系。
+==IBTA主要负责开发、维护和增强Infiniband协议标准规范(IB Spec)==；
+==OFA负责开发和维护Infiniband协议和上层应用API==。
 
 ## 开发社区
 
@@ -466,7 +493,7 @@ IB领域的领头羊，协议标准制定、软硬件开发和生态建设都能
 **rdma-core** 和 **kernel RDMA subsystem**。
 
 ## rdma-core
-**rdma-core**：开源的`RDMA`用户态软件协议栈，`repo`为`https://github.com/linux-rdma/rdma-core`。`rdma-core`是`rdma`在用户态的主要组件。
+**rdma-core**：开源的==`RDMA`用户态软件协议栈==，`repo`为`https://github.com/linux-rdma/rdma-core`。`rdma-core`是`rdma`在用户态的主要组件。
 用户态的程序需要通过`rdma-core`提供的用户态`verbs API`来和内核中的`rdma`子系统、`rdma`设备驱动、以及`rdma`设备本身交互，来使用`rdma`通信功能。
 其中包括用户态库`libibverbs`、`librdmacm`和`libibumad`。
 不同的`rdma`设备有不同的内核驱动，这些设备驱动向用户态提供的操作接口和功能也各不相同，`libibverbs`对不同设备驱动进行了相应的适配，支持了当前主流的`rdma`设备驱动，包括`rxe/siw`这两种软件实现的`rocev2/iwarp`设备驱动。
@@ -474,7 +501,7 @@ IB领域的领头羊，协议标准制定、软硬件开发和生态建设都能
 
 
 ## kernel RDMA subsystem
-**kernel RDMA subsystem**：开源的Linux内核中的RDMA软件栈，是Linux内核的一部分，主要包括内核的rdma子系统框架，以及各种rdma设备的驱动。ib_系列接口由其中的ib_core.ko提供。
+**kernel RDMA subsystem**：开源的==Linux内核中的RDMA软件栈==，是Linux内核的一部分，主要包括内核的rdma子系统框架，以及**各种rdma设备的驱动**。`ib_`系列接口由其中的`ib_core.ko`提供。
 
 ## 其他
 
@@ -486,8 +513,124 @@ IB领域的领头羊，协议标准制定、软硬件开发和生态建设都能
 `ofed`定期从前两个社区`repo`中获取最新版本的代码，并对各商用OS发行版进行适配，发布相应的软件包。
 ![](attachments/Pasted%20image%2020250303195817.png)
 
+#### ofed_info：查看 ofed的版本信息
+```bash
+# ofed_info -s
+MLNX_OFED_LINUX-5.4-3.1.0.0:
+
+# ofed_info -n
+5.4-3.1.0.0
+
+
+# which ofed_info
+/bin/ofed_info
+
+# file /bin/ofed_info
+/bin/ofed_info: Bourne-Again shell script, ASCII text executable, with very long lines
+
+# rpm -qf /bin/ofed_info
+ofed-scripts-5.4-OFED.5.4.3.1.0.x86_64
+
+
+# rpm -ql ofed-scripts
+/usr/bin/hca_self_test.ofed
+/usr/bin/ofed_info
+/usr/bin/ofed_rpm_info
+/usr/sbin/ofed_uninstall.sh
+/usr/sbin/sysinfo-snapshot.py
+/usr/sbin/vendor_post_uninstall.sh
+/usr/sbin/vendor_pre_uninstall.sh
+```
+
+#### ofed_rpm_info: 查看ofed中各个包的信息
+
+```bash
+# ofed_rpm_info
+ar_mgr 1.0 5.9.1.MLNX20210811.gb359a4e.54241
+ar_mgr 1.0 5.9.1.MLNX20210811.gb359a4e
+clusterkit 1.4.390 1.54241
+clusterkit 1.4.390 1
+dapl 2.1.10.1.mlnx OFED.4.9.0.1.4.53100
+dapl 2.1.10.1.mlnx OFED.4.9.0.1.4
+dpcp 1.1.13 1.54241
+dpcp 1.1.13 1
+dump_pr 1.0 5.9.1.MLNX20210811.gb359a4e.54241
+dump_pr 1.0 5.9.1.MLNX20210811.gb359a4e
+fabric-collector 1.1.0.MLNX20170103.89bb2aa 0.1.53100
+fabric-collector 1.1.0.MLNX20170103.89bb2aa 0.1
+hcoll 4.7.3199 1.54241
+hcoll 4.7.3199 1
+ibdump 6.0.0 1.53100
+ibdump 6.0.0 1
+ibsim 0.10 1.53100
+ibsim 0.10 1
+ibutils2 2.1.1 0.136.MLNX20210617.g4883fca.54241
+ibutils2 2.1.1 0.136.MLNX20210617.g4883fca
+iser 5.4 OFED.5.4.3.0.7.1
+isert 5.4 OFED.5.4.3.0.7.1
+kernel-mft 4.17.2 12
+knem 1.1.4.90mlnx1 OFED.5.1.2.5.0.1
+libvma 9.3.1 1
+libxlio 1.0.6 1
+mlnx-dpdk 20.11.0 1.54241
+mlnx-dpdk 20.11.0 1
+mlnx-en 5.4 3.1.0.0.g49f69b0
+mlnx-ethtool 5.13 1.54241
+mlnx-ethtool 5.13 1
+mlnx-iproute2 5.11.0 1.54241
+mlnx-iproute2 5.11.0 1
+mlnx-nfsrdma 5.4 OFED.5.4.3.0.7.1
+mlnx-nvme 5.4 OFED.5.4.3.0.7.1
+mlnx-ofa_kernel 5.4 OFED.5.4.3.1.0.1
+mlnx-tools 5.2.0 0.54241
+mlnx-tools 5.2.0 0
+mpi-selector 1.0.3 1.53100
+mpi-selector 1.0.3 1
+mpitests 3.2.20 5d20b49.53100
+mpitests 3.2.20 5d20b49
+mstflint 4.16.0 1.54241
+mstflint 4.16.0 1
+multiperf 3.0 0.14.g5f0fd0e.53100
+multiperf 3.0 0.14.g5f0fd0e
+ofed-docs 5.4 OFED.5.4.3.1.0
+openmpi 4.1.2a1 1.54241
+openmpi 4.1.2a1 1
+opensm 5.9.1.MLNX20210811.517c4ae 0.1.54241
+opensm 5.9.1.MLNX20210811.517c4ae 0.1
+openvswitch 2.14.1 1.54241
+openvswitch 2.14.1 1
+perftest 4.5 0.6.gbb9a707.54241
+perftest 4.5 0.6.gbb9a707
+rdma-core 54mlnx1 1.54241
+rdma-core 54mlnx1 1
+rshim 2.0.6 1.ga97dc5d
+sharp 2.5.1.MLNX20210812.e3c2616 1.54241
+sharp 2.5.1.MLNX20210812.e3c2616 1
+sockperf 3.7 0.gita1e8e835a689.53100
+sockperf 3.7 0.gita1e8e835a689
+srp 5.4 OFED.5.4.3.0.7.1
+ucx 1.11.0 1.54241
+ucx 1.11.0 1
+xpmem 2.6.3 2.53100
+xpmem 2.6.3 2
+ofed-scripts 5.4 OFED.5.4.3.1.0
+```
+
+```bash
+# which ofed_rpm_info
+/bin/ofed_rpm_info
+
+# file /bin/ofed_rpm_info
+/bin/ofed_rpm_info: Bourne-Again shell script, ASCII text executable
+
+# rpm -qf /bin/ofed_rpm_info
+ofed-scripts-5.4-OFED.5.4.3.1.0.x86_64
+```
+
 ### 厂商版ofed
-一些厂商会在开源ofed的基础上，增加一些私有的增强特性和一些专用的配置、测试工具，发布针对自家产品的ofed软件包。比如华为的`HW_OFED`和`Mellanox`的`MLNX_OFED`。这些定制版本基于开源OFED开发，由厂商自己测试和维护，会在开源软件包基础上提供私有的增强特性，并附上自己的配置、测试工具等。
+
+一些厂商会在开源ofed的基础上，增加一些私有的增强特性和一些专用的配置、测试工具，发布针对自家产品的ofed软件包。比如华为的`HW_OFED`和`Mellanox`的`MLNX_OFED`。
+这些定制版本基于开源OFED开发，由厂商自己测试和维护，会在开源软件包基础上提供私有的增强特性，并附上自己的配置、测试工具等。
 
 #### Mellanox OFED 软件栈
 
@@ -518,11 +661,81 @@ Mellanox OFED 软件堆栈是承载在 InfiniBand 硬件和协议之上的，软
 **（1）Application**
 各种RDMA应用程序（比如xperf、rping工具、spdk等）
 
-**（2）so**：RDMA软件栈中的用户态核心动态链接库，作用：
+**（2）so**：==RDMA用户态动态链接库(rdma用户态驱动， 或者uverbs provider)==，作用：
 - 实现并且向上层应用提供各种Verbs API
 - 在各种Verbs API的逻辑中调用到各厂商驱动注册的钩子函数
 - 提供进入内核态的接口
-- libxib.so：xilinx网卡的用户态驱动，也是个动态链接库，实现厂商的驱动逻辑。
+- `libxib.so`：xilinx网卡的用户态驱动，也是个动态链接库，实现厂商的驱动逻辑。
+如果是`Mellanox`的`RNIC`卡，那么对应的就是`libmlx.so`；
+如果是`Huawei`的`RNIC`卡，那么对应的就是`libmlx.so`, 
+```bash
+(1) Mellanox 网卡
+
+# ll /usr/lib64/libibverbs*
+-rw-r--r-- 1 root root 209606 Nov 15  2021 /usr/lib64/libibverbs.a
+lrwxrwxrwx 1 root root     15 May 28 11:57 /usr/lib64/libibverbs.so -> libibverbs.so.1
+lrwxrwxrwx 1 root root     23 May 28 11:57 /usr/lib64/libibverbs.so.1 -> libibverbs.so.1.14.35.0
+-rwxr-xr-x 1 root root 131384 Nov 15  2021 /usr/lib64/libibverbs.so.1.14.35.0
+
+/usr/lib64/libibverbs:
+total 0
+lrwxrwxrwx 1 root root 23 May 28 11:57 libmlx5-rdmav34.so -> ../libmlx5.so.1.19.35.0
+
+# readelf -a /usr/lib64/libmlx5.so.1.19.35.0 | grep -v ibv_cmd | grep ibv
+ 0x0000000000000001 (NEEDED)             Shared library: [libibverbs.so.1]
+0000002610d8  001800000007 R_X86_64_JUMP_SLO 0000000000000000 ibv_get_device_name + 0
+000000261120  001f00000007 R_X86_64_JUMP_SLO 0000000000000000 ibv_create_cq + 0
+000000261130  002100000007 R_X86_64_JUMP_SLO 0000000000000000 ibv_dontfork_range + 0
+0000002611e0  003300000007 R_X86_64_JUMP_SLO 0000000000000000 ibv_destroy_cq + 0
+000000261210  003900000007 R_X86_64_JUMP_SLO 0000000000000000 ibv_alloc_pd + 0
+000000261248  003d00000007 R_X86_64_JUMP_SLO 0000000000000000 ibv_query_device + 0
+000000261328  005500000007 R_X86_64_JUMP_SLO 0000000000000000 ibv_dealloc_pd + 0
+0000002613c8  006600000007 R_X86_64_JUMP_SLO 0000000000000000 ibv_qp_to_qp_ex + 0
+0000002613e0  006800000007 R_X86_64_JUMP_SLO 0000000000000000 ibv_query_port + 0
+000000261400  006a00000007 R_X86_64_JUMP_SLO 0000000000000000 ibv_get_device_index + 0
+000000261420  006d00000007 R_X86_64_JUMP_SLO 0000000000000000 ibv_dofork_range + 0
+000000261478  007900000007 R_X86_64_JUMP_SLO 0000000000000000 ibv_query_gid_type + 0
+0000002614e8  008400000007 R_X86_64_JUMP_SLO 0000000000000000 ibv_reg_mr + 0
+000000261510  008900000007 R_X86_64_JUMP_SLO 0000000000000000 ibv_dereg_mr + 0
+000000261578  009300000007 R_X86_64_JUMP_SLO 0000000000000000 ibv_resolve_eth_l2_fro + 0
+    24: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND ibv_get_device_name@IBVERBS_1.1 (28)
+    31: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND ibv_create_cq@IBVERBS_1.1 (28)
+    33: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND ibv_dontfork_range@IBVERBS_1.1 (28)
+    51: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND ibv_destroy_cq@IBVERBS_1.1 (28)
+    57: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND ibv_alloc_pd@IBVERBS_1.1 (28)
+    61: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND ibv_query_device@IBVERBS_1.1 (28)
+    85: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND ibv_dealloc_pd@IBVERBS_1.1 (28)
+   102: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND ibv_qp_to_qp_ex@IBVERBS_1.6 (31)
+   104: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND ibv_query_port@IBVERBS_1.1 (28)
+   106: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND ibv_get_device_index@IBVERBS_1.9 (32)
+   109: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND ibv_dofork_range@IBVERBS_1.1 (28)
+   121: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND ibv_query_gid_type@IBVERBS_PRIVATE_34 (23)
+   132: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND ibv_reg_mr@IBVERBS_1.1 (28)
+   137: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND ibv_dereg_mr@IBVERBS_1.1 (28)
+   147: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND ibv_resolve_eth_l2_from_g@IBVERBS_1.1 (28)
+   239: 000000000004b130     8 FUNC    GLOBAL DEFAULT   12 mlx5dv_qp_ex_from_ibv_qp_@@MLX5_1.10
+  0x0090: Version: 1  File: libibverbs.so.1  Cnt: 4
+
+
+如上所示：libmlx5.so.1.19.35.0 就是Mellanox RNIC的RMDA verbs providers（即: rdma用户态驱动）
+
+(2) Huawei 网卡：
+
+# ll /usr/lib64/libhrn3-rdmav*
+-r-xr-xr-x 1 root root 256304 Jun 18 14:12 /usr/lib64/libhrn3-rdmav34.so
+lrwxrwxrwx 1 root root     18 Jun 18 14:13 /usr/lib64/libhrn3-rdmav.so -> libhrn3-rdmav34.so
+
+# readelf -a /usr/lib64/libhrn3-rdmav34.so | grep -v ibv_cmd | grep ibv
+ 0x0000000000000001 (NEEDED)             Shared library: [libibverbs.so.1]
+00000023d598  005900000007 R_X86_64_JUMP_SLO 0000000000000000 ibv_dontfork_range + 0
+00000023d838  00d800000007 R_X86_64_JUMP_SLO 000000000000f5d0 roce3_fill_ibv_sw_wc + 0
+00000023dc48  019000000007 R_X86_64_JUMP_SLO 0000000000000000 ibv_dofork_range + 0
+    89: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND ibv_dontfork_range@IBVERBS_1.1 (6)
+   216: 000000000000f5d0   108 FUNC    GLOBAL DEFAULT   10 roce3_fill_ibv_sw_wc
+   400: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND ibv_dofork_range@IBVERBS_1.1 (6)
+
+```
+
 
 ##### 内核空间
 **（（1） 中间交互模块**
@@ -539,14 +752,56 @@ Mellanox OFED 软件堆栈是承载在 InfiniBand 硬件和协议之上的，软
 指xilinx网卡。
 
 
-#### 快路径
-快路径：不走内核，效率高，一般走数据面的流程（RDMA read/write: ibv_post_send ibv_poll_cq, APP将wr提交给硬件后，硬件就直接处理了，读写数据的过程中内核不用参与）。
+#### 快路径(数据路径)
+快路径：==不走内核，效率高，一般走数据面的流程（`RDMA read/write`, `ibv_post_send/recv`, `ibv_poll_cq`, 用户态APP将wr提交给硬件后，硬件就直接处理了，读写数据的过程中内核不用参与，不存在用户态和内核态的上下文切换）==。
 
 ![](attachments/Pasted%20image%2020250304105152.png)
 
+```bash
++------------------+            +------------------------+
+| User-space App   |            | Kernel-space Driver    |
+| using libibverbs |<---------->| (e.g., mlx5 kernel mod)|
++------------------+            +------------------------+
+         |
+         v
++------------------------+
+| Verbs Provider (userspace)  |
+| (e.g., libmlx5.so)     |
++------------------------+
+         |
+         v
++------------------------+
+| HW-resources mmap 到用户态 |
+| (doorbell, QP buffers)  |
++------------------------+
+         |
+         v
++------------------------+
+|     RNIC 硬件 (NIC)      |
++------------------------+
 
-#### 慢路径
-慢路径：都要通过内核，效率相对较低，一般走控制面的流程（建链、收发工作任务等）。
+```
+
+##### 快路径的原理
+使用 `libibverbs` 接口进行 `post_send` 和 `post_recv` 等操作时，没有传统意义上的用户态到内核态的上下文切换。
+
+这是因为： `verbs provider` 用户态驱动在用户态运行， 硬件资源（如QP, CQ, doorbell page）通过 `mmap` 映射到用户态「即： mmio技术： 将硬件设备的寄存器/缓冲区映射到主机内存地址空间的机制」，从而用户态程序可以直接与 NIC 通信。 实际提交 `work request` 时，用户程序直接将数据写入映射的内存区域（如 `Doorbell区域`），这是直接与硬件交互的，不需要陷入内核。
+
+##### RDMA Verbs 和 传统的socket 对比
+
+- 传统 Socket I/O：系统调用 `send()/recv()` 需要陷入内核，由内核调度数据，从用户空间 copy 到内核，再交给网络驱动。
+- RDMA Verbs：应用通过 `libibverbs` 和 `libmlx5` 等用户态驱动，直接构造 `Work Request` 并放入 `Queue Pair (QP)`，然后写入 doorbell（一个 MMIO 映射），通知硬件执行。
+
+`RDMA Verbs`的快路径（数据路径）中：
+- **不需要 syscall**（除非进行内存注册、QP 创建等初始化）。
+- **不触发内核调度或上下文切换**。    
+- 所以可以达到亚微秒级延迟（微秒甚至纳秒级别）。
+
+
+
+
+#### 慢路径(控制路径)
+慢路径：都要通过内核，效率相对较低，一般走控制面的流程（建链、资源创建/回收，收发工作任务等）。
 
 ![](attachments/Pasted%20image%2020250304105231.png)
 
@@ -554,12 +809,17 @@ Mellanox OFED 软件堆栈是承载在 InfiniBand 硬件和协议之上的，软
 
 ![](attachments/Pasted%20image%2020250303195849.png)
 
-在介绍Verbs功能时提到，不同的Verbs功能需要不同的权限。在规范中定义了每种Verbs功能所需的使用权限，只有数据面相关的功能可以由普通用户直接调用，例如Post Send、Post Recv等；控制面的功能都只能由特权用户调用，例如Create QP、Register MR等。
- 
-用户态`libibverbs`提供的`ibv_`接口是普通用户就能够使用的，因此它能在用户态直接实现的只有数据面的接口，通过调用`libmlx5.so`等网卡对应的用户态驱动直接与HCA交互。其他控制面相关的`ibv_`接口，都需要通过系统调用进入内核态，通过内核检查调用操作合法后，再调用内核`ib_core`模块的`ib_`接口来实现。
+在介绍Verbs功能时提到，不同的Verbs功能需要不同的权限。在规范中定义了每种Verbs功能所需的使用权限，**只有数据面相关的功能可以由普通用户直接调用，例如Post Send、Post Recv等；控制面的功能都只能由特权用户调用，例如Create QP、Register MR等**。
+
+ （1）数据路径
+用户态`libibverbs`提供的`ibv_`接口是普通用户就能够使用的，因此它能在用户态直接实现的只有==数据面的接口，通过调用`libmlx5.so`等网卡对应的**用户态驱动**直接与HCA交互==。
+
+（2）控制路径
+其他==控制面相关的`ibv_`接口，都需要通过系统调用进入内核态，通过内核检查调用操作合法后，再调用内核`ib_core`模块的`ib_`接口来实现==。
 通过这种方式，可以避免普通用户态程序错误的或者恶意的操作HCA。此外，注册MR等操作需要在内核态建立VA到PA的映射页表，并pin住物理页。由于RDMA的实现并没有基于`VFIO/IOMMU`，因此这些操作需要在内核中完成。
 
-用户态与内核态的接口是`/dev/infiniband/uverbsN`字符设备文件，`libibverbs`通过`write`这个文件向内核提交操作请求，`ib_uverbs.ko`负责解析`write`的内容，根据内容中的请求信息再去调用`ib_core.ko`提供的`ib_`接口。
+（2.1）控制路径中用户态和内核态交互的接口
+用户态与内核态交互的接口是`/dev/infiniband/uverbsN`字符设备文件，`libibverbs`通过`write`这个文件向内核提交操作请求，`ib_uverbs.ko`负责解析`write`的内容，根据内容中的请求信息再去调用`ib_core.ko`提供的`ib_`接口。
 
 #### 组件
 ##### 用户空间
@@ -571,7 +831,7 @@ Mellanox OFED 软件堆栈是承载在 InfiniBand 硬件和协议之上的，软
 - 实现并且向上层应用提供各种Verbs API
 - 在各种Verbs API的逻辑中调用到各厂商驱动注册的钩子函数
 - 提供进入内核态的接口
-- libmlx5.so：Mellanox ConnectX-5网卡的用户态驱动，也是个动态链接库，实现厂商的驱动逻辑。
+- libmlx5.so：**Mellanox ConnectX-5网卡的用户态驱动**，也是个动态链接库，实现厂商的驱动逻辑。
 
 ##### 内核空间
 **(1) 中间交互模块**
@@ -588,18 +848,18 @@ Mellanox OFED 软件堆栈是承载在 InfiniBand 硬件和协议之上的，软
 指Mellanox ConnectX-5网卡。
 
 
-#### 数据路径
+#### 快路径(数据路径)
 
-绕过内核（快路径）；
-
+绕过内核（快路径）；不存在用户态和内核态的上下文切换。
 不需要陷入内核的Verbs接口走的是左边红色箭头的”快路径“：
 
 ![](attachments/Pasted%20image%2020250304111404.png)
 
 
-#### 控制路径
+#### 慢路径(控制路径)
 
-控制路径上，用户态和内核态主要是通过系统调用来对`/dev/infiniband/uverbsN`字符设备文件进行操作的，从而实现交流信息的。
+**控制路径上，用户态和内核态主要是通过系统调用来对`/dev/infiniband/uverbsN`字符设备文件进行操作的，从而实现交流信息的**。
+
 最近的协议栈也支持了`ioctl()`系统调用需要陷入内核态的接口，走的是标红色箭头的“慢路径”：
 ![](attachments/Pasted%20image%2020250304111514.png)
 
@@ -735,6 +995,7 @@ SGE: Scatter/Gather Element (分散/聚集元素)
 - Keys: 密钥
 - Rkey: Remote Key
 - Lkey: Local Key
+
 #### AH
 AH：Address Handle，地址句柄。
 
@@ -784,7 +1045,7 @@ OFI打算通过提供一个抽象的API（libfabric）来统一所有可用的�
 这样，使用`libfabric API`编写的用户级网络应用程序就可以在不同的供应商之间移植。
 
 **（1）libfabric 和 libibverbs**
-libfabric是OpenFabrics Interfaces (OFI) 的实现，旨在提供一个==更通用、跨不同网络技术==的接口，支持不仅仅是InfiniBand，还包括RoCE、iWARP、TCP、UDP等。
+`libfabric`是`OpenFabrics Interfaces (OFI)` 的实现，旨在提供一个==更通用、跨不同网络技术==的接口，支持不仅仅是`InfiniBand`，还包括`RoCE`、`iWARP`、`TCP`、`UDP`等。
 实际上==libfabric可以构建在 libibverbs 之上，作为更高层次的抽象==。
 
 `libfabric` 可以通过 **verbs Provider** 直接调用 `libibverbs` 的底层接口，实现对 InfiniBand/RoCE 硬件的操作。 这意味着 `libfabric` 在支持 InfiniBand 时，实际是建立在 `libibverbs` 之上的高层封装。

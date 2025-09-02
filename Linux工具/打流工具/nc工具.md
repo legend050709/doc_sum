@@ -3,6 +3,9 @@
 # nc传输文件
 # nc 发送tcp
 ## IPv4
+### 超时设置
+需要注意的是，如果不设置超时时间，默认情况下nc命令会一直等待连接成功或出现错误，直到手动中断程序。
+
 ## ipv6
 ## 发送特定流
 nc 可以指定 srcport，dip，dport 发送指定数据流。
@@ -45,11 +48,16 @@ Ncat: 0 bytes sent, 0 bytes received in 0.01 seconds.
 抓包如下所示：
 ![](attachments/Pasted%20image%2020231013200028.png)
 
-- 场景
-比如某个机器A TCP和其他设备进行三次握手，偶发的时延比较大。如何复现这个偶发的问题。
+### tcp偶发超时测试复现
+场景
+比如某个机器A TCP和其他设备进行三次握手，偶发的时延比较大或者不通。如何复现这个偶发的问题。
+
+![](attachments/Pasted%20image%2020250707161218.png)
+
 ```c
 for i in {1..1000};do echo $i;  time nc IP PORT -z -v;done 2>&1  | grep real  | sort -rn | head -n 5
 ```
 ![](attachments/Pasted%20image%2020231013200323.png)
 如上所示，复现出来部分的TCP三次握手的时间较长。
+
 # 参考

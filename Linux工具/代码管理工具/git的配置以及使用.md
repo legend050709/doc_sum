@@ -6,6 +6,8 @@
 ## git clone
 ## git branch
 ## git log
+## git tag
+
 ## git status
 ## git remote
 ## git add
@@ -51,7 +53,7 @@ git reset --soft HEAD^
 用`Git`提交了最新的`commit`，但是现在想要回退到提交之前的状态，同时保留所有的更改。也就是说，他们不希望丢失当前的修改，只是撤销那次提交，让工作区回到提交前的状态，但保留那些改动，以便重新修改或再次提交。
 
 #### 分析
-要保留本地更改并回退到最近一次提交之前的状态，可以按照以下步骤操作：
+要保留本地更改并回退到**最近一次commit提交「即完成了`git commit -m xxx操作`」** 之前的状态，可以按照以下步骤操作：
 
 **（1）保留更改在暂存区（git add 后的状态）**
 ```bash
@@ -88,8 +90,32 @@ git reset HEAD^ # 或 git reset --mixed HEAD^
 
 7> 拷贝 xxxx.diff 到目标机器
 
-8> 目标机器上执行：git pull --rebase REMOTE_NAME BRANCH_NAME， 然后 git apply xxx.diff
+8> 目标机器上执行：
+git pull --rebase REMOTE_NAME BRANCH_NAME， 
+然后 git apply xxx.diff  或者 patch -p1 < xxx.diff
+
 ```
+
+## git blame
+### 需求背景
+
+### 范例
+
+如下所示，查询`rdma-core`的哪个版本中开始支持了`ibv_query_gid_ex`函数 或者存在了`struct ibv_gid_entry`结构体，之前都是`ibv_query_gid`函数。
+
+```bash
+git clone https://github.com/linux-rdma/rdma-core.git 
+cd rdma-core/libibverbs
+git blame verbs.h  查看具体的哪个 commit中提交了
+```
+![](attachments/Pasted%20image%2020250624143215.png)
+
+
+```bash
+查看该提交在哪个版本中被包含。
+git tag --contains  61f72f4768
+```
+![](attachments/Pasted%20image%2020250624142856.png)
 
 # 参考
 ```bash

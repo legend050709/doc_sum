@@ -7,7 +7,8 @@
 
 # 介绍
 
-netem(Network Emulator)可以用来对==网卡发出==的数据包进行增加延迟、丢包、重复、乱序等处理，来模拟复杂网络环境。用来在性能良好的局域网中，模拟出复杂的互联网传输性能。
+**netem(Network Emulator)** 可以用来对==网卡发出==的数据包进行增加延迟、丢包、重复、乱序等处理，来**模拟网络环境（比如：故障注入）**。用来在性能良好的局域网中，模拟出复杂的互联网传输性能。
+
 netem的设置依赖tc命令，tc是Linux内核提供的流量控制工具。关于更多功能以及参数的详细解释可以参阅 `tc-netem` 的 man page。
 
 包从进入tc开始，分为多个qd(qdisc)。每个qd可以包含多个子qd，qd彼此连接形成一颗树。每个qd上可以附加filter，选择进入哪个child。如果都没命中，那就看本身规则。
@@ -119,7 +120,7 @@ $ tc qdisc add dev eth0 root netem loss 5%
 
 # 其他
 ## tcconfig
-tc提供的非常强大的功能，同时也非常难以理解使用。通过tcconfig可以方便地配置netem的功能。 tcconfig可以通过pip或pip3安装，详细参见：[官方文档](https://tcconfig.readthedocs.io/en/latest/)
+tc提供的非常强大的功能，同时也非常难以理解使用。通过`tcconfig`可以方便地配置`netem`的功能。 `tcconfig`可以通过pip或pip3安装，详细参见：[官方文档](https://tcconfig.readthedocs.io/en/latest/)
 
 如对发往1.1.1.1的数据包增加延迟500ms，只需要一个命令即可。tcconfig会自动根据需要调用tc命令进行配置。
 ```

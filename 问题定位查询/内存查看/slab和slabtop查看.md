@@ -52,7 +52,7 @@ cat /sys/kernel/slab/kmalloc-192/reclaim_account
 sudo yum install crash -y
 ```
 
-（2）安装内核调试工具kernel-debuginfo
+（2）安装内核调试工具`kernel-debuginfo`
 ```shell
 sudo yum install -y kernel-debuginfo-<内核版本> 
 

@@ -37,5 +37,6 @@ Reading symbols from .gnu_debugdata for /usr/bin/ipmitool...
 
 # 参考
 ```c
-
+# Linux | 调试器GDB的详细教程【纯命令行调试】
+https://juejin.cn/post/7206723874506899512
 ```

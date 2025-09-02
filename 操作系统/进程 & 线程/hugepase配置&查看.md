@@ -110,7 +110,7 @@ DPDK也是使用HUGETLBFS来使用大页。
 首先，它需要把大页mount到某个路径，比如`/mnt/huge`。`/mnt/huge`这个目录必须存在。
 以下是命令：  
 ```c
-mkdir /mnt/huge  
+mkdir -p /mnt/huge  
 mount -t hugetlbfs nodev /mnt/huge  
 or 
 mount -t hugetlbfs hugetlbfs /mnt/huge

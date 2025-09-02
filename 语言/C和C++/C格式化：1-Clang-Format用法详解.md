@@ -3,6 +3,18 @@
 # 介绍
 
 # 使用
+## 使用方法
+### `clang-format off` 注释
+如果代码文件中有部分代码不希望采用`.clang-format`进行格式化，可以在这部分代码块的前后使用如下的注释进行标识：
+```c
+ /* clang-format off */
+ // 不需要.clang-format的代码块
+ int a = 42;
+ a++;
+ ...
+ /* clang-format on */
+```
+
 ## 使用流程
 ### 生成配置文件 `.clang-format`
 ```bash

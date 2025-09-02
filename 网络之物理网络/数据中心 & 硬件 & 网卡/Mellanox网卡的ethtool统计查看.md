@@ -105,6 +105,8 @@ outbound_pci_stalled_wr：这个是机器内，PCIe设备之间通过PCIe协议�
 ![](attachments/Pasted%20image%2020230809155800.png)
 
 
+
+
 ### 其他
 - Mellanox 网卡的 rx_out_of_range_len_phy
 ```c
@@ -119,12 +121,17 @@ tx_discards_phy:
 	The number of packets which were discarded on transmission, even no errors were detected. the drop might occur due to link in down state, head of line drop, pause from the network, etc
 ```
 
-## 统计分类
-### 概述
+## 统计分组
+### 分组介绍
 参考：[Mellanox mlx5 Ethtool counters](https://docs.kernel.org/networking/device_drivers/ethernet/mellanox/mlx5/counters.html)
 [UNDERSTANDING MLX5 ETHTOOL COUNTERS](https://enterprise-support.nvidia.com/s/article/understanding-mlx5-ethtool-counters)
 
-![](attachments/Pasted%20image%2020230809170942.png)
+分组介绍一：
+![](attachments/Pasted%20image%2020250721161952.png)
+
+
+分组介绍二：
+![](attachments/Pasted%20image%2020250721155730.png)
 
 根据统计的类别，可以分为information , **Acceleration** 和 error.
 ![](attachments/Pasted%20image%2020230809171936.png)
@@ -133,6 +140,83 @@ tx_discards_phy:
 
 ### Ring / Software Port Counter Table
 ![](attachments/Pasted%20image%2020230809172354.png)
+
+
+```bash
+# ethtool -S eth01 | grep rx[0-9]*_packets
+     rx_packets: 231489200
+     rx_packets_phy: 2572965292
+     rx0_packets: 221870072
+     rx1_packets: 149337
+     rx2_packets: 114253
+     rx3_packets: 95294
+     rx4_packets: 99219
+     rx5_packets: 99093
+     rx6_packets: 100297
+     rx7_packets: 101940
+     rx8_packets: 101419
+     rx9_packets: 98423
+     rx10_packets: 99722
+     rx11_packets: 95147
+     rx12_packets: 89489
+     rx13_packets: 92630
+     rx14_packets: 116891
+     rx15_packets: 104672
+     rx16_packets: 92939
+     rx17_packets: 98031
+     rx18_packets: 105305
+     rx19_packets: 106794
+     rx20_packets: 97336
+     rx21_packets: 94963
+     rx22_packets: 89824
+     rx23_packets: 114178
+     rx24_packets: 103528
+     rx25_packets: 110613
+     rx26_packets: 91062
+     rx27_packets: 129274
+     rx28_packets: 100352
+     rx29_packets: 2889641
+     rx30_packets: 109399
+     rx31_packets: 109895
+     rx32_packets: 100678
+     rx33_packets: 95946
+     rx34_packets: 94585
+     rx35_packets: 88391
+     rx36_packets: 98632
+     rx37_packets: 94718
+     rx38_packets: 110114
+     rx39_packets: 89022
+     rx40_packets: 105979
+     rx41_packets: 95155
+     rx42_packets: 102661
+     rx43_packets: 101242
+     rx44_packets: 105808
+     rx45_packets: 97078
+     rx46_packets: 101859
+     rx47_packets: 105401
+     rx48_packets: 115322
+     rx49_packets: 101222
+     rx50_packets: 100115
+     rx51_packets: 300771
+     rx52_packets: 100110
+     rx53_packets: 101202
+     rx54_packets: 106597
+     rx55_packets: 116969
+     rx56_packets: 94744
+     rx57_packets: 100147
+     rx58_packets: 95345
+     rx59_packets: 403060
+     rx60_packets: 100644
+     rx61_packets: 95568
+     rx62_packets: 99083
+```
+
+如上所示：`rx[i]_packets` 即 表示 某个`ring`的统计，也有整个`port`的统计。
+`rxi_packets`时：表示的是某个`ring`的统计。`i`为`ring`的`index`。 
+`rx_packets`时：表示的是整个`port`的统计。
+
+其他同理：`rx[i]_bytes、|tx[i]_packets、tx[i]_bytes`
+
 
 |**Counter**|**Description**|**Type**|
 |---|---|---|
@@ -185,6 +269,7 @@ tx_discards_phy:
 |tx[i]_xdp_err|The number of packets redirected to the interface(due to XDP redirect) but were dropped due to error such as frame too long and frame too short . Supported from kernel 4.19|Error|
 |tx[i]_xdp_cqes|The number of completions received for packets redirected to the interface(due to XDP redirect) on the CQ . Supported from kernel 4.19|Informative|
 |rx[i]_cache_waive|The number of cache evacuation. This can occur due to page move to another NUMA node or page was pfmemalloc-ed and should be freed as soon as possible. Supported from kernel 4.14|Acceleration|
+
 ### 设备本身DEVICE COUNTERS
 ![](attachments/Pasted%20image%2020230809171123.png)
 
@@ -256,12 +341,63 @@ The following counters are physical port counters that being counted per L2 prio
 Counters on the eswitch port that is connected to the VNIC.
 
 
+|**Counter**|**Description**|**Type**|
+|---|---|---|
+|rx_vport_unicast_packets|Unicast packets received, steered to a port including Raw Ethernet QP/DPDK traffic, excluding RDMA traffic|Informative|
+|rx_vport_unicast_bytes|Unicast bytes received, steered to a port including Raw Ethernet QP/DPDK traffic, excluding RDMA traffic|Informative|
+|tx_vport_unicast_packets|Unicast packets transmitted, steered from a port including Raw Ethernet QP/DPDK traffic, excluding RDMA traffic|Informative|
+|tx_vport_unicast_bytes|Unicast bytes transmitted, steered from a port including Raw Ethernet QP/DPDK traffic, excluding RDMA traffic|Informative|
+|rx_vport_multicast_packets|Multicast packets received, steered to a port including Raw Ethernet QP/DPDK traffic, excluding RDMA traffic|Informative|
+|rx_vport_multicast_bytes|Multicast bytes received, steered to a port including Raw Ethernet QP/DPDK traffic, excluding RDMA traffic|Informative|
+|tx_vport_multicast_packets|Multicast packets transmitted, steered from a port including Raw Ethernet QP/DPDK traffic, excluding RDMA traffic|Informative|
+|tx_vport_multicast_bytes|Multicast bytes transmitted, steered from a port including Raw Ethernet QP/DPDK traffic, excluding RDMA traffic|Informative|
+|rx_vport_broadcast_packets|Broadcast packets received, steered to a port including Raw Ethernet QP/DPDK traffic, excluding RDMA traffic|Informative|
+|rx_vport_broadcast_bytes|Broadcast bytes received, steered to a port including Raw Ethernet QP/DPDK traffic, excluding RDMA traffic|Informative|
+|tx_vport_broadcast_packets|Broadcast packets transmitted, steered from a port including Raw Ethernet QP/DPDK traffic, excluding RDMA traffic|Informative|
+|tx_vport_broadcast_bytes|Broadcast packets transmitted, steered from a port including Raw Ethernet QP/DPDK traffic, excluding RDMA traffic|Informative|
+|rx_vport_rdma_unicast_packets|RDMA unicast packets received, steered to a port (counters counts RoCE/UD/RC traffic) [A]|Acceleration|
+|rx_vport_rdma_unicast_bytes|RDMA unicast bytes received, steered to a port (counters counts RoCE/UD/RC traffic) [A]|Acceleration|
+|tx_vport_rdma_unicast_packets|RDMA unicast packets transmitted, steered from a port (counters counts RoCE/UD/RC traffic) [A]|Acceleration|
+|tx_vport_rdma_unicast_bytes|RDMA unicast bytes transmitted, steered from a port (counters counts RoCE/UD/RC traffic) [A]|Acceleration|
+|rx_vport_ rdma _multicast_packets|RDMA multicast packets received, steered to a port (counters counts RoCE/UD/RC traffic) [A]|Acceleration|
+|rx_vport_ rdma _multicast_bytes|RDMA multicast bytes received, steered to a port (counters counts RoCE/UD/RC traffic) [A]|Acceleration|
+|tx_vport_ rdma _multicast_packets|RDMA multicast packets transmitted, steered from a port (counters counts RoCE/UD/RC traffic) [A]|Acceleration|
+|tx_vport_ rdma _multicast_bytes|RDMA multicast bytes transmitted, steered from a port (counters counts RoCE/UD/RC traffic) [A]|Acceleration|
+|rx_steer_missed_packets|Number of packets that was received by the NIC, however was discarded because it did not match any flow in the NIC flow table. supported from kernel 4.16|Error|
+|rx_packets|Representor only: packets received, that were handled by the hypervisor. supported from kernel 4.18|Informative|
+|rx_bytes|Representor only: bytes received, that were handled by the hypervisor. supported from kernel 4.18|Informative|
+|tx_packets|Representor  only: packets transmitted, that were handled by the hypervisor. supported from kernel 4.18|Informative|
+|tx_bytes|Representor  only: bytes transmitted, that were handled by the hypervisor. supported from kernel 4.18|Informative|
+
+#### rx_vport_unicast_packets 和 rx_vport_rdma_unicast_packets
+
+|**特性**|`rx_vport_unicast_packets`|`rx_vport_rdma_unicast_packets`|
+|---|---|---|
+|**流量类型**|常规以太网/IP流量|仅RDMA协议流量|
+|**包含DPDK/Raw Eth**|✅|❌|
+|**包含RDMA (RoCE/UD/RC)**|❌|✅|
+|**统计目的**|传统网络应用流量|高性能RDMA应用流量|
+
+
+```mermaid
+graph LR
+A[接收数据包] --> B{是RDMA流量？}
+B -->|Yes| C[计入 rx_vport_rdma_unicast_packets]
+B -->|No| D[计入 rx_vport_unicast_packets]
+```
+
 ### 其他
-- ethtool 的硬件统计和软件统计如何区分问题
+#### RDMA协议相关统计
+
+
+#### ethtool 的硬件统计和软件统计如何区分
+
 ![](attachments/Pasted%20image%2020230809142948.png)
 
-#### 加速的方式方法
+#### 硬件加速的方法
 ![](attachments/Pasted%20image%2020230809172924.png)
+
+
 
 # dpdk程序中的统计
 在开发DPDK应用的时候，我们可以通过rte_eth_stats_get函数获取网卡统计信息中的imissed计数来判断网卡是否出现丢包。

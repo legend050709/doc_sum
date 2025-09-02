@@ -43,9 +43,17 @@ DPDK 提供了一套在指定 NUMA 节点上创建 memzone、ring, rte_malloc �
 在老版本的DPDK，系统申请100个大页，在DPDK系统启动的时候，直接从系统中申请100个大页全部给占用了，实际运行中，不存在频繁的从系统中申请大页以及释放大页给系统。
 
 ## DPDK中的预留内存
+
+### `--socket-mem`
 ```bash
 `--socket-mem`: Memory to allocate from hugepages on specific sockets. In dynamic memory mode, this memory will also be pinned (i.e. not released back to the system until application closes).
 ```
+
+### `--socket-limit`
+```bash
+
+```
+
 
 # DPDK内存整体架构
 参考: [# DPDK内存管理概述](https://zhuanlan.zhihu.com/p/658824633)
