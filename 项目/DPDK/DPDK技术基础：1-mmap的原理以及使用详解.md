@@ -2,9 +2,9 @@
 ```
 
 # 介绍
-mmap函数是一种内存映射文件的方法，它可以将一个文件或设备映射到进程的地址空间中，使得进程可以像访问内存一样访问文件或设备。
-mmap可以分为：文件映射和匿名映射。
 
+mmap函数是一种**内存映射文件**的方法，它可以**将一个文件或设备映射到进程的地址空间中，使得进程可以像访问内存一样访问文件或设备**。
+mmap可以分为：**文件映射和匿名映射**。
 
 
 # mmap 函数
@@ -31,13 +31,21 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 
 >注： ==addr，length 必须要按照 PAGE_SIZE（4K） 对齐==。
 
-### prot
+### prot(protection)
 指定映射区域的保护方式。可以是以下几种值的组合：  
 ```c
 #define PROT_READ 0x1  /* page can be read */  
 #define PROT_WRITE 0x2  /* page can be written */  
 #define PROT_EXEC 0x4  /* page can be executed */  
 #define PROT_NONE 0x0  /* page can not be accessed */
+
+
+The prot argument describes the desired memory protection of the mapping (and must not conflict with the open mode of the file).  It is either PROT_NONE or the bitwise OR of one or  more  of  the
+following flags:
+   PROT_EXEC  : Pages may be executed.
+   PROT_READ  : Pages may be read.
+   PROT_WRITE : Pages may be written.
+   PROT_NONE  : Pages may not be accessed.
 ```
 **PROT_READ** 表示该虚拟内存区域背后映射的物理内存是可读的。
     
@@ -65,6 +73,31 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 **MAP_FIXED**：指定映射区域的起始地址。如果指定了这个标志，则 addr 参数必须为非 NULL。  
 **MAP_ANONYMOUS**：不映射任何文件，而是映射一段匿名的内存区域。
 
+#### MAP_POPULATE
+
+##### 背景
+`mmap()` 默认只是建立了**虚拟地址空间的映射关系**，但并不马上分配物理页；直到下次真正访问地址空间时发现数据不存在于物理内存空间时，触发 `Page Fault` 即缺页中断，由内核分配物理页并建立页表映射。
+
+这在访问大文件或大内存映射时可能导致：
+- 首次访问延迟高（大量 page fault）；访问时的抖动（延迟分布不均）；
+- 内存分配的时候，系统的内存已经比较乱了，不知道系统会从那个numa节点去分配，而且极端的时候，发生内存短缺，会换出内存页面，这个时间非常不可控。内存的分配也无法准确的指定。
+
+**思路**：
+如果我们能够在系统内存还比较干净的时候，比如刚开机或者刚做完`vm.drop_caches=3`的时候，去把我们需要的内存或者数据预先按照我们设想的方式来准备，虽然这个集中化的动作会化很长的时间，但是换来的是后续的可控性。
+
+##### 作用
+```bash
+MAP_POPULATE (since Linux 2.5.46)
+        Populate (prefault) page tables for a mapping.  For a file
+        mapping, this causes read-ahead on the file.  This will
+        help to reduce blocking on page faults later.
+        MAP_POPULATE is supported for private mappings only since
+        Linux 2.6.23.
+```
+**populate page table**，提前分配并映射物理页，减少后续访问的缺页中断。
+
+
+
 
 ### offset 和 fd
 当我们将 mmap 系统调用参数 flags 指定为 `MAP_ANONYMOUS` 时，表示我们需要进行匿名映射，既然是匿名映射，fd 和 offset 这两个参数也就没有了意义，fd 参数需要被设置为 -1 。
@@ -85,7 +118,10 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 
 # mmap映射分类
 ## 匿名映射和文件映射
-操作系统对于物理内存的管理是按照内存页为单位进行的，而内存页的类型有两种：一种是匿名页，另一种是文件页。根据内存页类型的不同，内存映射也自然分为两种：一种是虚拟内存对匿名物理内存页的映射，另一种是虚拟内存对文件页的也映射，也就是我们常提到的匿名映射和文件映射。
+操作系统对于物理内存的管理是按照内存页为单位进行的，而内存页的类型有两种：一种是匿名页，另一种是文件页。
+
+根据内存页类型的不同，内存映射也自然分为两种：一种是虚拟内存对匿名物理内存页的映射，另一种是虚拟内存对文件页的也映射，也就是我们常提到的匿名映射和文件映射。
+
 ## 共享映射和私有映射
 根据 mmap 创建出的这片虚拟内存区域背后所映射的**物理内存**能否在多进程之间共享，又分为了两种内存映射方式：
 
@@ -297,6 +333,28 @@ atomic_fetch_add(&stats->requests, 1);
 int req = atomic_load(&stats->requests);
 ```
 也可以用 `__atomic_store_n(&counter, value, __ATOMIC_RELEASE);` 等
+
+# mmap 与 set_mempolicy / mbind  / mlock 的结合
+## set_mempolicy：影响后续分配的 NUMA 策略
+## mbind：为已有地址设置 NUMA 策略
+```c
+#include <numaif.h>
+
+int mbind(void *addr, unsigned long len, int mode,
+		 unsigned long *nodemask, unsigned long maxnode,
+		 unsigned flags);
+```
+## mlock/mlockall：锁页，禁止换出
+
+## 小结
+
+|接口|作用|影响阶段|典型组合|
+|---|---|---|---|
+|`MAP_POPULATE`|提前分配页，预防 page fault|映射时|`mmap + MAP_POPULATE`|
+|`set_mempolicy()`|影响后续分配的 NUMA 策略|调用后新分配|`set_mempolicy + mmap`|
+|`mbind()`|为已有地址设置 NUMA 策略|运行中|`mmap + mbind`|
+|`mlock()`|锁页，禁止换出|运行时|`mmap + MAP_POPULATE + mlock`|
+
 
 
 # 其他

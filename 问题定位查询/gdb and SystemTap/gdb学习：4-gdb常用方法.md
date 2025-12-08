@@ -21,23 +21,82 @@
 
 通过这个命令就可以实现这个需求。off 不锁定任何线程，也就是所有线程都执行，这是默认值。 on 只有当前被调试程序会执行。 step 在单步的时候，除了next过一个函数的情况(熟悉情况的人可能知道，这其实是一个设置断点然后continue的行为)以外，只有当前线程会执行。
 
-# 父子进程处理
-## set follow-fork-mode child
-### 背景
+# gdb与进程
+## gdb 启动程序
+### 带有参数的二进制
+```bash
+gdb --args <可执行文件> <参数1> <参数2> ...
+```
+
+### 运行
+```bash
+
+```
+
+
+## 父子进程处理
+### set follow-fork-mode child
+#### 背景
 在调试程序时，如果目标程序调用了 `fork()` 函数，GDB 需要决定是在父进程还是子进程中继续调试。`set follow-fork-mode` 用来指定 GDB 在 `fork()` 发生后跟踪哪一方。
 
 - **`parent`（默认值）**： GDB 在 `fork()` 调用后继续调试父进程。
 - **`child`**： GDB 在 `fork()` 调用后停止调试父进程，转而调试子进程。
 
-### 含义
+#### 含义
 - 如果设置为 `child`，GDB 会自动切换到子进程，并忽略父进程。
 - 如果调试的目标程序会生成子进程（例如，通过 `fork()` 或类似函数），使用该选项可以深入调试子进程的行为。
 
-### 使用场景
+#### 使用场景
 - 调试多进程程序时： 如果程序调用了 `fork()`，你想要调试子进程的逻辑，而不是父进程。
 - 调试守护进程（Daemon）： 通常守护进程在启动时会通过 `fork()` 创建一个子进程作为真正的服务进程，使用 `set follow-fork-mode child` 可以直接跟踪子进程。
 
+# gdb查看
+## 源码查看
+### 源码路径查看
+```bash
+`info sources`：查看编译二进制时所有源码文件路径
 
+`list <func>`：查看函数源码
+
+`directory <path>`：添加源码搜索路径
+```
+### 查看函数源码
+```bash
+list FUNC
+```
+
+#### 函数显示过短问题
+gdb 默认只显示函数前几行源码，如果函数很长，默认一次只显示 10 行，很难快速看到整个函数的全部热点区域。
+
+**解决**：
+
+（1）多次enter：
+默认 `list` 会显示 10 行，你可以连续按 **Enter** 来显示下一段 10 行
+
+（2）设置 listsize
+可以通过修改行数参数：
+```bash
+set listsize 50 
+list kucl_epoll_wait
+```
+`sets listsize` 改变默认显示行数（比如一次显示 50 行）， 后续的 `list` 命令都会按照这个数量显示
+
+（3）gdb 没有直接命令一次性打印整个函数，但可以结合 `start` 和 `end` 行, 显示整个函数
+```bash
+(1) 得到函数的开始，结束位置：
+(gdb) info line kucl_epoll_wait
+No line number information available for address 0x42f3aa <kucl_epoll_wait>
+Line 330 of "poll/epoll.c" starts at address 0x69e2b0 <kucl_epoll_wait> and ends at 0x69e2d3 <kucl_epoll_wait+35>.
+
+（2）计算行数
+>>> 0x69e2d3 - 0x69e2b0
+35
+
+（3）展示：list N,M   # 用结束行号
+比如：
+```
+
+![](attachments/Pasted%20image%2020250918123402.png)
 
 # gdb 输出
 
@@ -588,7 +647,7 @@ $7 = 0x1401b3d10
 $8 = 0x7ffd2afda9e0
 ```
 
-## 变量优化
+## `optimized out`变量优化
 ### 范例
 ```c
 (gdb) bt
@@ -612,6 +671,15 @@ $8 = 0x7ffd2afda9e0
 
 #### 查看
 (1) 查看反汇编：
+```bash
+(1) disassemble 函数名
+比如：
+disassemble kucl_epoll_real_polling
+
+(2) disassemble /m 函数名
+比如：
+disassemble /m kucl_epoll_real_polling
+```
 ![](attachments/Pasted%20image%2020250422153714.png)
 
 (2) 查看寄存器的值

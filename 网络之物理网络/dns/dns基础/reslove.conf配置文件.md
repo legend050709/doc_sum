@@ -266,6 +266,58 @@ listening on eth1, link-type EN10MB (Ethernet), capture size 65535 bytes
 search的说明如下，此中的search应该是包含了 domain的特性。
 ![](../attachments/Pasted%20image%2020231107174422.png)
 
+```bash
+search domain1 domain2 domain3 ...
+```
+**作用**：当你解析一个 不带点的主机名 或 点数不足的域名 时，系统会依次尝试在这些域名/主机名添加`search`后的后缀后面补全，然后进行查询。
+
+**注意**：一个 `search` 列表最多 6 个域名，总长度不超过 256 字节。
+
+### `ndots` 配置
+
+#### 配置格式
+```bash
+options ndots:N
+```
+作用：决定输入的名字里至少有几个点，才会被当成“完整域名”直接查。
+即：输入的名字有多少个点，才算“可能已经是完整域名「FQDN」”，先尝试直接查；不满足FQDN，则去 `search` 补全。
+
+#### 范例
+
+```bash
+options ndots:2
+search example.com corp.local
+```
+
+当你解析：
+
+- `foo`（0 个点）  
+    → 不够 `ndots=2`，所以会依次补全：
+    
+    - `foo.example.com`
+        
+    - `foo.corp.local`
+        
+- `foo.bar`（1 个点）  
+    → 还是不够 `ndots=2`，所以也会补全：
+    
+    - `foo.bar.example.com`
+        
+    - `foo.bar.corp.local`
+        
+- `foo.bar.baz`（2 个点）  
+    → 已经达到 `ndots=2`，系统会 **先尝试直接解析 `foo.bar.baz`**，如果失败，才会去补全：
+    
+    - `foo.bar.baz.example.com`
+        
+    - `foo.bar.baz.corp.local`
+
+
+#### 建议值
+- 默认 `ndots` 通常是 **1**。
+- 如果 `ndots` 设置太大，很多本来就是外部域名的（比如 `www.google.com`）也会被先拿去加后缀再查，反而会导致 **DNS 解析变慢**。
+
+
 ### 特性
 指定一组域名（用空格分割），当请求解析的内容仅写出主机名（没有点），就依次添加search里的每一项依次组成FQDN（完全合格域名）来查询，直到匹配完所有列出的域名，给出最终的结果。
 
@@ -306,7 +358,7 @@ DNS配置文件如下：
 search openstack.local dev.com example.local
 nameserver 192.168.122.21
 ```
-例1：请求解析的内容没有点(主机名后面没有点，没有点的查询就认为是主机名)，所以先添加search里的每一项依次组成FQDN（完全合格域名）来查询，完全合格域名查询未找到，就再认为主机名是完全合格域名来查询。
+例1：==请求解析的内容没有点(主机名后面没有点，没有点的查询就认为是主机名)，所以先添加search里的每一项依次组成FQDN（完全合格域名）来查询，完全合格域名查询未找到，就再认为主机名是完全合格域名来查询==。
 ```c
 # host -a centos7-bind-1
 Trying "centos7-bind-1.openstack.local"
@@ -316,7 +368,7 @@ Trying "centos7-bind-1"
 ;; connection timed out; no servers could be reached
 ```
 
-例2：请求解析的内容有点(不是末尾有点)，就认为是完全合格域名，先用它来查询，查询失败就把它当成是主机名来进行，添加search里的每一项组成FQDN（完全合格域名）来查询。
+例2：==请求解析的内容有点(不是末尾有点)，就认为是完全合格域名，先用它来查询，查询失败就把它当成是主机名来进行，添加search里的每一项组成FQDN（完全合格域名）来查询==。
 ```c
 # host -a centos7-bind-1.com
 Trying "centos7-bind-1.com"
@@ -328,7 +380,7 @@ Host centos7-bind-1.com not found: 3(NXDOMAIN)
 Received 125 bytes from 192.168.122.21#53 in 55 ms
 ```
 
-例3：请求解析的内容有点(末尾有点)，则认为是完全合格域名，只用它来查询（不会再添加search里的每一项）。查询次数会与search里项域名个数有关。
+例3：==请求解析的内容有点(末尾有点)，则认为是完全合格域名，只用它来查询（不会再添加search里的每一项）。查询次数会与search里项域名个数有关==。
 ```c
 # host -a centos7-bind-1.
 Trying "centos7-bind-1"

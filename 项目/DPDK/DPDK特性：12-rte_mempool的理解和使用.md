@@ -272,6 +272,115 @@ typedef rte_mempool_obj_cb_t rte_mempool_obj_ctor_t; /* compat */
 ## rte_mempool_get
 ## rte_mempool_put
 
+## rte_mempool_avail_count 和  rte_mempool_ops_get_count
+
+DPDK 的 `rte_mempool` 是一个通用的内存对象池抽象层，其底层可以用不同的“实现”（ops）：
+默认是 `ring`（基于 `rte_ring`）也可能是 `stack`、`dpaa2`、`mlx5`、`octeontx` 等 driver 特定实现
+```bash
+         ┌────────────────────────────┐
+         │ rte_mempool                │   ← 通用接口层
+         │  ├── objcnt (统计字段)     │
+         │  ├── ops (指向实现函数集) │
+         │  └── mem_list, cache 等    │
+         └────────────┬──────────────┘
+                      │
+                      ▼
+           ┌────────────────────────┐
+           │ rte_mempool_ops_xxx    │   ← 实现层（ring/stack/driver等）
+           │  ├── enqueue/dequeue   │
+           │  ├── get_count         │ ← 关键：rte_mempool_ops_get_count 调这个
+           │  └── ...
+           └────────────────────────┘
+
+```
+
+（1）`rte_mempool_ops_get_count(const struct rte_mempool *mp)` 调用 `mempool` 底层实现（ops）的 `get_count()` 函数，返回**底层数据结构中可用的对象数量**。例如： 对于 `ring` 模式，就是 ring 中元素的个数（`rte_ring_count()`）；
+
+（2）`rte_mempool_avail_count()` = 底层池中剩余对象 + 每个线程/核 cache 中未用对象。因此，它给出的数量是**从全局视角**的、**逻辑上可用**的对象总数。
+即：`avail_count` ≈ `ops_get_count` + “所有 core cache 中的可用对象”。
+
+
+|函数名|层级|是否包含 per-lcore cache|返回含义|常用场景|
+|---|---|---|---|---|
+|`rte_mempool_avail_count(mp)`|通用层|✅ 包含|整个 mempool 当前“可用对象”的逻辑总数|用户层查看 pool 剩余容量|
+|`rte_mempool_ops_get_count(mp)`|实现层|❌ 不包含|底层 ops 实现中剩余的对象数（不含 cache）|调试或实现自定义 ops|
+
+
+
+```c
+/* Return the number of entries in the mempool */
+unsigned int rte_mempool_avail_count(const struct rte_mempool *mp)
+{
+  unsigned count;
+  unsigned lcore_id;
+
+  count = rte_mempool_ops_get_count(mp);
+
+  if (mp->cache_size == 0)
+    return count;
+
+  for (lcore_id = 0; lcore_id < RTE_MAX_LCORE; lcore_id++)
+    count += mp->local_cache[lcore_id].len;
+
+  /*
+   * due to race condition (access to len is not locked), the
+   * total can be greater than size... so fix the result
+   */
+  if (count > mp->size)
+    return mp->size;
+  return count;
+}
+
+
+/* return the number of entries allocated from the mempool */
+unsigned int
+rte_mempool_in_use_count(const struct rte_mempool *mp)
+{
+  return mp->size - rte_mempool_avail_count(mp);
+}
+
+
+
+/**
+ * Test if the mempool is full.
+ *
+ * When cache is enabled, this function has to browse the length of all
+ * lcores, so it should not be used in a data path, but only for debug
+ * purposes. User-owned mempool caches are not accounted for.
+ *
+ * @param mp
+ *   A pointer to the mempool structure.
+ * @return
+ *   - 1: The mempool is full.
+ *   - 0: The mempool is not full.
+ */
+static inline int
+rte_mempool_full(const struct rte_mempool *mp)
+{
+  return rte_mempool_avail_count(mp) == mp->size;
+}
+
+/**
+ * Test if the mempool is empty.
+ *
+ * When cache is enabled, this function has to browse the length of all
+ * lcores, so it should not be used in a data path, but only for debug
+ * purposes. User-owned mempool caches are not accounted for.
+ *
+ * @param mp
+ *   A pointer to the mempool structure.
+ * @return
+ *   - 1: The mempool is empty.
+ *   - 0: The mempool is not empty.
+ */
+static inline int
+rte_mempool_empty(const struct rte_mempool *mp)
+{
+  return rte_mempool_avail_count(mp) == 0;
+}
+
+```
+
 ## 其他
 ### 一个core中进行`rte_mempool_get`，另外一个core进行`rte_mempool_put`是否有问题？
 #### 背景

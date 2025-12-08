@@ -40,6 +40,14 @@ Meson 是依赖 Python 与 Ninja 实现的，依赖的版本如下：
 # dnf install -y meson ninja-build
 ```
 
+### 安装高版本的meson
+```bash
+比如：出错如下所示：
+meson.build:4:0: ERROR:  Meson version is 0.47.2 but project requires >= 0.53.2.
+```
+
+
+
 ## meson.build描述文件
 `meson`和`makefile` 一样，需要写描述文件告诉`meson`要构建什么，这个描述文件 就是`meson.build`，`meson`根据`meson.build`中的定义生成具体的构建定义文件`build.ninja`, `ninja`根据`build.ninja`完成具体构建。
 所以，不像`make`直接根据`Makefile`文件完成构建，`meson`  

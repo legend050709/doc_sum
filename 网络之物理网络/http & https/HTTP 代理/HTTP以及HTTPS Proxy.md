@@ -106,6 +106,9 @@ pip install --proxy="$proxy:11080" $python-package
 ```
 ### 应用
 #### Squid正向代理
+
+![](attachments/image%20(23).png)
+
 所有的客户端通过设置代理服务器连接值Squid，通过代理上网。此模型下，Squid主要负责提供缓存加速服务和访问控制的功能。
 ### 范例
 （1）client设置HTTP_PROXY，在Client执行`curl www.baidu.com`, 抓包如下所示：

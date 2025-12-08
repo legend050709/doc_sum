@@ -21,9 +21,113 @@
 	1.2> 已经提交commit的删除
 	1.3> 已经提交cimmit的重新编辑
 	1.4> 2个commit的先后顺序调整
+```
 
+
+### 提取已经提交的几个commit中对于某个目录的修改，为新的commit
+#### 背景
+比如：存在多个分支。
+发布给线上用的分支为：1.0的分支；
+开发的分支为：devel的分支。正常在devel分支上进行开发。
+
+devel分支上可能存在一个新的功能模块（在一个新的目录下，比如： feature_new），1.0分支上没有这个功能模块。
+每次commit的时候，可能修改了很多了文件，有的位于 feature_new 目录下，有的位于其他的目录下(其他的目录在1.0分支上也有)。
+
+那么，这个commit可能就无法被1.0分支进行cherry-pick。
+
+#### 需求
+比如：已经在devel分支上提交了3个commit，修改了3个bug。但是这3个commit也涉及到 新的功能模块（在一个新的目录下，比如： feature_new）文件下的修改。
+
+那么，这3个commit就无法直接的cherry-pick到1.0分支上。这就带来了麻烦。
+
+#### 解决方法
+
+**思路**：
+从最近 3 个提交中，把 某个目录的改动提取出来，单独作为一个新的 commit，  并将原有 3 个提交中对该目录的改动清理掉。
+
+**流程**：
+
+（1）备份分支（防止出错可随时回退）
+```bash
+git branch backup-before-rebase
+```
+
+（2）生成并保存该目录的所有改动
+回来原来分支，在开始前，先把最近 3 个提交中 `src/module/` 的所有变更保存成 patch 文件：
+```bash
+git diff HEAD~3 HEAD -- src/module > /tmp/module.patch
+
+可以用 `git apply --stat /tmp/module.patch` 看看 patch 内容是否符合预期。
+```
+
+（3）启动交互式 rebase
+```bash
+git rebase -i HEAD~3
+
+编辑器打开后会看到类似：
+pick a1c2d34 Commit 1
+pick b2e3f45 Commit 2
+pick c3f4a56 Commit 3
+
+把它改成：
+edit a1c2d34 Commit 1
+edit b2e3f45 Commit 2
+edit c3f4a56 Commit 3
+
+保存退出。
+```
+
+在 rebase 暂停时清理该目录的改动：
+```bash
+每次 Git 暂停在一个 commit 时执行以下命令：
+
+# 从当前提交中移除 src/module 目录的改动
+git reset HEAD^ -- src/module
+git checkout -- src/module
+
+# 保存该 commit（不再包含 src/module 改动）
+git commit --amend --no-edit
+
+# 继续下一个 commit
+git rebase --continue
+
+你只需重复这组命令三次（每次 rebase 停下来时都执行）。
+```
+
+
+（4）rebase 完成后，创建新的独立 commit
+当 rebase 全部完成后，你的提交历史中最近 3 个 commit 已不再包含 `src/module` 的修改。此时重新应用并提交该目录的改动：
+```bash
+git apply /tmp/module.patch
+git add .
+git commit -m "Extract: 从最近3个提交中提取 src/module 改动为独立提交"
 
 ```
+
+（5）强制推送远程仓库（可选）
+由于 rebase 改写了历史，如果这些提交已推送远程，需要强制推送：
+```bash
+git push -f origin <branch-name>
+
+or
+
+git push -f
+```
+
+
+**小结**
+
+|步骤|命令|说明|
+|---|---|---|
+|1️⃣ 保存目录变更|`git diff HEAD~3 HEAD -- src/module > /tmp/module.patch`|提前导出 patch|
+|2️⃣ 启动 rebase|`git rebase -i HEAD~3`|对最近3个提交交互式编辑|
+|3️⃣ 清理每个 commit 的改动|`git reset HEAD^ -- src/module``git checkout -- src/module``git commit --amend --no-edit``git rebase --continue`|重复三次|
+|4️⃣ 重新创建新提交|`git apply /tmp/module.patch && git add src/module && git commit -m "Extract..."`|新建独立 commit|
+|5️⃣ 推送|`git push -f`|改写历史|
+
+
+
+
 ## git diff
 ### 使用场景
 如果开发环境和编译的环境不在一个机器上，那么就涉及到如何在这2个环境中进行更改代码的同步。

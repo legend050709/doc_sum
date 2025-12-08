@@ -123,6 +123,13 @@ VF Representor（后文简称VF Rep，VF代表），在DPDK中也叫做**Port Re
 
 因此，是不是可以得出一个结论，内存性能会非常影响网络性能（仅在慢速路径中）？
 
+## eswitch 和 vswitch 和 switch
+
+![](attachments/Pasted%20image%2020251111142611.png)
+
+![](attachments/85ef4e16-32c9-4f7b-b19b-6f98db95b525.png)
+
+![](attachments/098d18f8-34d5-4cb9-8623-ad012556df76.png)
 
 ## Datapath
 

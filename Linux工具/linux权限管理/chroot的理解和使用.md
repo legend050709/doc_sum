@@ -100,6 +100,12 @@ mount --bind /lib64 /jail/lib64
 因此，特权进程可以轻松逃脱监狱。
 非特权进程有可能通过方法 `chdir(\..\)` 和对 `chroot` 的另一个调用完全中断。如果您真的专注于安全性，您应该放弃对 `chroot(2)` 系统调用的访问，或者使用 fork `jchroot`，它会自动执行此额外的安全功能。
 
+## chroot后挂载之前根目录下的某个目录
+### 背景
+chroot之后，之前的根目录下的目录，在chroot中就无法再访问到了。
+但是如果期望再次访问之前的某个目录。
+
+
 ## 范例
 创建对应的新的根目录：
 ```bash
@@ -238,4 +244,6 @@ bash-4.3#
 ```c
 # Linux中的chroot命令
 https://jasonkayzk.github.io/2021/06/26/Linux%E4%B8%AD%E7%9A%84chroot%E5%91%BD%E4%BB%A4/
+
+https://zyy.rs/post/chroot-mechanism/
 ```

@@ -26,9 +26,9 @@ TCP/UDP用`五元组`唯一标识一个连接。**任何时候**，两条连接�
 同样的，我们也可以使用一个通配符来让系统决定绑定哪个源地址（ipv4通配符为0.0.0.0，ipv6通配符为::）。而与端口不同的是，一个socket可以被绑定到主机上所有接口所对应的地址中的任意一个。基于连接在本socket的目的地址和路由表中对应的信息，操作系统将会选择合适的地址来绑定这个socket，并用这个地址来取代之前的通配符IP地址。
 
 ## socket绑定的限制
-默认情况下，两个sockets不能绑定相同的源地址和源端口组合上。比如说我们将socketA绑定在A:X地址，将socketB绑定在B:Y地址，其中A和B是IP地址，X和Y是端口。那么在`A==B`的情况下X!=Y必须满足，在`X==Y`的情况下A!=B必须满足。
+==默认情况下，两个sockets不能绑定相同的源地址和源端口组合上==。比如说我们将socketA绑定在A:X地址，将socketB绑定在B:Y地址，其中A和B是IP地址，X和Y是端口。那么在`A==B`的情况下X!=Y必须满足，在`X==Y`的情况下A!=B必须满足。
 
-需要注意的是，如果某一个socket被绑定在通配符IP地址下，那么事实上本机所有IP都会被系统认为与其绑定了。例如一个socket绑定了0.0.0.0:21，在这种情况下，任何其他socket不论选择哪一个具体的IP地址，其都不能再绑定在21端口下。因为通配符IP0.0.0.0与所有本地IP都冲突。
+需要注意的是，如果某一个socket被绑定在通配符IP地址下，那么事实上本机所有IP都会被系统认为与其绑定了。例如一个socket绑定了0.0.0.0:21，在这种情况下，任何其他socket不论选择哪一个具体的IP地址，其都不能再绑定在21端口下。因为==通配符IP0.0.0.0与所有本地IP都冲突==。
 
 ## tcp socket关闭的延迟时间
 每一个TCP socket都有其相应的发送缓冲区（buffer）。当成功调用其send()方法的时候，实际上我们所要求发送的数据并不一定被立即发送出去，而是被添加到了发送缓冲区中。
@@ -38,7 +38,7 @@ TCP/UDP用`五元组`唯一标识一个连接。**任何时候**，两条连接�
 
 如果TCP socket在我们调用close()之后直接关闭，那么所有这些数据都将会丢失，而我们的代码根本不会知道。但是，TCP是一个可靠的传输层协议，直接丢弃这些待传输的数据显然是不可取的。实际上，如果在socket的发送缓冲区中还有待发送数据的情况下调用了其close()方法，socket将会持续尝试发送缓冲区的数据直到所有数据都被成功发送或者直到超时，超时被触发的情况下socket将会被强制关闭。
 
-调用 `close()` 后等待 buffer 内数据全部写出去的时间叫做 Linger Time。Linger Time 结束后开始正常的 TCP 挥手过程。
+==调用 `close()` 后等待 buffer 内数据全部写出去的时间叫做 Linger Time==。Linger Time 结束后开始正常的 TCP 挥手过程。
 操作系统的kernel在强制关闭一个socket之前的最长等待时间被称为延迟时间（Linger Time）。在大部分系统中延迟时间都已经被全局设置好了，并且相对较长（大部分系统将其设置为2分钟）。
 我们也可以在初始化一个socket的时候使用SO_LINGER选项来特定地设置每一个socket的延迟时间。我们甚至可以完全关闭延迟等待。但是需要注意的是，将延迟时间设置为0（完全关闭延迟等待）并不是一个好的编程实践。因为优雅地关闭TCP socket是一个比较复杂的过程，过程中包括与远程主机交换数个数据包（包括在丢包的情况下的丢失重传），而**这个数据包交换的过程所需要的时间也包括在延迟时间中**。
 如果我们停用延迟等待，socket不止会在关闭的时候直接丢弃所有待发送的数据，而且总是会被强制关闭（由于TCP是面向连接的协议，不与远端端口交换关闭数据包将会导致远端端口处于长时间的等待状态）。所以通常我们并不推荐在实际编程中这样做。
@@ -50,7 +50,8 @@ TCP/UDP用`五元组`唯一标识一个连接。**任何时候**，两条连接�
 
 # SO_REUSEADDR
 假设我现在需要`bind()`将`socketA`绑定到`A:X`，将`socketB`绑定到`B:Y`(不考虑`X=0`或者`Y=0`，因为`0`表示让内核自动分配端口，一定不会冲突)。
-如果`X!=Y`，那么无论`A`和`B`的关系如何，两个`bind()`都会成功。但如果`X==Y`，那么结果会是下面这样:
+如果`X!=Y`，那么无论`A`和`B`的关系如何，两个`bind()`都会成功。
+但如果`X==Y`，那么结果会是下面这样:
 ```
 SO_REUSEADDR       socketA        socketB       Result
 ---------------------------------------------------------------------
@@ -65,27 +66,33 @@ SO_REUSEADDR       socketA        socketB       Result
 ```
 第一列表示是否设置`SO_REUSEADDR``注`，最后一列表示**后**绑定的socket是否能绑定成功。
 这里设置的对象是指**后**绑定的socket(**也就是说不关心前一个是否设置**)。
+
 ## 作用
 ### 作用一
 如果在一个socket绑定到某一地址和端口之前设置了其SO_REUSEADDR的属性，那么除非本socket尝试与另一个socket绑定到完全相同的源地址和源端口组合会导致冲突，否则的话这个socket就可以成功的绑定这个地址端口对。
 
-- 如果不用SO_REUSEADDR的话，如果我们将socketA绑定到0.0.0.0:21，那么任何将本机其他socket绑定到端口21的举动（如绑定到192.168.1.1:21）都会导致EADDRINUSE错误。因为0.0.0.0是一个通配符IP地址，意味着任意一个IP地址，所以任何其他本机上的IP地址都被系统认为已被占用。
+- **如果不用SO_REUSEADDR的话**，如果我们将socketA绑定到0.0.0.0:21，那么任何将本机其他socket绑定到端口21的举动（如绑定到192.168.1.1:21）都会导致EADDRINUSE错误。因为0.0.0.0是一个通配符IP地址，意味着任意一个IP地址，所以任何其他本机上的IP地址都被系统认为已被占用。
 
-- 如果设置了SO_REUSEADDR选项，因为0.0.0.0:21和192.168.1.1:21并不是完全相同的地址端口对（其中一个是通配符IP地址，另一个是一个本机的具体IP地址），所以这样的绑定是可以成功的。
-> 需要注意的是，无论socketA和socketB初始化的顺序如何，只要设置了SO_REUSEADDR，绑定都会成功；而只要没有设置SO_REUSEADDR，绑定都不会成功。
+- **如果设置了SO_REUSEADDR选项**，因为0.0.0.0:21和192.168.1.1:21并不是完全相同的地址端口对（其中一个是通配符IP地址，另一个是一个本机的具体IP地址），所以这样的绑定是可以成功的。
+
+> 注：需要注意的是，无论socketA和socketB初始化的顺序如何，只要设置了SO_REUSEADDR，绑定都会成功；而只要没有设置SO_REUSEADDR，绑定都不会成功。
+
 ### 作用二
 
 如果SO_REUSEADDR选项没有被设置，处于TIME_WAIT阶段的socket任然被认为是绑定在原来那个地址和端口上的。直到该socket被完全关闭之前（结束TIME_WAIT阶段），任何其他企图将一个新socket绑定该该地址端口对的操作都无法成功。
+
 这一等待的过程可能和延迟等待的时间一样长。所以我们并不能马上将一个新的socket绑定到一个刚刚被关闭的socket对应的地址端口对上。在大多数情况下这种操作都会失败。
 
 如果我们在新的socket上设置了SO_REUSEADDR选项，如果此时有另一个socket绑定在当前的地址端口对且处于TIME_WAIT阶段，那么这个已存在的绑定关系将会被忽略。
 > 事实上处于TIME_WAIT阶段的socket已经是半关闭的状态，将一个新的socket绑定在这个地址端口对上不会有任何问题。这样的话原来绑定在这个端口上的socket一般不会对新的socket产生影响。但需要注意的是，在某些时候，将一个新的socket绑定在一个处于TIME_WAIT阶段但仍在工作的socket所对应的地址端口对会产生一些我们并不想要的，无法预料的负面影响。但这个问题超过了本文的讨论范围。而且幸运的是这些负面影响在实践中很少见到。
 
 注：以上所有内容只要我们对**新的socket设置了SO_REUSEADDR**就成立。至于原有的已经绑定在当前地址端口对上的，处于或不处于TIME_WAIT阶段的socket是否设置了SO_REUSEADDR并无影响。
-决定bind操作是否成功的代码仅仅会检查新的被传递到bind()方法的socket的SO_REUSEADDR选项。其他涉及到的socket的SO_REUSEADDR选项并不会被检查。
+
+决定bind操作是否成功的代码仅仅会**检查新的被传递到bind()方法的socket的SO_REUSEADDR选项**。其他涉及到的socket的SO_REUSEADDR选项并不会被检查。
 
 ## 应用
-- 应用一：在**非**`TCP_LISTEN`状态复用本地地址。
+### 应用一：在非`TCP_LISTEN`状态复用本地地址
+
 **BSD**的实现中`SO_REUSEADDR`可以让**一个使用通配地址(0.0.0.0)，一个使用指定地址(192.168.1.0)的socket同时绑定相同的端口成功**。
 
 在**Linux中**，作为**Server**的TCP Socket一旦绑定到了具体的端口，启动了LISTEN，即使它之前设置过`SO_REUSEADDR`, 也不会生效。这一点Linux比BSD更加严格
@@ -105,12 +112,16 @@ SO_REUSEADDR       socketA        socketB       Result
     ```
 
 
-- 应用二：在`TIME_WAIT`状态复用本地地址(如支持服务端快速重启)。
+### 应用二：在`TIME_WAIT`状态复用本地地址(如支持服务端快速重启)
+
 在`TCP`中存在一个`TIME_WAIT`状态，它是指主动关闭的一端最后停留的阶段。假设`socketA`绑定到`A:X`，在完成TCP通信后主动使用`close()`,进入`TIME_WAIT`，此时，如果`socketB`也去绑定`A:X`，那么同样会得到`EADDRINUSE`错误，但如果`socketB`设置了`SO_REUSEADDR`，那么就可以绑定成功。
 
+
 ## 其他
-SO_REUSEADDR 这个选项对应的linux内核参数是 tcp_tw_reuse_。
+SO_REUSEADDR 这个选项对应的linux内核参数是 `tcp_tw_reuse`。
+
 ![](attachments/Pasted%20image%2020230619193148.png)
+
 ### tcp_tw_reuse 和 SO_REUSEADDR
 - tcp_tw_reuse 是内核选项，主要用在**连接的发起方**。TIME_WAIT 状态的连接创建时间超过 1 秒后，新的连接才可以被复用，注意，这里是连接的发起方；
 - SO_REUSEADDR 是**用户态的选项**，SO_REUSEADDR 选项用来告诉操作系统内核，如果端口已被占用，**但是 TCP 连接状态位于 TIME_WAIT ，可以重用端口**。如果端口忙，而 TCP 处于其他状态，重用端口时依旧得到“Address already in use”的错误信息。注意，这里一般都是连接的服务方。
@@ -123,17 +134,20 @@ SO_REUSEADDR 这个选项对应的linux内核参数是 tcp_tw_reuse_。
 本特性用于多播（组播）时， 允许在同一个主机上同时运行同一个应用程序的多个副本。当一个UDP数据报需要由这些重复捆绑套接字中的一个接收时，所用规则为：如果该数据报的目的地址是一个**广播地址或多播地址**，那就给每个匹配的套接字发送一个该**数据报的副本**；如果该数据报的目的地址是一个单播地址，那么它只发送给单个套接字。
 
 # SO_REUSEPORT
+
 如果理解了`SO_REUSEADDR`，那么`SO_REUSEPORT`就很好理解了，它让两个socket可以绑定完全相同的`<IP:Port>`
 ```
 SO_REUSEPORT       socketA        socketB       Result
 ---------------------------------------------------------------------
     ON         192.168.0.1:21   192.168.0.1:21    OK
 ```
+
 **提醒一下，以上的结果都是BSD的结果，Linux内核有一些不一样的地方**，具体表现为:
 
-**Linux在3.9版本**才开始支持`SO_REUSEPORT`，在3.9版本之前已经存在 SO_REUSEADDR，通过 SO_REUSEADDR 来实现 SO_REUSEPORT 的特性。
+==**Linux在3.9版本**才开始支持`SO_REUSEPORT`，在3.9版本之前已经存在 SO_REUSEADDR，通过 SO_REUSEADDR 来实现 SO_REUSEPORT 的特性==。
 
 ## 背景
+
 运行在Linux系统上网络应用程序，为了利用多核的优势，一般使用以下比较典型的多进程/多线程服务器模型：
 
 1. 单线程listen+accept，多个工作线程接收任务分发，虽CPU的工作负载不再是问题，但会存在：
@@ -153,6 +167,7 @@ SO_REUSEPORT       socketA        socketB       Result
 - 随着核数的扩展，性能并没有随着提升
 
 比如HTTP CPS(Connection Per Second)吞吐量并没有随着CPU核数增加呈现线性增长：
+
 ![](attachments/Pasted%20image%2020230620104601.png)
 
 ## SO_REUSEPORT介绍
@@ -167,20 +182,26 @@ linux man文档中一段文字描述其作用：
 The new socket option allows multiple sockets on the same host to bind to the same port, and is intended to improve the performance of multithreaded network server applications running on top of multicore systems.
 ```
 
-SO_REUSEPORT支持多个进程或者线程绑定到同一端口，提高服务器程序的性能，解决的问题：
-- 允许多个套接字 bind()/listen() 同一个TCP/UDP端口
+==SO_REUSEPORT支持多个进程或者线程绑定到同一端口，提高服务器程序的性能，解决的问题==：
+- 允许多个套接字 `bind()/listen()` 同一个`TCP/UDP`端口
     - 每一个线程拥有自己的服务器套接字
     - 在服务器套接字上没有了锁的竞争
 - 内核层面实现负载均衡
 - 安全层面，监听同一个端口的套接字只能位于同一个用户下面
 
-## SO_REUSEPORT 和 SO_REUSEADDR 区别与联系
-SO_REUSEPORT允许我们将任意数目的socket绑定到完全相同的源地址端口对上，只要所有之前绑定的socket都设置了SO_REUSEPORT选项。
-> 如果第一个绑定在该地址端口对上的socket没有设置SO_REUSEPORT，无论之后的socket是否设置SO_REUSEPORT，其都无法绑定在与这个地址端口完全相同的地址上。除非第一个绑定在这个地址端口对上的socket释放了这个绑定关系。
->
-与SO_REUSEADDR不同的是 ，处理SO_REUSEPORT的代码不仅会检查当前尝试绑定的socket的SO_REUSEPORT，而且也会检查之前已绑定了当前尝试绑定的地址端口对的socket的SO_REUSEPORT选项。
 
-如果当前socket已经处于TIME_WAIT阶段，而这个设置了SO_REUSEPORT选项的新socket尝试绑定到当前地址，这个绑定操作也会失败。为了能够将新的socket绑定到一个当前处于TIME_WAIT阶段的socket对应的地址端口对上，我们要么需要在绑定之前设置这个新socket的SO_REUSEADDR选项，要么需要在绑定之前给两个socket都设置SO_REUSEPORT选项。当然，同时给socket设置SO_REUSEADDR和SO_REUSEPORT选项是也是可以的。
+## SO_REUSEPORT 和 SO_REUSEADDR 区别与联系
+
+==SO_REUSEPORT允许我们将任意数目的socket绑定到完全相同的源地址端口对上，只要所有之前绑定的socket都设置了SO_REUSEPORT选项==。
+
+### 注意
+
+**如果第一个绑定在该地址端口对上的socket没有设置SO_REUSEPORT，无论之后的socket是否设置SO_REUSEPORT，其都无法绑定在与这个地址端口完全相同的地址上。除非第一个绑定在这个地址端口对上的socket释放了这个绑定关系**。
+
+**与SO_REUSEADDR不同的是 ，处理SO_REUSEPORT的代码不仅会检查当前尝试绑定的socket的SO_REUSEPORT，而且也会检查之前已绑定了当前尝试绑定的地址端口对的socket的SO_REUSEPORT选项**。
+
+如果当前socket已经处于TIME_WAIT阶段，而这个设置了SO_REUSEPORT选项的新socket尝试绑定到当前地址，这个绑定操作也会失败。为了能够将新的socket绑定到一个当前处于TIME_WAIT阶段的socket对应的地址端口对上，我们要么需要在绑定之前设置这个新socket的SO_REUSEADDR选项，要么需要在绑定之前给两个socket都设置SO_REUSEPORT选项。
+==当然，同时给socket设置SO_REUSEADDR和SO_REUSEPORT选项是也是可以的==。
 
 ## 原理
 reuseport 选项主要解决了两个问题：
@@ -293,16 +314,21 @@ static struct sock *inet_lhash2_lookup(struct net *net,
 ```
 
 ## SO_REUSEPORT 的负载均衡算法
+
 使用`(remote_ip, remote_port, local_ip, local_port)`四元组来进行哈希，因此可以保证同一个client的包可以路由到同一个进程。
-但是，当一个listen的进程加进来或者terminate的时候，由于没有实现`一致性哈希`，结果可能导致有些请求由于路由到另外一个进程上，client-server的三次握手过程可能会被重置。
+但是，==当一个listen的进程加进来或者`terminate`的时候，由于没有实现`一致性哈希`，结果可能导致有些请求由于路由到另外一个进程上，client-server的三次握手过程可能会被重置==。
+
 
 ## 限制
-1. 第一个进程必须enable了SO_REUSEPORT之后，后续的进程才可以通过enable这个选项将socket绑定到同一个端口上。
-2. 绑定到同一个端口的多个进程的effective user id必须一致。
-> 上述规定是为了避免hijacking劫持：恶意用户通过监听相同的端口来获取用户信息。
+
+（1）第一个进程必须`enable`了`SO_REUSEPORT`之后，后续的进程才可以通过`enable`这个选项将`socket`绑定到同一个端口上。
+
+（2）绑定到同一个端口的多个进程的`effective user id`必须一致。
+> 上述规定是为了避免`hijacking`劫持：恶意用户通过监听相同的端口来获取用户信息。
 
 ## 相关问题
 ### Connect()返回EADDRINUSE？
+
 有些时候bind()操作会返回EADDRINUSE错误。但奇怪的是，在我们调用connect()操作时，也有可能得到EADDRINUSE错误。这是为什么呢？
 
 正如本文之前所说，一个连接关系是由一个五元组确定的。对于任意的连接关系而言，这个五元组必须是唯一的。否则的话，系统将无法分辨两个连接。而现在当我们采用了地址复用之后，我们可以将两个采用相同协议的socket绑定到同一地址端口对上。这意味着对这两个socket而言，五元组里的{sip, sport, proto }已经相同了。在这种情况下，如果我们尝试将它们都连接到同一个远程地址端口上，这两个连接关系的五元组将完全相同。也就是说，产生了两个完全相同的连接。在TCP协议中这是不被允许的（UDP是无连接的）。如果这两个完全相同的连接种的某一个接收到了数据，系统将无法分辨这个数据到底属于哪个连接。所以在这种情况下，至少这两个socket所尝试连接的远程主机的地址和端口不能相同。只有如此，系统才能继续区分这两个连接关系。
@@ -310,26 +336,28 @@ static struct sock *inet_lhash2_lookup(struct net *net,
 所以当我们将两个采用相同协议的socket绑定到同一个本地地址端口对上后，如果我们还尝试让它们和同一个目的地址端口对建立连接，第二个尝试调用connect()方法的socket将会报EADDRINUSE的错误，这说明一个拥有完全相同的五元组的socket已经存在了。
 
 ### tcp socket和udp socket使用SO_REUSEPORT的区别
-对于设置了SO_REUSEPORT选项的socket，Linux kernel还会执行一些别的系统所没有的特别的操作：
-对于绑定于同一地址端口组合上的UDP socket，kernel尝试在它们之间平均分配收到的数据包；
-对于绑定于同一地址端口组合上的TCP监听socket，kernel尝试在它们之间平均分配收到的连接请求（调用accept()方法所得到的请求）。
 
-比如一个简单的服务器进程的几个不同实例可以方便地使用SO_REUSEPORT来实现一个简单的负载均衡，而且这个负载均衡有kernel负责， 对程序来说完全免费！
+对于设置了SO_REUSEPORT选项的socket，Linux kernel还会执行一些别的系统所没有的特别的操作：
+==(1) 对于绑定于同一地址端口组合上的UDP socket，kernel尝试在它们之间平均分配收到的数据包==；
+==(2) 对于绑定于同一地址端口组合上的TCP监听socket，kernel尝试在它们之间平均分配收到的连接请求（调用accept()方法所得到的请求）==。
+
+比如一个简单的服务器进程的几个不同实例可以方便地使用`SO_REUSEPORT`来实现一个简单的负载均衡，而且这个负载均衡有kernel负责， 对程序来说完全免费！
 
 ## 应用
-- 为**多核多线程**Server绑定相同的IP/PORT对，提升新连接的分配性能。
+### 为多核多线程Server绑定相同的IP/PORT对，提升新连接的分配性能。
 该功能允许多个进程/线程 bind/listen 相同的 IP/PORT，提升了新链接的分配性能（针对accept）。如可以启用多个worker线程，这些worker线程绑定相同的地址和端口。当新接入一条流时，内核会使用流哈希算法选择使用哪个socket。
 
 >注：与`SO_REUSEADDR` 选项类似，使用`SO_REUSEPORT`选项时，同样要求复用者和被复用者同时设置该选项，如果被复用者没有设置，即使复用者设置了该选项，最终绑定还是失败的。
 
-reuseport 也是内核解决 `惊群问题` 的优秀方案。
+==reuseport 也是内核解决 `惊群问题` 的优秀方案==。
 
-1. 每个进程可以 bind/listen 相同的 IP/PORT，相当于每个进程拥有独立的 listen socket 的完全队列，避免了共享 listen socket 的资源争抢，提升了并发的吞吐。
-    
-2. 内核通过哈希算法，将新链接相对均衡地分配到各个开启了 reuseport 属性的进程，所以资源的负载均衡得到解决。
+## 多进程中每个进程可以 bind/listen 相同的 IP/PORT
+
+相当于每个进程拥有独立的 listen socket 的完全队列，避免了共享 listen socket 的资源争抢，提升了并发的吞吐。
+内核通过哈希算法，将新链接相对均衡地分配到各个开启了 reuseport 属性的进程，所以资源的负载均衡得到解决。
 
 ## 使用
-SO_REUSEPORT 功能使用，可以通过网络选项进行设置，在 bind 前面设置即可，使用比较简单。
+SO_REUSEPORT 功能使用，可以通过网络选项进行设置，**在 bind 前面设置即可**，使用比较简单。
 ```c
 int fd, reuse = 1;
 fd = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
@@ -350,6 +378,7 @@ setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, (const void *)&reuse, sizeof(int));
 针对对客户端而言，表面上感受不到其变动，因为这些工作完全在服务器端进行。
 
 ### 服务器无缝升级/切换（热更新/热升级）
+
 我们迭代了一版本，需要部署到线上，为之启动一个新的进程后，稍后关闭旧版本进程程序，服务一直在运行中不间断，需要平衡过度。这就像Erlang语言层面所提供的热更新一样。
 
 有一个[hubtime](https://github.com/amscanne/huptime)开源工具，原理为`SIGHUP信号处理器+SO_REUSEPORT+LD_RELOAD`，可以帮助我们轻松做到。
@@ -376,8 +405,10 @@ nginx 开启 reuseport 功能后，性能有立竿见影的提升，我们结合
 
 ## linux中reuseport的演进
 ### Linux < 3.9
-不支持 SO_REUSEPORT, 支持 SO_REUSEADDR。内核socket使用`skc_reuse`字段表示是否设置了`SO_REUSEADDR`。
-```
+**不支持 SO_REUSEPORT, 支持 SO_REUSEADDR**。
+内核socket使用`skc_reuse`字段表示是否设置了`SO_REUSEADDR`。
+
+```c
  struct sock_common {
  	/* omitted */
     unsigned char		skc_reuse;
@@ -392,8 +423,9 @@ int sock_setsockopt(struct socket *sock, int level, int optname,...
  	break;
 }
 ```
+
 `inet_bind_bucket`表示一个绑定的端口。
-```
+```c
 struct inet_bind_bucket {
     /* omitted */
 	unsigned short		port;
@@ -403,8 +435,9 @@ struct inet_bind_bucket {
 	struct hlist_head	owners;
 };
 ```
+
 上面结构中的`fastreuse`表示该端口是否支持共享，所有共享该端口的socket挂到`owner`成员上。在用户使用`bind()`时，内核使用**TCP**:`inet_csk_get_port()`,**UDP**:`udp_v4_get_port()`来绑定端口。
-```
+```c
 /* inet_connection_Sock.c: inet_csk_get_port() */
 tb_found:
 	if (!hlist_empty(&tb->owners)) {
@@ -417,10 +450,11 @@ tb_found:
 所以，当该端口支持共享，且socket也设置了`SO_REUSEADDR`并且不为`LISTEN`状态时，此次`bind()`可以成功。
 
 ### 3.9 =< Linux < 4.5
-`3.9`版本内核增加了对`SO_REUSEPORT`的支持，`listener`可以绑定到相同的`<IP:Port>`了。这个时候，当Server收到Client发送的SYN报文时，会选择其中一个socket进行响应.
+**`3.9`版本内核增加了对`SO_REUSEPORT`的支持，`listener`可以绑定到相同的`<IP:Port>`了**。
+这个时候，当Server收到Client发送的SYN报文时，会选择其中一个socket进行响应.
 
 具体到实现，`3.9`版本扩展了`sock_common`，将原来记录`skc_reuse`进行了拆分.
-```
+```c
 struct sock_common {
  	unsigned short		skc_family;
  	volatile unsigned char	skc_state;
@@ -439,7 +473,7 @@ struct sock_common {
 
 ```
 然后对`inet_bind_bucket`也相应进行了扩展
-```
+```c
 struct inet_bind_bucket {
  	/* omitted */
  	unsigned short		port;
@@ -449,7 +483,7 @@ struct inet_bind_bucket {
 +	kuid_t			fastuid;
 ```
 当Client的SYN报文到达时，Server会首先根据本地端口(SYN报文的`<dport>`)计算出一条hash冲突链，然后遍历该链表上的所有Socket，根据四元组匹配程度进行打分;如果使能了reuseport，那么可能有多个Socket都将拿到最高分，此时内核将随机选择一个进行后续处理。
-```
+```c
 /* inet_hashtables.c  */
 struct sock *__inet_lookup_listener(struct......)
 {

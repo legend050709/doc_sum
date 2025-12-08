@@ -4,21 +4,76 @@
 ldconfig命令的用途主要是在默认搜寻目录/lib和/usr/lib以及动态库配置文件/etc/ld.so.conf内所列的目录下，搜索出可共享的动态链接库（格式如lib_.so_）,进而创建出动态装入程序(ld.so)所需的连接和缓存文件。
 
 # 应用场景
-ldconfig通常在系统启动时运行，而当用户安装了一个新的动态链接库时，就需要手工运行这个命令。
+## 安装新版本的动态库
+`ldconfig`通常在系统启动时运行，而==当用户安装了一个新的动态链接库时，就需要手工运行这个命令==。
 
-(1) 往/lib和/usr/lib里面加东西，是不用修改/etc/ld.so.conf的，但是完了之后要调一下ldconfig，不然这个library会找不到。
+(1) 往/lib和/usr/lib里面加东西，是不用修改`/etc/ld.so.conf`的，但是完了之后要调一下`ldconfig`，不然这个`library`会找不到。
 
-(2) 想往上面两个目录以外加东西的时候，一定要修改/etc/ld.so.conf，然后再调用ldconfig，不然也会找不到。
+(2) 想往上面两个目录以外加东西的时候，一定要修改`/etc/ld.so.conf`，然后再调用`ldconfig`，不然也会找不到。
 ```text
 比如安装了一个mysql到/usr/local/mysql，mysql有一大堆library在/usr/local/mysql/lib下面，这时就需要在/etc/ld.so.conf下面加一行/usr/local/mysql/lib，保存过后ldconfig一下，新的library才能在程序运行时被找到。
 ```
 
-(3) 如果想在这两个目录以外放lib，但是又不想在/etc/ld.so.conf中加东西（或者是没有权限加东西）。那也可以，就是export一个全局变量LD_LIBRARY_PATH，然后运行程序的时候就会去这个目录中找library。
+(3) 如果想在这两个目录以外放lib，但是又不想在`/etc/ld.so.conf`中加东西（或者是没有权限加东西）。那也可以，就是export一个全局变量LD_LIBRARY_PATH，然后运行程序的时候就会去这个目录中找library。
 > 一般来讲这只是一种临时的解决方案，在没有权限或临时需要的时候使用,因为这样的export 只对当前shell有效，当另开一个shell时候，又要重新设置，当然可以把export LD_LIBRARY_PATH=xxx 语句写到 ~/.bashrc中，这样就对当前用户有效了，写到/etc/bashrc中就对所有用户有效了。
+
+## 回退低版本的动态库
+```bash
+(1) 回退之前
+# ll /lib64/libibverbs.so*
+lrwxrwxrwx 1 root root      15 Aug 30  2022 /lib64/libibverbs.so -> libibverbs.so.1
+lrwxrwxrwx 1 root root      23 Aug 26 20:09 /lib64/libibverbs.so.1 -> libibverbs.so.1.14.51.0
+-rwxr-xr-x 1 root root  118920 Aug 30  2022 /lib64/libibverbs.so.1.10.30.0
+-rwxr-xr-x 1 root root 1182608 Sep 11 14:17 /lib64/libibverbs.so.1.14.51.0
+
+(2) 删除/移除最新的动态库
+mv /lib64/libibverbs.so.1.14.51.0 /lib64/bak_libibverbs.so.1.14.51.0
+
+(3) ldconfig
+
+(4) 查看
+# ll /lib64/libibverbs.so*
+lrwxrwxrwx 1 root root     15 Aug 30  2022 /lib64/libibverbs.so -> libibverbs.so.1
+lrwxrwxrwx 1 root root     23 Dec  3 10:37 /lib64/libibverbs.so.1 -> libibverbs.so.1.10.30.0
+-rwxr-xr-x 1 root root 118920 Aug 30  2022 /lib64/libibverbs.so.1.10.30.0
+```
+
+### 回退后再升级高版本的动态库
+```bash
+(1) 升级之前查看
+# ll /lib64/*libibverbs.so*
+-rwxr-xr-x 1 root root 1182608 Sep 11 14:17 /lib64/bak_libibverbs.so.1.14.51.0
+lrwxrwxrwx 1 root root      15 Aug 30  2022 /lib64/libibverbs.so -> libibverbs.so.1
+lrwxrwxrwx 1 root root      23 Dec  3 10:37 /lib64/libibverbs.so.1 -> libibverbs.so.1.10.30.0
+-rwxr-xr-x 1 root root  118920 Aug 30  2022 /lib64/libibverbs.so.1.10.30.0
+
+(2) 添加高版本的动态库
+mv /lib64/bak_libibverbs.so.1.14.51.0 /lib64/libibverbs.so.1.14.51.0
+# ll /lib64/*libibverbs.so*
+lrwxrwxrwx 1 root root      15 Aug 30  2022 /lib64/libibverbs.so -> libibverbs.so.1
+lrwxrwxrwx 1 root root      23 Dec  3 10:37 /lib64/libibverbs.so.1 -> libibverbs.so.1.10.30.0
+-rwxr-xr-x 1 root root  118920 Aug 30  2022 /lib64/libibverbs.so.1.10.30.0
+-rwxr-xr-x 1 root root 1182608 Sep 11 14:17 /lib64/libibverbs.so.1.14.51.0
+
+
+
+(3) ldconfig
+
+(4) 查看
+# ll /lib64/*libibverbs.so*
+lrwxrwxrwx 1 root root      15 Aug 30  2022 /lib64/libibverbs.so -> libibverbs.so.1
+lrwxrwxrwx 1 root root      23 Dec  3 13:16 /lib64/libibverbs.so.1 -> libibverbs.so.1.14.51.0
+-rwxr-xr-x 1 root root  118920 Aug 30  2022 /lib64/libibverbs.so.1.10.30.0
+-rwxr-xr-x 1 root root 1182608 Sep 11 14:17 /lib64/libibverbs.so.1.14.51.0
+
+```
+
+
 
 # 查找路径
 ## 编译程序链接时动态库的查找路径
 我们都知道，在编译成可执行文件前，链接器链接动态库也是需要查找动态库路径的，否则怎么链接上指定的动态库呢？那么这个顺序又是怎样的呢？
+
 ### 范例
 ```c
 // test.c  
@@ -158,7 +213,45 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:xxxx
 LD_PRELOAD环境变量 的使用同理。
 
 
+# 注意事项
+
+`ldconfig` 会导致`xxx.so` 这样的软链接，链接到具体的最高版本的的`xxx.so`文件。如果存在具体的多个版本的`xxx.so`文件，那么执行完了`ldconfig`, 软链接就会链接到最高版本上面。
+
+## 范例
+```bash
+# ll /lib64/libibverbs.so*
+lrwxrwxrwx 1 root root      15 Aug 30  2022 /lib64/libibverbs.so -> libibverbs.so.1
+lrwxrwxrwx 1 root root      23 Aug 26 20:09 /lib64/libibverbs.so.1 -> libibverbs.so.1.14.51.0
+-rwxr-xr-x 1 root root  118920 Aug 30  2022 /lib64/libibverbs.so.1.10.30.0
+-rwxr-xr-x 1 root root 1182608 Sep 11 14:17 /lib64/libibverbs.so.1.14.51.0
+
+# ll /lib64/libmlx5.so*
+lrwxrwxrwx 1 root root      12 Aug 30  2022 /lib64/libmlx5.so -> libmlx5.so.1
+lrwxrwxrwx 1 root root      20 Aug 26 20:09 /lib64/libmlx5.so.1 -> libmlx5.so.1.24.51.0
+-rwxr-xr-x 2 root root  326248 Aug 30  2022 /lib64/libmlx5.so.1.14.30.0
+-rwxr-xr-x 1 root root 5515800 Sep 11 14:17 /lib64/libmlx5.so.1.24.51.0
+```
+
+
+
 # so动态库使用的常见问题
+## so动态库的升级
+升级so动态库：将老的so文件替换为新的so文件。
+
+### 运行中的程序
+**结论**：
+将老的so文件替换为新的so文件对于替换之前已经运行的程序没有影响。
+
+**分析**：
+Linux 的动态链接器在程序启动时，会将 .so 映射进进程地址空间。
+已启动的进程不会重新加载新.so，即使文件被替换。
+文件被替换后，旧进程仍持有内存中的旧库副本，不会出错。但新启动的进程可能加载新库。
+
+### 新启动的程序
+**结论**：
+替换之后，新启动的程序会使用新的libxxx.so指向的版本。
+
+
 ## cp命令拷贝一个新的so去覆盖旧的so时，如果有进程正在使用这个so，有可能导致该进程coredump
 
 ### 场景

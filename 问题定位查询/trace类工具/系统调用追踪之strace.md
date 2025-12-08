@@ -25,6 +25,12 @@ strace -T -tt -fp PID
 
 ```
 
+## 指定线程追踪
+一个一个进程存在多个线程，那么只追踪指定的线程，如下所示：
+```bash
+strace -T -tt -fp TID
+```
+
 ## 追踪所有信息
 ```bash
 strace -T -tt -e trace=all -fp PID

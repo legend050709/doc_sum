@@ -666,9 +666,10 @@ static void handle_events(struct epoll_event *e, int epfd) {
 当`tcp`建立连接之后，我们会发现服务端终端一直输出`EPOLLOUT`，进入了死循环，和我们分析的结果是一样的。
 
 ### ET模式下的读和写以及accept
-在`epoll`的`ET`模式下，正确的读写方式为:
+==在`epoll`的`ET`模式下，正确的读写方式为:
 读：只要可读，就一直读，直到返回`0`，或者 `errno = EAGAIN`；
-写：只要可写，就一直写，直到数据发送完，或者 `errno = EAGAIN`。
+写：只要可写，就一直写，直到数据发送完，或者 `errno = EAGAIN`==。
+
 
 #### 读
 ```c
@@ -2129,6 +2130,951 @@ sockfd 5: EPOLLIN EPOLLOUT
 #### accept相关
 accept接收对端连接之前，会触载`EPOLLIN`事件的产生，然后进行accept创建新的连接。
 这里可以循环多次调用`accept`, 直至返回 `EAGAIN`， 同时适用于LT和ET。
+
+
+
+##### 场景：client`connect` 成功后，Server 尚未 `accept`，Client 又关闭了连接
+无论是TCP socket, 还是 UDS(unix domain socket), client`connect` 成功（连接建立）后，Server 尚未 `accept`，Client 又关闭连接。此时server端的行为。
+
+##### 问题一：server 端还没有来得及调用epoll_wait, client关闭后，server调用epoll_wait是否会产生事件
+##### 问题二：server端epoll_wait产生了事件，还没来得及accept，client关闭后，server进行accept会产生什么
+##### 问题三：server端完成了accept，然后client关闭后，server在新的new_fd（没有通过epoll_add添加epoo中）上直接读写会产生什么
+Server 对 `new_fd` 的读写操作将根据 Client 关闭的方式和 Server 的操作类型产生不同的结果。
+
+注意：由于 `new_fd` 没有加入 `epoll`，Server 无法通过 I/O 多路复用机制异步感知 Client 的关闭，必须通过主动进行 `read()` 或 `write()` 操作（即同步 I/O 或轮询）才能发现连接已断开。
+
+
+|**Server 操作**|**结果**|**解释**|
+|---|---|---|
+|**`read(new_fd)`**|**返回 0**。|Client 正常关闭连接（发送 FIN）。Server 读取到 EOF（文件结束）。这是检测对端正常关闭的标准方法。|
+|**`write(new_fd)`**|**返回 `-1`，`errno` 为 `EPIPE`**。|Client 关闭连接后，如果 Server 仍然尝试写入，会触发 `SIGPIPE` 信号。如果 Server 忽略或处理了 `SIGPIPE` 信号（这是推荐做法），则 `write()` 调用会失败，并返回 `errno=EPIPE` (Broken pipe)。|
+
+
+
+##### 问题四：server端完成了accept，然后client关闭后，server在新的new_fd（通过epoll_add添加到epoll中）上读写会产生什么
+
+Server 将通过 `epoll_wait` 异步收到关闭事件。
+
+**分析：**
+1. **`epoll_add`：** Server 将 `new_fd` 加入 `epoll` 实例，通常监听 `EPOLLIN` 和 **`EPOLLRDHUP`** (Read Hang Up)。
+2. **Client 关闭：** Client 关闭连接（发送 FIN）。
+3. **`epoll_wait` 结果：** `epoll_wait` 会返回 `new_fd` 上的事件：
+    - **`EPOLLIN`：** 因为 FIN 包被内核视为可读事件（表示可以读取 0 字节）。
+    - **`EPOLLRDHUP`：** 这是 Linux 专有的事件，**明确指示**对端已关闭连接的写入端，但 Server 自己的写入端仍可使用。
+
+4. **Server 对事件的响应：**
+    - 当 Server 收到 `EPOLLIN` 或 `EPOLLRDHUP` 事件后，应该对 `new_fd` 调用 **`read()`**。
+    - **`read()` 将返回 0**，确认连接已正常关闭。
+    - 收到这些事件后，Server 应该调用 `close(new_fd)` 并将该文件描述符从 `epoll` 实例中移除 (`EPOLL_CTL_DEL`)。
+
+
+##### TCP socket 测试
+```c
+# cat epoll_tcp_robust_test.c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/epoll.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <time.h>
+
+#define TCP_PORT 8888
+#define MAX_EVENTS 10
+#define LISTEN_BACKLOG 5
+#define TIMEOUT_MS 500
+#define SERVER_IP "127.0.0.1"
+
+// --- 辅助函数 ---
+
+/**
+ * @brief 设置文件描述符为非阻塞模式
+ */
+void set_nonblocking(int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags == -1) {
+        perror("fcntl F_GETFL");
+        exit(EXIT_FAILURE);
+    }
+    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+        perror("fcntl F_SETFL O_NONBLOCK");
+        exit(EXIT_FAILURE);
+    }
+}
+
+/**
+ * @brief 尝试在 listen_fd 上调用 accept() 并打印结果
+ */
+void try_accept(int listen_fd, const char* name) {
+    int conn_fd;
+    printf("[%s] Server: 尝试调用 accept()...\n", name);
+    conn_fd = accept(listen_fd, NULL, NULL);
+
+    if (conn_fd == -1) {
+        if (errno == EWOULDBLOCK || errno == EAGAIN) {
+            printf("[%s] Server 成功: accept 阻塞/队列为空。符合预期。\n", name);
+        } else if (errno == ECONNABORTED || errno == EPROTO) {
+            // TCP 中止连接的典型错误
+            printf("[%s] Server 成功: accept 失败，errno=%d (%s)。连接在被接受前中止。\n",
+                   name, errno, (errno == ECONNABORTED ? "ECONNABORTED" : "EPROTO"));
+        } else {
+            perror("Server 失败: accept 失败，错误");
+        }
+    } else {
+        // UDS 场景中这里成功了，对于 TCP，这通常是失败的信号
+        printf("[%s] Server 失败: accept 意外成功，返回新的 fd %d。\n", name, conn_fd);
+
+        // 关键验证：检查新连接的状态 (如果 read() 返回 0，说明连接已断开)
+        char test_buf[1];
+        ssize_t nread = read(conn_fd, test_buf, 1);
+        if (nread == 0) {
+            printf("[%s] Server 验证: new_fd 上的 read() 返回 0 (EOF)。连接实际已断开。\n", name);
+        } else {
+            printf("[%s] Server 验证: new_fd 上的 read() 返回 %zd。连接意外存活。\n", name, nread);
+        }
+
+        close(conn_fd);
+    }
+}
+
+// --- Client 进程函数 ---
+
+/**
+ * @brief 客户端连接并立即关闭
+ */
+void client_connect_and_close(const char *name) {
+    int sfd;
+    struct sockaddr_in addr;
+
+    if ((sfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+        perror("Client socket");
+        _exit(EXIT_FAILURE);
+    }
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(TCP_PORT);
+    inet_pton(AF_INET, SERVER_IP, &addr.sin_addr);
+
+    // 尝试连接
+    if (connect(sfd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+        // connect 可能会在 server 尚未完全准备好时失败
+        // perror("Client connect failed");
+    } else {
+        printf("[%s] Client: 三次握手成功。\n", name);
+        usleep(50000); // 50ms 确保 Server 内核将连接放入完成队列
+        close(sfd);
+        printf("[%s] Client: 连接立即关闭 (四次挥手/RST)。\n", name);
+    }
+
+    _exit(EXIT_SUCCESS);
+}
+
+/**
+ * @brief 客户端连接并保持连接打开，直到收到信号
+ */
+void client_connect_and_hold(const char *name, int pipe_read_fd) {
+    int sfd;
+    struct sockaddr_in addr;
+    char buffer;
+
+    if ((sfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+        perror("Client holder socket");
+        _exit(EXIT_FAILURE);
+    }
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(TCP_PORT);
+    inet_pton(AF_INET, SERVER_IP, &addr.sin_addr);
+
+    if (connect(sfd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+        // perror("Client holder connect failed");
+        close(sfd);
+        _exit(EXIT_FAILURE);
+    }
+
+    printf("[%s] Client: 三次握手成功，保持打开。\n", name);
+
+    // 阻塞在管道上，等待父进程发出关闭信号
+    if (read(pipe_read_fd, &buffer, 1) == 1 && buffer == 'C') {
+        // 收到关闭信号
+        printf("[%s] Client: 收到关闭指令，正在关闭连接。\n", name);
+        close(sfd); // 发送 FIN
+    } else {
+        close(sfd);
+    }
+
+    close(pipe_read_fd);
+    _exit(EXIT_SUCCESS);
+}
+
+// --- 场景实现 ---
+
+/**
+ * @brief 场景一：Server 尚未调用 epoll_wait，Client 关闭后，Server 调用 epoll_wait 是否会产生事件
+ */
+void run_scenario_one(int epoll_fd, int listen_fd) {
+    printf("\n--- 场景一: epoll_wait 前 Client 关闭 (预期: epoll_wait 无事件, accept 失败) ---\n");
+
+    // 1. 模拟 Client: 连接成功并立即关闭
+    pid_t pid = fork();
+    if (pid == 0) {
+        client_connect_and_close("S1");
+    }
+    waitpid(pid, NULL, 0); // 等待 Client 进程退出，确保连接已关闭
+
+    // 2. Server: 稍后调用 epoll_wait
+    struct epoll_event events[MAX_EVENTS];
+    printf("[S1] Server: Client已关闭。调用 epoll_wait 验证是否有事件。\n");
+    int nfds = epoll_wait(epoll_fd, events, MAX_EVENTS, TIMEOUT_MS);
+
+    if (nfds == 0) {
+        printf("[S1] Server 成功: epoll_wait 返回 0 (超时)，符合预期（内核已清理中止连接）。\n");
+    } else if (nfds > 0) {
+        printf("[S1] Server: 接收到 %d 个事件 (与预期不符)。尝试 accept 验证...\n", nfds);
+        try_accept(listen_fd, "S1");
+    } else {
+        perror("[S1] epoll_wait error");
+    }
+}
+
+/**
+ * @brief 场景二：epoll_wait 产生事件，未 accept，Client 关闭后，Server 进行 accept 会产生什么
+ */
+void run_scenario_two(int epoll_fd, int listen_fd) {
+    printf("\n--- 场景二: epoll_wait 后，accept 前 Client 关闭 (预期: epoll_wait 有事件，accept 失败) ---\n");
+
+    int pipefd[2];
+    if (pipe(pipefd) == -1) { perror("pipe"); return; }
+
+    // 1. 模拟 Client: 连接成功，保持打开
+    pid_t pid = fork();
+    if (pid == 0) {
+        close(pipefd[1]);
+        client_connect_and_hold("S2", pipefd[0]);
+    }
+    close(pipefd[0]);
+
+    usleep(100000); // 100ms 确保 Client 连接成功
+
+    // 2. Server: 等待事件
+    struct epoll_event events[MAX_EVENTS];
+    printf("[S2] Server: 等待连接事件...\n");
+    int nfds = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
+
+    if (nfds > 0 && events[0].data.fd == listen_fd) {
+        printf("[S2] Server: 收到 EPOLLIN 事件 (%d)。\n", events[0].events);
+
+        // 3. Client: 在 Server 尚未 accept 时关闭连接
+        write(pipefd[1], "C", 1);
+        close(pipefd[1]);
+        waitpid(pid, NULL, 0);
+        printf("[S2] Client: 已关闭连接。\n");
+
+        // 4. Server: 尝试 accept
+        try_accept(listen_fd, "S2");
+
+    } else {
+        printf("[S2] Server 失败: 未收到预期的连接事件。\n");
+        if (pid > 0) { kill(pid, SIGTERM); waitpid(pid, NULL, 0); }
+    }
+}
+
+// 场景三和四的实现与 UDS 场景一致，因为一旦连接建立，读写行为与协议栈无关
+
+/**
+ * @brief 场景三：Server 完成 accept，Client 关闭后，Server 在 new_fd 上直接读写会产生什么
+ */
+void run_scenario_three(int listen_fd) {
+    printf("\n--- 场景三: accept 后，未加 epoll，Client 关闭 (预期: read=0, write=EPIPE) ---\n");
+
+    int pipefd[2];
+    if (pipe(pipefd) == -1) { perror("pipe"); return; }
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        close(pipefd[1]);
+        client_connect_and_hold("S3", pipefd[0]);
+    }
+    close(pipefd[0]);
+
+    usleep(100000);
+
+    // 2. Server: 接受连接
+    int conn_fd = accept(listen_fd, NULL, NULL);
+    if (conn_fd == -1) {
+        perror("[S3] Server accept failed");
+        close(pipefd[1]); kill(pid, SIGTERM); waitpid(pid, NULL, 0);
+        return;
+    }
+    printf("[S3] Server: 成功 accept 新连接 fd %d。\n", conn_fd);
+
+    // 3. Client: 关闭连接
+    write(pipefd[1], "C", 1);
+    close(pipefd[1]);
+    waitpid(pid, NULL, 0);
+    printf("[S3] Client: 已关闭连接。\n");
+
+    // 4. Server: 验证读操作
+    char buf[10];
+    ssize_t nread = read(conn_fd, buf, 10);
+    if (nread == 0) {
+        printf("[S3] Server 成功: read() 返回 0 (EOF)，符合预期。\n");
+    } else {
+        printf("[S3] Server 失败: read() 返回 %zd, 不符合预期。\n", nread);
+    }
+
+    // 5. Server: 验证写操作
+    signal(SIGPIPE, SIG_IGN);
+    ssize_t nwrite = write(conn_fd, "test", 4);
+    if (nwrite == -1 && errno == EPIPE) {
+        printf("[S3] Server 成功: write() 失败，errno=%d (EPIPE/Broken pipe)，符合预期。\n", EPIPE);
+    } else {
+        printf("[S3] Server 失败: write() 返回 %zd, errno=%d，不符合预期。\n", nwrite, errno);
+    }
+    signal(SIGPIPE, SIG_DFL);
+
+    close(conn_fd);
+}
+
+/**
+ * @brief 场景四：Server 完成 accept，Client 关闭后，Server 在 new_fd (已加入 epoll) 上读写会产生什么
+ */
+void run_scenario_four(int epoll_fd, int listen_fd) {
+    printf("\n--- 场景四: accept 后，已加 epoll，Client 关闭 (预期: new_fd 收到 EPOLLRDHUP/EPOLLIN) ---\n");
+
+    int pipefd[2];
+    if (pipe(pipefd) == -1) { perror("pipe"); return; }
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        close(pipefd[1]);
+        client_connect_and_hold("S4", pipefd[0]);
+    }
+    close(pipefd[0]);
+
+    usleep(100000);
+
+    // 2. Server: 接受连接
+    struct epoll_event listen_events[MAX_EVENTS];
+    epoll_wait(epoll_fd, listen_events, MAX_EVENTS, -1);
+
+    int conn_fd = accept(listen_fd, NULL, NULL);
+    if (conn_fd == -1) {
+        perror("[S4] Server accept failed");
+        close(pipefd[1]); kill(pid, SIGTERM); waitpid(pid, NULL, 0);
+        return;
+    }
+    set_nonblocking(conn_fd);
+    printf("[S4] Server: 成功 accept 新连接 fd %d。\n", conn_fd);
+
+    // 3. Server: 注册 new_fd 到 epoll
+    struct epoll_event ev;
+    ev.events = EPOLLIN | EPOLLRDHUP | EPOLLET;
+    ev.data.fd = conn_fd;
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn_fd, &ev) == -1) {
+        perror("[S4] epoll_ctl: conn_fd");
+        close(conn_fd); close(pipefd[1]); kill(pid, SIGTERM); waitpid(pid, NULL, 0);
+        return;
+    }
+
+    // 4. Client: 关闭连接
+    write(pipefd[1], "C", 1);
+    close(pipefd[1]);
+    waitpid(pid, NULL, 0);
+    printf("[S4] Client: 已关闭连接。\n");
+
+    // 5. Server: 等待 new_fd 上的事件
+    struct epoll_event conn_events[MAX_EVENTS];
+    printf("[S4] Server: 等待 new_fd 上的关闭事件...\n");
+    int nfds = epoll_wait(epoll_fd, conn_events, MAX_EVENTS, TIMEOUT_MS * 2);
+
+    if (nfds > 0 && conn_events[0].data.fd == conn_fd) {
+        unsigned int events_mask = conn_events[0].events;
+        printf("[S4] Server 成功: 收到 new_fd 事件掩码 0x%X。\n", events_mask);
+
+        if (events_mask & EPOLLRDHUP) {
+            printf("[S4] Server 成功: 捕获到 EPOLLRDHUP (对端关闭写入端) 事件。\n");
+        }
+        if (events_mask & EPOLLIN) {
+            char buffer[10];
+            ssize_t nread = read(conn_fd, buffer, 10);
+            if (nread == 0) {
+                printf("[S4] Server 成功: read() 返回 0 (EOF)，连接已正常关闭。\n");
+            } else {
+                printf("[S4] Server 失败: read() 返回 %zd, 连接未正确关闭。\n", nread);
+            }
+        }
+    } else {
+        printf("[S4] Server 失败: 未收到 new_fd 上的关闭事件。\n");
+    }
+
+    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, conn_fd, NULL);
+    close(conn_fd);
+}
+
+
+// --- 主函数 ---
+int main() {
+    int listen_fd, epoll_fd;
+    struct sockaddr_in addr;
+    int optval = 1; // 用于 setsockopt
+
+    // 1. 创建和配置 Server Listen Socket
+    if ((listen_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1) { perror("socket"); exit(EXIT_FAILURE); }
+
+    // 允许地址重用，避免 TIME_WAIT 导致的 bind 失败
+    if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) == -1) {
+        perror("setsockopt SO_REUSEADDR");
+        close(listen_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    set_nonblocking(listen_fd);
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(TCP_PORT);
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    if (bind(listen_fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) { perror("bind"); goto cleanup; }
+    if (listen(listen_fd, LISTEN_BACKLOG) == -1) { perror("listen"); goto cleanup; }
+    printf("Server: TCP 监听中于 %s:%d\n", SERVER_IP, TCP_PORT);
+
+    // 2. 创建 epoll 实例并添加 listen_fd
+    epoll_fd = epoll_create1(0);
+    if (epoll_fd == -1) { perror("epoll_create1"); goto cleanup; }
+
+    struct epoll_event ev;
+    ev.events = EPOLLIN | EPOLLET;
+    ev.data.fd = listen_fd;
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listen_fd, &ev) == -1) { perror("epoll_ctl: listen_fd"); goto cleanup_epoll; }
+
+    // 运行测试场景
+    run_scenario_one(epoll_fd, listen_fd);
+    run_scenario_two(epoll_fd, listen_fd);
+
+    // 准备 S3/S4 前，清理可能残留的 listen_fd 事件，并确保队列是空的
+    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, listen_fd, NULL);
+    int temp_fd;
+    while((temp_fd = accept(listen_fd, NULL, NULL)) != -1) { close(temp_fd); }
+
+    // 重新添加 listen_fd (S4需要它来触发)
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listen_fd, &ev) == -1) { perror("epoll_ctl re-add"); goto cleanup_epoll; }
+
+    run_scenario_three(listen_fd);
+    run_scenario_four(epoll_fd, listen_fd);
+
+    // 清理
+cleanup_epoll:
+    close(epoll_fd);
+cleanup:
+    close(listen_fd);
+    printf("\n--- 所有测试完成，资源已清理。---\n");
+
+    return 0;
+}
+```
+
+```bash
+# ./epoll_tcp_robust_test
+Server: TCP 监听中于 127.0.0.1:8888
+
+--- 场景一: epoll_wait 前 Client 关闭 (预期: epoll_wait 无事件, accept 失败) ---
+[S1] Client: 三次握手成功。
+[S1] Client: 连接立即关闭 (四次挥手/RST)。
+[S1] Server: Client已关闭。调用 epoll_wait 验证是否有事件。
+[S1] Server: 接收到 1 个事件 (与预期不符)。尝试 accept 验证...
+[S1] Server: 尝试调用 accept()...
+[S1] Server 失败: accept 意外成功，返回新的 fd 5。
+[S1] Server 验证: new_fd 上的 read() 返回 0 (EOF)。连接实际已断开。
+
+--- 场景二: epoll_wait 后，accept 前 Client 关闭 (预期: epoll_wait 有事件，accept 失败) ---
+[S2] Client: 三次握手成功，保持打开。
+[S2] Server: 等待连接事件...
+[S2] Server: 收到 EPOLLIN 事件 (1)。
+[S2] Client: 收到关闭指令，正在关闭连接。
+[S2] Client: 已关闭连接。
+[S2] Server: 尝试调用 accept()...
+[S2] Server 失败: accept 意外成功，返回新的 fd 5。
+[S2] Server 验证: new_fd 上的 read() 返回 0 (EOF)。连接实际已断开。
+
+--- 场景三: accept 后，未加 epoll，Client 关闭 (预期: read=0, write=EPIPE) ---
+[S3] Client: 三次握手成功，保持打开。
+[S3] Server: 成功 accept 新连接 fd 5。
+[S3] Client: 收到关闭指令，正在关闭连接。
+[S3] Client: 已关闭连接。
+[S3] Server 成功: read() 返回 0 (EOF)，符合预期。
+[S3] Server 失败: write() 返回 4, errno=11，不符合预期。
+
+--- 场景四: accept 后，已加 epoll，Client 关闭 (预期: new_fd 收到 EPOLLRDHUP/EPOLLIN) ---
+[S4] Client: 三次握手成功，保持打开。
+[S4] Server: 成功 accept 新连接 fd 5。
+[S4] Client: 收到关闭指令，正在关闭连接。
+[S4] Client: 已关闭连接。
+[S4] Server: 等待 new_fd 上的关闭事件...
+[S4] Server 成功: 收到 new_fd 事件掩码 0x2001。
+[S4] Server 成功: 捕获到 EPOLLRDHUP (对端关闭写入端) 事件。
+[S4] Server 成功: read() 返回 0 (EOF)，连接已正常关闭。
+
+--- 所有测试完成，资源已清理。---
+```
+
+##### unix domain socket（uds）测试
+
+```c
+# cat epoll_unix_robust_test.c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <sys/epoll.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <time.h>
+
+#define SOCKET_PATH "/tmp/epoll_uds_robust_test.sock"
+#define MAX_EVENTS 10
+#define LISTEN_BACKLOG 5
+#define TIMEOUT_MS 500
+
+// --- 辅助函数 ---
+
+/**
+ * @brief 设置文件描述符为非阻塞模式
+ */
+void set_nonblocking(int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags == -1) {
+        perror("fcntl F_GETFL");
+        exit(EXIT_FAILURE);
+    }
+    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+        perror("fcntl F_SETFL O_NONBLOCK");
+        exit(EXIT_FAILURE);
+    }
+}
+
+/**
+ * @brief 尝试在 listen_fd 上调用 accept() 并打印结果
+ */
+void try_accept(int listen_fd, const char* name) {
+    int conn_fd;
+    printf("[%s] Server: 尝试调用 accept()...\n", name);
+    conn_fd = accept(listen_fd, NULL, NULL);
+
+    if (conn_fd == -1) {
+        if (errno == EWOULDBLOCK || errno == EAGAIN) {
+            printf("[%s] Server 成功: accept 阻塞/队列为空。符合预期。\n", name);
+        } else if (errno == ECONNABORTED || errno == EPROTO) {
+            // Client 在 accept 前关闭的典型错误
+            printf("[%s] Server 成功: accept 失败，errno=%d (%s)。连接在被接受前中止。\n",
+                   name, errno, (errno == ECONNABORTED ? "ECONNABORTED" : "EPROTO"));
+        } else {
+            perror("Server 失败: accept 失败");
+        }
+    } else {
+        printf("[%s] Server 失败: accept 成功，返回新的 fd %d。\n", name, conn_fd);
+        close(conn_fd);
+    }
+}
+
+// --- Client 进程函数 ---
+
+/**
+ * @brief 客户端连接并立即关闭
+ */
+void client_connect_and_close(const char *name) {
+    int sfd;
+    struct sockaddr_un addr;
+
+    if ((sfd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+        perror("Client socket");
+        _exit(EXIT_FAILURE);
+    }
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path) - 1);
+
+    // 尝试连接
+    if (connect(sfd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+        // 如果连接失败，打印错误但不一定退出，让Server进程决定下一步
+        // (在某些时序下，connect可能会失败)
+        // perror("Client connect failed");
+    } else {
+        printf("[%s] Client: 连接建立成功。\n", name);
+        usleep(50000); // 50ms 确保 Server 内核将连接放入队列
+        close(sfd);
+        printf("[%s] Client: 连接立即关闭。\n", name);
+    }
+
+    _exit(EXIT_SUCCESS);
+}
+
+/**
+ * @brief 客户端连接并保持连接打开，直到收到信号或父进程终止
+ */
+void client_connect_and_hold(const char *name, int pipe_read_fd) {
+    int sfd;
+    struct sockaddr_un addr;
+    char buffer;
+
+    if ((sfd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+        perror("Client socket");
+        _exit(EXIT_FAILURE);
+    }
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path) - 1);
+
+    if (connect(sfd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+        // perror("Client connect failed");
+        _exit(EXIT_FAILURE);
+    }
+
+    printf("[%s] Client: 连接建立成功，保持打开。\n", name);
+
+    // 阻塞在管道上，等待父进程发出关闭信号
+    if (read(pipe_read_fd, &buffer, 1) == 1 && buffer == 'C') {
+        // 收到关闭信号
+        printf("[%s] Client: 收到关闭指令，正在关闭连接。\n", name);
+        close(sfd);
+    } else {
+        // 发生错误或父进程终止，直接关闭
+        close(sfd);
+    }
+
+    close(pipe_read_fd);
+    _exit(EXIT_SUCCESS);
+}
+
+// --- 场景实现 ---
+
+/**
+ * @brief 场景一：Server 尚未调用 epoll_wait，Client 关闭后，Server 调用 epoll_wait 是否会产生事件
+ */
+void run_scenario_one(int epoll_fd, int listen_fd) {
+    printf("\n--- 场景一: epoll_wait 前关闭 (预期: epoll_wait 无事件) ---\n");
+
+    // 1. 模拟 Client: 连接成功并立即关闭
+    pid_t pid = fork();
+    if (pid == 0) {
+        client_connect_and_close("S1");
+    }
+    waitpid(pid, NULL, 0); // 等待 Client 进程退出，确保连接已关闭和内核已处理
+
+    // 2. Server: 稍后调用 epoll_wait
+    struct epoll_event events[MAX_EVENTS];
+    printf("[S1] Server: Client已关闭。调用 epoll_wait 验证是否有事件。\n");
+    int nfds = epoll_wait(epoll_fd, events, MAX_EVENTS, TIMEOUT_MS);
+
+    if (nfds == 0) {
+        printf("[S1] Server 成功: epoll_wait 返回 0 (超时)，符合预期（内核已清理中止连接）。\n");
+    } else if (nfds > 0) {
+        printf("[S1] Server 失败: 接收到 %d 个事件 (但预期是 0)。尝试 accept 验证...\n", nfds);
+        // 如果收到事件，调用 accept 验证其状态
+        try_accept(listen_fd, "S1");
+    } else {
+        perror("[S1] epoll_wait error");
+    }
+}
+
+/**
+ * @brief 场景二：epoll_wait 产生事件，未 accept，Client 关闭后，Server 进行 accept 会产生什么
+ */
+void run_scenario_two(int epoll_fd, int listen_fd) {
+    printf("\n--- 场景二: epoll_wait 后，accept 前关闭 (预期: epoll_wait 有事件，accept 失败) ---\n");
+
+    int pipefd[2];
+    if (pipe(pipefd) == -1) { perror("pipe"); return; }
+
+    // 1. 模拟 Client: 连接成功，保持打开
+    pid_t pid = fork();
+    if (pid == 0) {
+        close(pipefd[1]); // 关闭写端
+        client_connect_and_hold("S2", pipefd[0]);
+    }
+    close(pipefd[0]); // 关闭读端 (Server 持有写端)
+
+    usleep(100000); // 100ms 确保 Client 连接成功
+
+    // 2. Server: 等待事件
+    struct epoll_event events[MAX_EVENTS];
+    printf("[S2] Server: 等待连接事件...\n");
+    int nfds = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
+
+    if (nfds > 0 && events[0].data.fd == listen_fd) {
+        printf("[S2] Server: 收到 EPOLLIN 事件 (%d)。\n", events[0].events);
+
+        // 3. Client: 在 Server 尚未 accept 时关闭连接
+        write(pipefd[1], "C", 1); // 发出关闭指令
+        close(pipefd[1]); // 关闭管道，并等待 Client 进程退出
+        waitpid(pid, NULL, 0);
+        printf("[S2] Client: 已关闭连接。\n");
+
+        // 4. Server: 尝试 accept
+        try_accept(listen_fd, "S2");
+
+    } else {
+        printf("[S2] Server 失败: 未收到预期的连接事件。\n");
+        // 如果超时，确保关闭 Client 进程
+        if (pid > 0) { kill(pid, SIGTERM); waitpid(pid, NULL, 0); }
+    }
+}
+
+/**
+ * @brief 场景三：Server 完成 accept，Client 关闭后，Server 在 new_fd 上直接读写会产生什么
+ */
+void run_scenario_three(int listen_fd) {
+    printf("\n--- 场景三: accept 后，未加 epoll，Client 关闭 (预期: read=0, write=EPIPE) ---\n");
+
+    int pipefd[2];
+    if (pipe(pipefd) == -1) { perror("pipe"); return; }
+
+    // 1. 模拟 Client: 连接成功，保持打开
+    pid_t pid = fork();
+    if (pid == 0) {
+        close(pipefd[1]); // 关闭写端
+        client_connect_and_hold("S3", pipefd[0]);
+    }
+    close(pipefd[0]); // Server 持有写端
+
+    usleep(100000); // 确保 Client 连接成功
+
+    // 2. Server: 接受连接
+    int conn_fd = accept(listen_fd, NULL, NULL);
+    if (conn_fd == -1) {
+        perror("[S3] Server accept failed");
+        close(pipefd[1]); kill(pid, SIGTERM); waitpid(pid, NULL, 0);
+        return;
+    }
+    printf("[S3] Server: 成功 accept 新连接 fd %d。\n", conn_fd);
+
+    // 3. Client: 关闭连接
+    write(pipefd[1], "C", 1); // 发出关闭指令
+    close(pipefd[1]);
+    waitpid(pid, NULL, 0); // 等待 Client 进程退出
+    printf("[S3] Client: 已关闭连接。\n");
+
+    // 4. Server: 验证读操作
+    char buf[10];
+    ssize_t nread = read(conn_fd, buf, 10);
+    if (nread == 0) {
+        printf("[S3] Server 成功: read() 返回 0 (EOF)，符合预期。\n");
+    } else {
+        printf("[S3] Server 失败: read() 返回 %zd, 不符合预期。\n", nread);
+    }
+
+    // 5. Server: 验证写操作（需要屏蔽 SIGPIPE 信号）
+    signal(SIGPIPE, SIG_IGN); // 临时忽略 SIGPIPE
+    ssize_t nwrite = write(conn_fd, "test", 4);
+    if (nwrite == -1 && errno == EPIPE) {
+        printf("[S3] Server 成功: write() 失败，errno=32 (EPIPE/Broken pipe)，符合预期。\n");
+    } else {
+        printf("[S3] Server 失败: write() 返回 %zd, errno=%d，不符合预期。\n", nwrite, errno);
+    }
+    signal(SIGPIPE, SIG_DFL); // 恢复默认 SIGPIPE 处理
+
+    close(conn_fd);
+}
+
+/**
+ * @brief 场景四：Server 完成 accept，Client 关闭后，Server 在 new_fd (已加入 epoll) 上读写会产生什么
+ */
+void run_scenario_four(int epoll_fd, int listen_fd) {
+    printf("\n--- 场景四: accept 后，已加 epoll，Client 关闭 (预期: new_fd 收到 EPOLLRDHUP/EPOLLIN) ---\n");
+
+    int pipefd[2];
+    if (pipe(pipefd) == -1) { perror("pipe"); return; }
+
+    // 1. 模拟 Client: 连接成功，保持打开
+    pid_t pid = fork();
+    if (pid == 0) {
+        close(pipefd[1]); // 关闭写端
+        client_connect_and_hold("S4", pipefd[0]);
+    }
+    close(pipefd[0]); // Server 持有写端
+
+    usleep(100000); // 确保 Client 连接成功
+
+    // 2. Server: 接受连接
+    struct epoll_event listen_events[MAX_EVENTS];
+    epoll_wait(epoll_fd, listen_events, MAX_EVENTS, -1); // 确保 listen fd 有事件
+
+    int conn_fd = accept(listen_fd, NULL, NULL);
+    if (conn_fd == -1) {
+        perror("[S4] Server accept failed");
+        close(pipefd[1]); kill(pid, SIGTERM); waitpid(pid, NULL, 0);
+        return;
+    }
+    set_nonblocking(conn_fd);
+    printf("[S4] Server: 成功 accept 新连接 fd %d。\n", conn_fd);
+
+    // 3. Server: 注册 new_fd 到 epoll
+    struct epoll_event ev;
+    ev.events = EPOLLIN | EPOLLRDHUP | EPOLLET;
+    ev.data.fd = conn_fd;
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn_fd, &ev) == -1) {
+        perror("[S4] epoll_ctl: conn_fd");
+        close(conn_fd); close(pipefd[1]); kill(pid, SIGTERM); waitpid(pid, NULL, 0);
+        return;
+    }
+
+    // 4. Client: 关闭连接
+    write(pipefd[1], "C", 1); // 发出关闭指令
+    close(pipefd[1]);
+    waitpid(pid, NULL, 0);
+    printf("[S4] Client: 已关闭连接。\n");
+
+    // 5. Server: 等待 new_fd 上的事件
+    struct epoll_event conn_events[MAX_EVENTS];
+    printf("[S4] Server: 等待 new_fd 上的关闭事件...\n");
+    int nfds = epoll_wait(epoll_fd, conn_events, MAX_EVENTS, TIMEOUT_MS * 2);
+
+    if (nfds > 0 && conn_events[0].data.fd == conn_fd) {
+        unsigned int events_mask = conn_events[0].events;
+        printf("[S4] Server 成功: 收到 new_fd 事件掩码 0x%X。\n", events_mask);
+
+        if (events_mask & EPOLLRDHUP) {
+            printf("[S4] Server 成功: 捕获到 EPOLLRDHUP (对端关闭写入端) 事件。\n");
+        }
+        if (events_mask & EPOLLIN) {
+            // 尝试 read 验证 EOF
+            char buffer[10];
+            ssize_t nread = read(conn_fd, buffer, 10);
+            if (nread == 0) {
+                printf("[S4] Server 成功: read() 返回 0 (EOF)，连接已正常关闭。\n");
+            } else {
+                printf("[S4] Server 失败: read() 返回 %zd, 连接未正确关闭。\n", nread);
+            }
+        }
+    } else {
+        printf("[S4] Server 失败: 未收到 new_fd 上的关闭事件。\n");
+    }
+
+    // 清理 epoll 和 fd
+    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, conn_fd, NULL);
+    close(conn_fd);
+}
+
+
+// --- 主函数 ---
+int main() {
+    int listen_fd, epoll_fd;
+    struct sockaddr_un addr;
+
+    // 0. 清理旧 socket 文件
+    unlink(SOCKET_PATH);
+
+    // 1. 创建和配置 Server Listen Socket
+    if ((listen_fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) { perror("socket"); exit(EXIT_FAILURE); }
+    set_nonblocking(listen_fd);
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path) - 1);
+
+    if (bind(listen_fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) { perror("bind"); goto cleanup; }
+    if (listen(listen_fd, LISTEN_BACKLOG) == -1) { perror("listen"); goto cleanup; }
+    printf("Server: UDS 监听中于 %s\n", SOCKET_PATH);
+
+    // 2. 创建 epoll 实例并添加 listen_fd
+    epoll_fd = epoll_create1(0);
+    if (epoll_fd == -1) { perror("epoll_create1"); goto cleanup; }
+
+    struct epoll_event ev;
+    ev.events = EPOLLIN | EPOLLET;
+    ev.data.fd = listen_fd;
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listen_fd, &ev) == -1) { perror("epoll_ctl: listen_fd"); goto cleanup_epoll; }
+
+    // 运行测试场景
+    run_scenario_one(epoll_fd, listen_fd);
+    run_scenario_two(epoll_fd, listen_fd);
+
+    // 移除 listen_fd 上的事件，防止影响场景三和四的 accept 调用
+    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, listen_fd, NULL);
+
+    // 场景三和四需要清空队列才能确保 accept 拿到新的连接
+    int temp_fd;
+    while((temp_fd = accept(listen_fd, NULL, NULL)) != -1) { close(temp_fd); }
+
+    // 重新添加 listen_fd for S4 (必须在 accept 之前添加，因为它在 S4 场景中也要用于 epoll_wait)
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listen_fd, &ev) == -1) { perror("epoll_ctl re-add"); goto cleanup_epoll; }
+
+    run_scenario_three(listen_fd); // S3 不使用 epoll，所以 listen_fd 状态不重要
+
+    // S4 需要 epoll_wait(listen_fd) 再次触发
+    run_scenario_four(epoll_fd, listen_fd);
+
+    // 清理
+cleanup_epoll:
+    close(epoll_fd);
+cleanup:
+    close(listen_fd);
+    unlink(SOCKET_PATH);
+    printf("\n--- 所有测试完成，资源已清理。---\n");
+
+    return 0;
+}
+```
+
+
+```bash
+# ./epoll_unix_robust_test
+Server: UDS 监听中于 /tmp/epoll_uds_robust_test.sock
+
+--- 场景一: epoll_wait 前关闭 (预期: epoll_wait 无事件) ---
+[S1] Client: 连接建立成功。
+[S1] Client: 连接立即关闭。
+[S1] Server: Client已关闭。调用 epoll_wait 验证是否有事件。
+[S1] Server 失败: 接收到 1 个事件 (但预期是 0)。尝试 accept 验证...
+[S1] Server: 尝试调用 accept()...
+[S1] Server 失败: accept 成功，返回新的 fd 5。
+
+--- 场景二: epoll_wait 后，accept 前关闭 (预期: epoll_wait 有事件，accept 失败) ---
+[S2] Client: 连接建立成功，保持打开。
+[S2] Server: 等待连接事件...
+[S2] Server: 收到 EPOLLIN 事件 (1)。
+[S2] Client: 收到关闭指令，正在关闭连接。
+[S2] Client: 已关闭连接。
+[S2] Server: 尝试调用 accept()...
+[S2] Server 失败: accept 成功，返回新的 fd 5。
+
+--- 场景三: accept 后，未加 epoll，Client 关闭 (预期: read=0, write=EPIPE) ---
+[S3] Client: 连接建立成功，保持打开。
+[S3] Server: 成功 accept 新连接 fd 5。
+[S3] Client: 收到关闭指令，正在关闭连接。
+[S3] Client: 已关闭连接。
+[S3] Server 成功: read() 返回 0 (EOF)，符合预期。
+[S3] Server 成功: write() 失败，errno=32 (EPIPE/Broken pipe)，符合预期。
+
+--- 场景四: accept 后，已加 epoll，Client 关闭 (预期: new_fd 收到 EPOLLRDHUP/EPOLLIN) ---
+[S4] Client: 连接建立成功，保持打开。
+[S4] Server: 成功 accept 新连接 fd 5。
+[S4] Client: 收到关闭指令，正在关闭连接。
+[S4] Client: 已关闭连接。
+[S4] Server: 等待 new_fd 上的关闭事件...
+[S4] Server 成功: 收到 new_fd 事件掩码 0x2011。
+[S4] Server 成功: 捕获到 EPOLLRDHUP (对端关闭写入端) 事件。
+[S4] Server 成功: read() 返回 0 (EOF)，连接已正常关闭。
+
+--- 所有测试完成，资源已清理。---
+```
 
 #### 对已经close的fd继续操作
 **read**：返回-1, `errno = 9, Bad file descriptor` ;

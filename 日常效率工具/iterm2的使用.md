@@ -449,6 +449,11 @@ alias m=mkdir
 alias gc="git clone"
 ```
 
+# 问题记录
+## 窗口中ctrl+C等命令失效，显示对应的文本
+
+![](attachments/Pasted%20image%2020251107142352.png)
+
 # 参考
 ```bash
 # Iterm2 修改默认Key Mappings
