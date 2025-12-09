@@ -160,51 +160,9 @@
               "icon": "lucide-file",
               "title": "RDMA流控和拥塞控制：6-拥塞控制之以太网络层ECN"
             }
-          },
-          {
-            "id": "c89c96649ba52b54",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "语言/预处理 & 编译 & 汇编 & 链接/动态库和静态库/静态库：5-高效生成动态库以及静态库供其他程序使用.md",
-                "mode": "source",
-                "source": true
-              },
-              "icon": "lucide-file",
-              "title": "静态库：5-高效生成动态库以及静态库供其他程序使用"
-            }
-          },
-          {
-            "id": "7f479cb308c20eae",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "操作系统/进程 & 线程/进程：fork和vfork以及clone.md",
-                "mode": "source",
-                "source": true
-              },
-              "icon": "lucide-file",
-              "title": "进程：fork和vfork以及clone"
-            }
-          },
-          {
-            "id": "9616cfa1629f4a21",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "项目/DPDK/DPDK项目：1-non-EAL线程环境下使用DPDK.md",
-                "mode": "source",
-                "source": true
-              },
-              "icon": "lucide-file",
-              "title": "DPDK项目：1-non-EAL线程环境下使用DPDK"
-            }
           }
         ],
-        "currentTab": 13
+        "currentTab": 10
       }
     ],
     "direction": "vertical"
@@ -352,16 +310,17 @@
       "command-palette:打开命令面板": false
     }
   },
-  "active": "9616cfa1629f4a21",
+  "active": "89b15470217ab36b",
   "lastOpenFiles": [
+    "语言/预处理 & 编译 & 汇编 & 链接/动态库和静态库/静态库：5-高效生成动态库以及静态库供其他程序使用.md",
+    "操作系统/进程 & 线程/进程：fork和vfork以及clone.md",
+    "项目/DPDK/DPDK项目：1-non-EAL线程环境下使用DPDK.md",
     "项目/DPDK/attachments/Pasted image 20251208223423.png",
     "项目/DPDK/attachments/Pasted image 20251208223206.png",
     "项目/DPDK/attachments/Pasted image 20251208223123.png",
     "项目/DPDK/attachments/Pasted image 20251208220948.png",
     "项目/DPDK/DPDK项目：2-gopacket 和 dpdk 结合.md",
     "项目/DPDK/DPDK项目：3-内核管理的Linux C程序使用dpdk中库.md",
-    "项目/DPDK/DPDK项目：1-non-EAL线程环境下使用DPDK.md",
-    "操作系统/进程 & 线程/进程：fork和vfork以及clone.md",
     "网络之高性能网络HPN/RDMA基础和理论/RDMA问题记录：ibv_fork_init 原理,局限性与最佳实践.md",
     "网络之高性能网络HPN/RDMA基础和理论/attachments/Pasted image 20251208202022.png",
     "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：6-拥塞控制之以太网络层ECN.md",
@@ -369,7 +328,6 @@
     "网络之高性能网络HPN/RDMA基础和理论/attachments/Pasted image 20251208201204.png",
     "网络之高性能网络HPN/RDMA基础和理论/attachments/Pasted image 20251208195806.png",
     "网络之高性能网络HPN/RDMA基础和理论/RDMA工具：3-统计工具.md",
-    "语言/预处理 & 编译 & 汇编 & 链接/动态库和静态库/静态库：5-高效生成动态库以及静态库供其他程序使用.md",
     "语言/预处理 & 编译 & 汇编 & 链接/动态库和静态库/动态库：6-动态库的升级.md",
     "操作系统/文件系统/inode理解.md",
     "语言/预处理 & 编译 & 汇编 & 链接/动态库和静态库/attachments/Pasted image 20251208170556.png",
@@ -385,7 +343,6 @@
     "操作系统/进程 & 线程/进程：进程限制之Linux上单机的进程和线程个数限制.md",
     "网络之高性能网络HPN/RDMA基础和理论/RDMA通信库中间件：7-设计自定义的中间件.md",
     "网络之高性能网络HPN/RDMA基础和理论/RDMA性能优化：3-设计一个高性能的RDMA系统.md",
-    "网络之高性能网络HPN/RDMA基础和理论/attachments/image2.png",
     "网络之高性能网络HPN/GPU集合通讯库/DeepEP：1-整体介绍.md",
     "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：1-RDMA无损网络.md",
     "语言/预处理 & 编译 & 汇编 & 链接/elf/nm使用.md",
