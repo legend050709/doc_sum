@@ -103,6 +103,13 @@ pin内存也叫锁页，就是固定虚拟地址和物理地址的映射，防�
 
 不过也有一些新硬件设备支持触发的缺页机制（如ARM SMMUv3的STALL模型），允许IOMMU暂停DMA操作并通知操作系统重新映射内存，或者一些intel新CPU支持再IOMMU缺页时产生MMU-notifier提供内核处理，然而，当然这些是依赖硬件支持的。
 
+## 小结
+
+**Memory Region (MR)：**
+用户通过`ibv_reg_mr`向对端暴露一块内存(iova+va+len+key)，iova是对端来访问所用地址，va是本地访问所用地址，它们都需在硬件里翻译为PA，所以注册MR涉及建立MTT地址翻译表。同时也需为MR指定访问权限如可读可写，这涉及建立MPT表。MR所涵盖的物理内存需要在注册时PIN住以避免DMA访问`swapped out`的页。
+注册MR可以指定MR的访问权限(`local/remote read/write`)。MR注册好之后会返回LKEY和RKEY，LKEY用于自己访问自己，RKEY用于别人访问自己。
+一片内存区可以多次注册MR，每次可以设置不同的访问权限，每次都会返回不同的LKEY和RKEY。
+
 ## FMR
 ### 介绍
 **FMR（Fast Memory Region/Registration）** 是RDMA中用于**优化内存注册/注销性能**的技术。
@@ -188,6 +195,10 @@ ibv_memcpy_to_dm
 
 ## MW
 为了内存管理的细粒度化，RDMA 还提供了 Memory Window（简称 MW），一个 MR 上可以分列出多块 MW，并且每一块 MW 上都可以自定义访问权限。
+
+**Memory window (MW)：**
+MW允许用户更灵活的控制远端对本地内存的访问：动态的授予和收回远端对MR的访问权限，给不同的远端以不同的访问权限，为MR内的不同range的小块内存授予不同的访问权限。注册MR时需要同时建立地址映射表和安全保护表，但注册MW仅需建立安全保护表，所以建立MW可以直接在用户态与硬件通信完成而不需要经过内核。 ibv_bind_mw用于建立MW，它其实也是向QP里post了一个请求。
+
 
 ## PD
 
@@ -378,6 +389,31 @@ RDMA的核心目标是**绕过CPU和操作系统**，直接通过网卡访问远
 
 - **预取策略**： 在预期访问前，通过软件提示网卡预加载相关MTT/MPT条目到SRAM。
 - **减少细粒度访问**： 合并多个小数据操作成批量操作，减少MTT/MPT查询次数。
+
+# UMR
+
+
+## 背景
+## 介绍
+**User-mode memory registration (UMR)**
+
+### 将多块非连续的MR拼接成一个VA连续的MR
+
+![](attachments/Pasted%20image%2020251230154011.png)
+
+如上图所示，我们之前创建了3个常规得MR：MR1(green), MR2(purple), MR3(red)，现在我们想从这三个MR中各抽取一部分拼接起来形成一个新的逻辑上连续的MR：第一块是MR1(v0-v1)部分，第二块是MR2(v2-v3)部分，第三块是MR3(v4-v5)部分。这个新的MR有一个新的base VA地址，长度是3个小块的长度之和。这样虽然内部是不连续的，但在外部访问者看来这个MR是连续的。
+
+### 将一个MR内有规律非连续的块拼接成一个VA连续的MR
+
+![](attachments/Pasted%20image%2020251230154220.png)
+
+如上图所示，当我们做一个矩阵的转置时需要把一列的元素拼成新的行，这个行就成了新的连续的MR。老矩阵的列元素一般可以用<基地址(base address), 元素间距(stride)，元素长度(block size)，元素数量(repeat count)>来描述。
+
+### 将多个MR拼接成新的相互交织的VA连续MR
+
+![](attachments/Pasted%20image%2020251230154339.png)
+如上图所示，2个老矩阵的列相互交织形成新的列，这是一个新的VA连续的MR，有它自己的新的base address和length。
+
 
 
 

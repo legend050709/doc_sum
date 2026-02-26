@@ -343,6 +343,242 @@ static struct sock *inet_lhash2_lookup(struct net *net,
 
 比如一个简单的服务器进程的几个不同实例可以方便地使用`SO_REUSEPORT`来实现一个简单的负载均衡，而且这个负载均衡有kernel负责， 对程序来说完全免费！
 
+
+### 单机多进程使用reuseport导致进程间“流量劫持”问题
+#### 问题
+在 Linux 网络编程中，`SO_REUSEPORT` 确实引入了这种“内核级负载均衡”的机制，同时也带来了你所担心的进程间“流量劫持”或“竞争”的隐患。
+
+简单来说：如果另一个具有足够权限的进程也使用了 `SO_REUSEPORT` 监听同一个端口，内核会将一部分新连接分发给它，而你的进程对此完全无感。
+
+##### 为什么你的程序感知不到？
+
+`SO_REUSEPORT` 的设计初衷是为了提高多核性能，让内核在多个监听相同套接字的线程之间进行 哈希分发。
+
+- **内核视角**：内核维护了一个监听相同端口的套接字列表。每当有新的 `SYN` 包到达时，内核会根据源 IP 和源端口计算哈希值，然后决定将连接放入哪个套接字的 `accept` 队列。
+    
+- **进程视角**：每个进程/线程只管从自己的 `epoll` 实例中读取就绪事件。如果连接被分发给了进程 B，进程 A 的 `epoll_wait` 根本不会返回，它会认为此时没有新连接。
+
+##### 安全性限制：谁能“抢”你的流量？
+
+Linux 为了防止恶意进程劫持流量，对 `SO_REUSEPORT` 设定了权限门槛：
+
+- **UID 必须一致**：默认情况下，只有运行在**同一个有效用户 ID (EUID)** 下的进程，才能对同一个端口开启 `SO_REUSEPORT`。
+    
+- **示例**：如果你的程序以 `www-data` 用户运行，黑客尝试用 `nobody` 用户启动一个监听相同端口的程序，内核会直接返回 `EADDRINUSE` 错误，阻止其加入负载均衡组。
+    
+- **特权用户例外**：`root` 用户可以“劫持”任何用户的端口。
+
+#### 范例
+
+```c
+# cat server.c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <pthread.h>
+#include <sys/epoll.h>
+#include <errno.h>
+
+#define PORT 8888
+#define MAX_EVENTS 10
+#define THREAD_COUNT 3
+#define PROCESS_COUNT 2
+
+void *worker_thread(void *arg) {
+    int process_id = *(int *)arg;
+    pthread_t tid = pthread_self();
+
+    int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+    int opt = 1;
+
+    // 核心：设置 SO_REUSEPORT
+    setsockopt(listen_fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
+
+    struct sockaddr_in address;
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+
+    if (bind(listen_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("bind failed");
+        return NULL;
+    }
+
+    listen(listen_fd, 128);
+
+    int epoll_fd = epoll_create1(0);
+    struct epoll_event ev, events[MAX_EVENTS];
+    ev.events = EPOLLIN;
+    ev.data.fd = listen_fd;
+    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listen_fd, &ev);
+
+    printf("[Process %d][Thread %lx] Listening on port %d\n", process_id, (unsigned long)tid, PORT);
+
+    while (1) {
+        int nfds = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
+        for (int i = 0; i < nfds; i++) {
+            if (events[i].data.fd == listen_fd) {
+                struct sockaddr_in client_addr;
+                socklen_t addrlen = sizeof(client_addr);
+                int conn_sock = accept(listen_fd, (struct sockaddr *)&client_addr, &addrlen);
+
+                if (conn_sock > 0) {
+                    char msg[128];
+                    sprintf(msg, "Response from Process %d, Thread %lx\n", process_id, (unsigned long)tid);
+                    send(conn_sock, msg, strlen(msg), 0);
+                    close(conn_sock);
+                }
+            }
+        }
+    }
+    return NULL;
+}
+
+int main() {
+    for (int i = 0; i < PROCESS_COUNT; i++) {
+        pid_t pid = fork();
+        if (pid == 0) { // 子进程
+            pthread_t threads[THREAD_COUNT];
+            int process_id = i + 1;
+            for (int j = 0; j < THREAD_COUNT; j++) {
+                pthread_create(&threads[j], NULL, worker_thread, &process_id);
+            }
+            for (int j = 0; j < THREAD_COUNT; j++) {
+                pthread_join(threads[j], NULL);
+            }
+            exit(0);
+        }
+    }
+    // 父进程等待
+    while(wait(NULL) > 0);
+    return 0;
+}
+```
+
+（1）进程1监听相同的port：
+```bash
+# gcc server.c -o reuseport_server -lpthread -std=gnu99
+# ./reuseport_server
+[Process 1][Thread 7fa5bd744700] Listening on port 8888
+[Process 1][Thread 7fa5bcd43700] Listening on port 8888
+[Process 1][Thread 7fa5bc342700] Listening on port 8888
+[Process 2][Thread 7fa5bcd43700] Listening on port 8888
+[Process 2][Thread 7fa5bc342700] Listening on port 8888
+[Process 2][Thread 7fa5bd744700] Listening on port 8888
+
+```
+
+（2）进程2监听相同的port：
+```bash
+# socat TCP4-LISTEN:8888,reuseport,fork EXEC:"echo I AM AN INTRUDER"
+```
+
+（3）查看
+```bash
+# ss -lnept | grep -e 8888 -i -e local
+State      Recv-Q Send-Q Local Address:Port               Peer Address:Port
+LISTEN     0      5            *:8888                     *:*                   users:(("socat",pid=39375,fd=5)) ino:3696446054 sk:16 <->
+LISTEN     0      128          *:8888                     *:*                   users:(("reuseport_serve",pid=13976,fd=7)) ino:3696280256 sk:3 <->
+LISTEN     0      128          *:8888                     *:*                   users:(("reuseport_serve",pid=13976,fd=5)) ino:3696422975 sk:4 <->
+LISTEN     0      128          *:8888                     *:*                   users:(("reuseport_serve",pid=13976,fd=3)) ino:3696372190 sk:5 <->
+LISTEN     0      128          *:8888                     *:*                   users:(("reuseport_serve",pid=13975,fd=7)) ino:3696327382 sk:6 <->
+LISTEN     0      128          *:8888                     *:*                   users:(("reuseport_serve",pid=13975,fd=5)) ino:3696412799 sk:7 <->
+LISTEN     0      128          *:8888                     *:*                   users:(("reuseport_serve",pid=13975,fd=3)) ino:3696402722 sk:8 <->
+
+
+# ll /proc/13975/fd
+total 0
+lrwx------ 1 root root 64 Dec 22 11:16 0 -> /dev/pts/0
+lrwx------ 1 root root 64 Dec 22 11:16 1 -> /dev/pts/0
+lrwx------ 1 root root 64 Dec 22 11:15 2 -> /dev/pts/0
+lrwx------ 1 root root 64 Dec 22 11:16 3 -> socket:[3696402722]
+lrwx------ 1 root root 64 Dec 22 11:16 4 -> anon_inode:[eventpoll]
+lrwx------ 1 root root 64 Dec 22 11:16 5 -> socket:[3696412799]
+lrwx------ 1 root root 64 Dec 22 11:16 6 -> anon_inode:[eventpoll]
+lrwx------ 1 root root 64 Dec 22 11:16 7 -> socket:[3696327382]
+lrwx------ 1 root root 64 Dec 22 11:16 8 -> anon_inode:[eventpoll]
+
+# ll /proc/39375/fd
+total 0
+lrwx------ 1 root root 64 Dec 22 11:28 0 -> /dev/pts/2
+lrwx------ 1 root root 64 Dec 22 11:28 1 -> /dev/pts/2
+lrwx------ 1 root root 64 Dec 22 11:28 2 -> /dev/pts/2
+lrwx------ 1 root root 64 Dec 22 11:28 3 -> socket:[3696446052]
+lrwx------ 1 root root 64 Dec 22 11:28 4 -> socket:[3696446053]
+lrwx------ 1 root root 64 Dec 22 11:28 5 -> socket:[3696446054]
+```
+
+（4）client：
+```python3
+# cat client.py
+import socket
+import concurrent.futures
+
+def connect_once(i):
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect(('127.0.0.1', 8888))
+        response = s.recv(1024).decode().strip()
+        s.close()
+        return response
+    except Exception as e:
+        return str(e)
+
+def run_test():
+    print("Starting load balance test (50 connections)...")
+    results = {}
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [executor.submit(connect_once, i) for i in range(50)]
+        for future in concurrent.futures.as_completed(futures):
+            res = future.result()
+            results[res] = results.get(res, 0) + 1
+
+    print("\n--- Statistics ---")
+    for worker, count in sorted(results.items()):
+        print(f"{worker}: {count} hits")
+
+if __name__ == "__main__":
+    run_test()
+```
+
+```bash
+# python3 ./client.py
+Starting load balance test (50 connections)...
+
+--- Statistics ---
+I AM AN INTRUDER: 11 hits
+Response from Process 1, Thread 7fa5bc342700: 9 hits
+Response from Process 1, Thread 7fa5bcd43700: 7 hits
+Response from Process 1, Thread 7fa5bd744700: 11 hits
+Response from Process 2, Thread 7fa5bc342700: 2 hits
+Response from Process 2, Thread 7fa5bcd43700: 6 hits
+Response from Process 2, Thread 7fa5bd744700: 4 hits
+```
+
+#### 如何确保流量不被“劫持”
+##### 检查端口占用情况
+在程序启动或运行期间，你可以通过读取 `/proc/net/tcp` 或调用工具`ss -lnetp`指令来确认监听者的身份。
+
+##### 用 eBPF
+你可以编写一个简单的 eBPF 程序（挂载到 `inet_bind` 或相关内核点），监控哪些进程正在尝试对特定端口设置 `SO_REUSEPORT`。如果发现非法 PID 或 UID，直接拦截。
+
+##### 利用 `SO_ATTACH_REUSEPORT_CBPF`
+
+Linux 允许你为 `REUSEPORT` 组绑定一个 BPF 过滤器。通过这个机制，你可以自定义负载均衡逻辑。虽然它主要用于优化分发，但也可以用来确保只有符合特定条件的套接字能接收流量。
+
+##### 架构设计的权衡
+
+如果你非常担心“不可控”的进程竞争，可以考虑以下替代方案：
+
+1. **单 Listen 模式**：只由一个主线程/进程 `listen` 端口。接收到新连接（`accept`）后，通过 `Unix Domain Socket` 使用 `sendmsg` 将文件描述符 (fd) 传递给工作线程/进程。这种方式流量完全由你控制，但会有跨进程传递 fd 的开销。
+    
+2. **独占监听**：不使用 `SO_REUSEPORT`。如果你只有一个进程，可以通过 `epoll` 的 `EPOLLEXCLUSIVE` 标志（Linux 4.5+）来解决多线程同时 `wait` 产生的“惊群效应”，同时保证了该端口在系统层面的排他性。
+
+
 ## 应用
 ### 为多核多线程Server绑定相同的IP/PORT对，提升新连接的分配性能。
 该功能允许多个进程/线程 bind/listen 相同的 IP/PORT，提升了新链接的分配性能（针对accept）。如可以启用多个worker线程，这些worker线程绑定相同的地址和端口。当新接入一条流时，内核会使用流哈希算法选择使用哪个socket。

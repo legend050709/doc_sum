@@ -774,6 +774,26 @@ static inline int sockopt_msg_recv(int clt_fd, struct dpvs_sock_msg_reply *reply
 
 
 #### 写
+##### ET模式下触发可写事件
+在 ET 模式下，以下情况会触发可写事件：
+1. `epoll_ctl(ADD)` 之后，fd 变为可写（通常是连接刚建立时）。
+2. `epoll_ctl(MOD)` 显式修改事件。
+3. 内核缓冲区从**满**变为**不满**（即腾出了空间）。
+> 即：发送缓冲区满了之后，内核发送消息收到了对方的ACK，就可以删除一部分内存，可以继续写了，就会触发可写事件。
+> 缓冲区满：循环调用 `send()` 直到返回 `EAGAIN` 或 `EWOULDBLOCK`。这表示你已经把内核缓冲区填满了。
+
+```bash
+在 epoll ET 模式下，只有在状态发生从“不可写”到“可写”的转变时，才会触发事件。
+
+- 三次握手成功后：发送缓冲区是空的，状态从“无”变为“可写”，epoll 返回一次可写事件。
+- 发送消息时：当你调用 `send()` 或 `write()`，数据只是从你的用户态内存拷贝到了内核的 TCP 发送缓冲区。只要缓冲区没满，`send()` 就会立即返回成功。
+- ACK 的角色：对方回复 ACK 意味着数据已经安全到达，此时内核会将这些数据从本地发送缓冲区中移除，从而腾出空间。
+- 关键点：只要本地发送缓冲区还没满，它就一直处于“可写状态”。由于状态没有发生“从满到不满”的切换，epoll 不会再次提醒你可写。
+```
+
+
+
+##### 范例
 ```c
 /* send "n" bytes to a descriptor */
 ssize_t send_n(int fd, const void *vptr, size_t n, int flags)
@@ -941,7 +961,7 @@ Under Linux, select() may report a socket file descriptor as "ready for reading"
 **范例**
 ![](attachments/Pasted%20image%2020250510172726.png)
 
-##### io复用返回的可读不是确定性的
+##### io多路复用返回的可读不是确定性的
 ==select 返回可读，和 read 去读，这是两个独立的系统调用，两个操作之间是有窗口的，也就是说 select 返回可读，紧接着去 read，不能保证一定可读==。
 
 比如：
@@ -1353,6 +1373,45 @@ epoll_wait 的相关工作流程：
 
 ![](attachments/Pasted%20image%2020250531220453.png)
 
+
+#### `epoll_wait`是否是阻塞的
+`epoll_wait` 函数**通常是阻塞的**，但您可以非常灵活地控制它的阻塞行为，包括实现非阻塞或带超时阻塞。
+`epoll_wait` 的主要目的是**等待**内核通知您在 epoll 实例上注册的文件描述符 (FDs) 上有事件发生（例如，Socket 可读、可写）。
+```c
+int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout);
+```
+
+ 阻塞行为取决于 `timeout` 参数：
+ 
+|**timeout 值**|**行为描述**|
+|---|---|
+|**`timeout > 0` (正值)**|**带超时阻塞**。`epoll_wait` 最多会阻塞 `timeout` 毫秒。如果在超时时间内有事件发生，它会立即返回；如果超时时间到了仍没有事件，它会返回 0。|
+|**`timeout = 0`**|**非阻塞 (Non-blocking)**。`epoll_wait` 会立即返回。如果当前有事件就绪，它会返回事件数量；如果没有事件就绪，它会立即返回 0。|
+|**`timeout = -1` (负值)**|**无限期阻塞**。`epoll_wait` 将一直阻塞，直到至少有一个注册的事件发生，或者被信号中断。|
+
+#### `epoll_wait`是否阻塞和加入到`epoll`的`fd`的非阻塞的关系
+
+您可能会混淆设置文件描述符的 `O_NONBLOCK` 标志和 `epoll_wait` 的行为。
+
+**(1)`O_NONBLOCK` 的作用（设置在 Socket/FD 上）：** 
+它决定了对该文件描述符执行的 I/O 操作（如 `read()`, `write()`, `accept()`, `connect()`）是否会阻塞。
+设置后： 这些 I/O 函数会立即返回，如果数据未就绪，则返回 `-1` 并设置 `errno` 为 `EAGAIN` 或 `EWOULDBLOCK`。
+
+**(2)`epoll_wait` 的作用（设置在 Epoll 实例上）：** 
+它决定了**等待 I/O 事件通知**的函数是否阻塞。
+
+
+##### 小结
+
+`epoll_wait` 的阻塞行为**完全由其自身的 `timeout` 参数控制**，与您在注册的 Socket 上是否设置了 `O_NONBLOCK` 无关。
+但在高性能网络编程中，最佳实践是：
+
+1. **将所有注册到 epoll 上的 Socket 都设置为 `O_NONBLOCK`。**
+2. **通过调整 `epoll_wait` 的 `timeout` 参数来控制事件等待的阻塞时长。**
+
+这样可以确保程序在接收到事件后，对 Socket 进行的 `read`/`write` 操作不会意外地再次阻塞整个线程。
+
+
 #### 唤醒的源码流程
 `epoll_wait` 唤醒：
 ```c
@@ -1712,11 +1771,9 @@ epoll 支持的事件包括：
 ### EPOLLHUP 和 EPOLLRDHUP
 参考： [How do I use EPOLLHUP](https://stackoverflow.com/questions/6437879/how-do-i-use-epollhup)
 
-
-
 #### EPOLLRDHUP
 ##### 背景
-相信很多时候，大家都是通过检测 `read/recv` 返回 0 来判断对端是否关闭了连接，如果返回 0，我们通常也会 close 该连接。这没有问题，但在很多场景下有个缺陷：FIN 报文和普通数据报文一样，也是需要在缓冲区中排队的，只有当 read 读取到 FIN 以后才会返回 0，而且 FIN 报文无法和数据同时被读取，也就是说，必须将数据 read 完毕后，再调用一次 read 才能读取到 FIN 并返回 0 。这也是为什么在网络读取时需要将 read 放在循环中的原因之一，不仅是为了将数据读取完整，也是为了能够读到 FIN 报文。
+相信很多时候，大家都是通过检测 `read/recv` 返回 0 来判断对端是否关闭了连接，如果返回 0，我们通常也会 close 该连接。这没有问题，但在很多场景下有个缺陷：FIN 报文和普通数据报文一样，也是需要在缓冲区中排队的，只有当 read 读取到 FIN 以后才会返回 0；而且 FIN 报文无法和数据同时被读取，也就是说，必须将数据 read 完毕后，再调用一次 read 才能读取到 FIN 并返回 0 。这也是为什么在网络读取时需要将 read 放在循环中的原因之一，不仅是为了将数据读取完整，也是为了能够读到 FIN 报文。
 
 > **注意，FIN 报文虽然会排队，但当本端收到 FIN 后，内核网络栈会立刻回复 ACK，而不会管你是否 read 到这个 FIN 报文。**
 
@@ -2128,10 +2185,8 @@ sockfd 5: EPOLLIN EPOLLOUT
 其实说来也简单，你只要把你不想要的事件从`epoll`注册中移除就好了。虽然`epoll`还是会调用`tcp_poll`方法，返回的`socket`事件还是包含所有的就绪事件，但它在返回给用户时，会过滤掉我们不感兴趣的事件。所以，当`read`返回`0`时，你只要把`epollin`事件从`epoll`注册中取消，以后就再也不会有这个事件发生了。
 
 #### accept相关
-accept接收对端连接之前，会触载`EPOLLIN`事件的产生，然后进行accept创建新的连接。
+accept接收对端连接之前，会触发`EPOLLIN`事件的产生，然后进行accept创建新的连接。
 这里可以循环多次调用`accept`, 直至返回 `EAGAIN`， 同时适用于LT和ET。
-
-
 
 ##### 场景：client`connect` 成功后，Server 尚未 `accept`，Client 又关闭了连接
 无论是TCP socket, 还是 UDS(unix domain socket), client`connect` 成功（连接建立）后，Server 尚未 `accept`，Client 又关闭连接。此时server端的行为。
@@ -2156,13 +2211,13 @@ Server 对 `new_fd` 的读写操作将根据 Client 关闭的方式和 Server �
 Server 将通过 `epoll_wait` 异步收到关闭事件。
 
 **分析：**
-1. **`epoll_add`：** Server 将 `new_fd` 加入 `epoll` 实例，通常监听 `EPOLLIN` 和 **`EPOLLRDHUP`** (Read Hang Up)。
-2. **Client 关闭：** Client 关闭连接（发送 FIN）。
-3. **`epoll_wait` 结果：** `epoll_wait` 会返回 `new_fd` 上的事件：
+3. **`epoll_add`：** Server 将 `new_fd` 加入 `epoll` 实例，通常监听 `EPOLLIN` 和 **`EPOLLRDHUP`** (Read Hang Up)。
+4. **Client 关闭：** Client 关闭连接（发送 FIN）。
+5. **`epoll_wait` 结果：** `epoll_wait` 会返回 `new_fd` 上的事件：
     - **`EPOLLIN`：** 因为 FIN 包被内核视为可读事件（表示可以读取 0 字节）。
     - **`EPOLLRDHUP`：** 这是 Linux 专有的事件，**明确指示**对端已关闭连接的写入端，但 Server 自己的写入端仍可使用。
 
-4. **Server 对事件的响应：**
+6. **Server 对事件的响应：**
     - 当 Server 收到 `EPOLLIN` 或 `EPOLLRDHUP` 事件后，应该对 `new_fd` 调用 **`read()`**。
     - **`read()` 将返回 0**，确认连接已正常关闭。
     - 收到这些事件后，Server 应该调用 `close(new_fd)` 并将该文件描述符从 `epoll` 实例中移除 (`EPOLL_CTL_DEL`)。

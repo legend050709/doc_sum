@@ -74,11 +74,13 @@ PCIe协议分为3层
 在PCIe Spec中，规定了四种类型的请求（Request）：Memory、IO、Configuration和Messages。其中，前三种都是从PCI/PCI-X总线中继承过来的，第四种Messages是PCIe新增加的类型。详细的信息如下表所示：
 ![](../限速%20&%20流控/attachments/Pasted%20image%2020230731211112.png)
 
+#### PCIe posted 和 non-posted
 只有Memory Write和Message是Posted类型的，其他的都是Non-Posted类型的。
 - 所谓Non-posted，就是Requester发送了一个包含Request的包之后，必须要得到一个包含Completion的包的应答，这次传输才算结束，否则会进行等待。
 - 所谓Posted，就是Requester的请求并不需要Completer通过发送包含  Completion 的包进行应答，当然也就不需要进行等待了。很显然，Posted类型的操作对总线的利用率（效率）要远高于Non-Posted型。
 
-那么为什么要分为Non-Posted和Posted两种类型呢？对于Memory Writes来说，对效率要求较高，因此采用了Posted的方式。但是这并不意味着Posted类型的操作完全不需要Completer进行应答，Completer仍然可采用另一种应答机制——Ack/Nak的机制（在数据链路层实现的）。**即Non-Posted和Posted是从事务层来看，是否需要发送事务层的Completion 包；而DDL层的ack/Nack都是存在的，保证可靠**
+那么为什么要分为Non-Posted和Posted两种类型呢？对于Memory Writes来说，对效率要求较高，因此采用了Posted的方式。但是这并不意味着Posted类型的操作完全不需要Completer进行应答，Completer仍然可采用另一种应答机制——Ack/Nak的机制（在数据链路层实现的）。
+**即Non-Posted和Posted是从事务层来看，是否需要发送事务层的Completion 包；而DDL层的ack/Nack都是存在的，保证可靠**
 
 ### TLP传输
 TLP传输的示意图如下图所示：

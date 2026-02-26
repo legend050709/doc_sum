@@ -39,7 +39,7 @@ pid_t vfork(void);
 此作法主要的优点是如果呼叫者并没有修改该资源，就不会有副本(private copy)被建立。
 
 
-#### 什么是写时复制
+#### 什么是写时复制（COW）
 
 但由于现在Linux中是采取了`copy-on-write(COW写时复制)`技术，为了降低开销，fork最初并不会真的产生两个不同的拷贝，因为在那个时候，大量的数据其实完全是一样的。写时复制是在推迟真正的数据拷贝。
 若后来确实发生了写入，那意味着parent和child的数据不一致了，于是产生复制动作，每个进程拿到属于自己的那一份，这样就可以降低系统调用的开销。所以有了写时复制后呢，vfork其实现意义就不大了。
@@ -63,6 +63,60 @@ do_wp_page()会对这块导致写入异常中断的物理页面进行取消共�
 （2）仅在写入时复制数据，减少冗余拷贝/无意义拷贝。
 ```
 
+#### COW的时机
+
+发生 COW 的三个必要条件
+（1）VMA 是可写的（VM_WRITE）
+（2）底层物理页当前不可写
+（3）进程发生了写访问（page fault）
+
+##### 单个进程也存在COW吗？
+
+在教科书里，COW 通常和 `fork()` 挂钩。但实际上，COW 是 Linux 内存管理的一种通用优化手段，即使在单进程中，它也无处不在。
+比如：对于全局变量（`.data` 段），即便你从未手动 `fork`，它依然涉及 COW 机制。
+
+```c
+int g = 1;   // 初始化的全局变量存储在 .data
+
+加载时：
+	mmap(a.out, MAP_PRIVATE, PROT_READ|PROT_WRITE)
+
+
+关键点：
+- a.out： 说明是文件映射
+- MAP_PRIVATE: 说明是私有的，不允许回写到文件，也就是最开始页是只读物理页
+- PROT_READ|PROT_WRITE： 说明mmap返回的vma是可读可写的；
+```
+
+
+更改全局变量时：一旦你的代码修改了全局变量，CPU 会发现你试图写入一个标记为“只读”的页面，从而触发一个**缺页异常（Page Fault）**。
+- 内核介入，发现这是一个 `MAP_PRIVATE` 映射。
+- 内核在 RAM 中找一个干净的空闲页，把原数据拷贝过去。
+- 这个新拷贝的页面现在变成了**匿名页面（Anonymous Page）**，它不再属于原来的文件。然后拷贝原内容；
+
+```bash
+发生了什么？
+
+1. page fault（写一个不可写页）
+2. 内核分配匿名页
+3. 拷贝原内容
+4. 建立新的 PTE（可写）
+```
+
+==因此，一个进程也可以出现COW==；
+
+这也是为什么，`coredump_filter` 默认为`0x33`, 出现了`coredump`时，依然可以打印初始化的全局变量的值。
+==因为程序刚启动：初始化的全局变量是“文件后台页面”（File-backed private page）。
+程序运行并修改变量：该页面通过 COW 变成了“私有匿名页面” (Private Anonymous Memory)==。
+
+##### 单个进程的COW是否会导致内存占用翻倍
+不会整体翻倍。  单进程里的 COW 只会在“被写到的页”上发生，  物理内存的增长是“按页、按需、渐进的”。
+换句话说： 不是 `.data` 段一加载就复制一份；不是“有 COW 就翻倍”；只有第一次写某个页，才多占用一页物理内存。
+
+
+##### DPDK 的 匿名私有大页存在COW么
+
+
 #### fork之后，子进程exec 对 COW 关系的影响
 ##### exec 的作用
 
@@ -79,9 +133,13 @@ exec 系列函数的作用是**用一个新的程序映像（executable image）
 
 子进程调用 exec 后：
 
-1. 父进程再进行写操作时，将不再触发 COW 机制（即不会发生物理内存复制）。
-2. 这是因为在 exec 之后，父进程是这些内存页的唯一拥有者（引用计数为 1）。
-3. 内核会解除这些页的“只读”保护标志，允许父进程直接写入，就像进程从未 fork 过一样。
+5. 父进程再进行写操作时，将不再触发 COW 机制（即不会发生物理内存复制）。
+6. 这是因为在 exec 之后，父进程是这些内存页的唯一拥有者（引用计数为 1）。
+7. 内核会解除这些页的“只读”保护标志，允许父进程直接写入，就像进程从未 fork 过一样。
+
+
+
+
 
 
 #### 小结
@@ -93,6 +151,51 @@ fork 后面紧跟 exec 是 Unix/Linux 系统启动新程序（如 Shell 执行�
 |---|---|---|---|
 |**$\text{fork}$**|子进程创建|父子进程共享页，标记为只读 ($\text{COW}$)|避免了 $\text{exec}$ 马上就要丢弃的内存的**不必要复制**。|
 |**$\text{exec}$**|子进程加载新程序|子进程丢弃旧页，解除父进程页的共享|父进程对自己的内存恢复独占写入权，**避免了 $\text{COW}$ 触发的写时复制**。|
+
+
+#### 大页内存和COW
+
+对于 DPDK 显式分配的大页内存（Hugepages），`fork()` 后的行为取决于映射标志，但在 DPDK 典型的 `MAP_SHARED` 配置下，不存在 COW（写时复制）机制。
+
+DPDK 初始化大页内存时，默认使用 `mmap` 的 `MAP_SHARED` 标志。==虽然初始化大页内存是共享的，但是多个DPDK程序，可以通过`--file-prefix `参数的不同，进行大页的隔离==。
+
+- `MAP_SHARED` 的行为：在 Linux 中，`MAP_SHARED` 映射的内存在 `fork()` 之后，父子进程指向的是同一个物理页框。任何一方对内存的修改都会直接作用于物理内存，另一方立刻可见。
+- 语义矛盾：==COW（Copy-on-Write）是针对 `MAP_PRIVATE`匿名或文件映射的==。如果内存是私有的，`fork` 才会为了性能而延迟拷贝；
+
+
+##### DPDK 默认分配的内存池 (rte_malloc/rte_mempool/rte_ring)
+
+这是你最常遇到的场景。由于大页内存是 `MAP_SHARED`，父进程 `fork` 出子进程后：
+- **无 COW**：子进程写入内存，不会触发内核的页面拷贝。
+- **直接共享**：子进程修改一个 mbuf 的内容，父进程看到的也是修改后的内容。
+
+##### 如果是 `MAP_PRIVATE` 映射的大页
+
+虽然 DPDK 核心不这么用，但如果你手动 `mmap` 了一个大页且用了 `MAP_PRIVATE`：
+- **存在 COW**：此时 `fork` 会触发典型的写时复制。当子进程尝试写入大页时，内核会分配一个新的 2MB/1GB 的大页进行数据拷贝。
+- **风险**：大页的 COW 非常昂贵且容易导致 `SIGBUS`（如果此时系统没有剩余的大页来完成复制）。
+
+
+##### rte_malloc 对比普通 malloc 区域
+
+```c
+
+char *p = malloc(4096);
+fork(); 
+p[0] = 'x';
+
+malloc 区域是匿名私有 → 写触发 COW
+```
+
+```c
+void *buf = rte_malloc("test", 4096, 0);
+fork();
+((char*)buf)[0] = 'x';
+
+- buf 来自 MAP_SHARED hugetlbfs → 写入不会触发 COW
+- 父子进程都能看到修改
+```
+
 
 ## fork的特点
 ### 写时复制
@@ -111,10 +214,10 @@ fork 后面紧跟 exec 是 Unix/Linux 系统启动新程序（如 Shell 执行�
 如果任一进程写入一个 COW（写时复制）页，就会触发一个 页故障（Page Fault）。
 在页故障处理程序中，如果这个页理应是可写的，内核会执行以下操作：
 
-4. 分配一个新的物理页（physical page）。
-5. 执行一次内存复制操作（`memcpy(newpage, shared_page, pagesize)`），将共享页的内容复制到这个新页中。
-6. 然后，更新触发故障的那个进程的 页表（Page Table），将该虚拟地址映射到这个新分配的物理页上。
-7. 随后返回用户空间，让存储指令（store instruction） 重新执行。
+8. 分配一个新的物理页（physical page）。
+9. 执行一次内存复制操作（`memcpy(newpage, shared_page, pagesize)`），将共享页的内容复制到这个新页中。
+10. 然后，更新触发故障的那个进程的 页表（Page Table），将该虚拟地址映射到这个新分配的物理页上。
+11. 随后返回用户空间，让存储指令（store instruction） 重新执行。
 
 
 对于像 `fork` 这样的系统调用来说，这是一个优势，因为子进程通常会立即进行 `execve` 系统调用，在此之前它可能只接触（写入）了大约一个页（通常是栈内存的顶部）。
@@ -215,7 +318,244 @@ Shell 脚本中的命令执行可以分为以下几种情况：
 
 ## fork的使用
 ## fork的注意事项
+
+### 多线程进程的fork
+
+**在多线程程序中调用 `fork()` 之后：**
+子进程里只剩下调用 `fork()` 的那个线程，不会是多个线程；
+子进程中看到的“线程变量”的值 = `fork()` 那一刻的快照；
+
+```bash
+(1)假设父进程里有多个线程：
+进程 P
+ ├── 线程 T1
+ ├── 线程 T2
+ └── 线程 T3
+
+
+(2) 如果 T2 调用了 `fork()`：
+父进程：T1, T2, T3  （全部还在）
+子进程：只有 T2    （其他线程“消失”）
+
+```
+
+
+
+
+#### 多线程fork导致的死锁问题
+##### 问题描述
+当你在一个多线程程序中调用 `fork()` 时，只有调用 fork 的那个线程会被复制到子进程，而其他的线程都会消失。
+
+这会导致一个严重问题：如果父进程创建了pthread的互斥锁（pthread_mutex_t）对象，那么子进程将自动继承父进程中互斥锁对象，并且互斥锁的状态也会被子进程继承下来：如果父进程中已经加锁的互斥锁在子进程中也是被锁住的，如果在父进程中未加锁的互斥锁在子进程中也是未加锁的。
+
+如果某个消失的线程当时正持有某个互斥锁（Mutex），那么在子进程中，这个锁将永远处于“被占用”状态且无人能解锁，从而引发死锁。
+或者说：
+因为`fork`出来的子进程都会继承父进程的部分数据，包括锁，句柄等，也就是说在父进程被锁的临界区，在子进程也会被锁，这样可能导致在子进程逻辑中继续加锁，导致出现死锁情况；
+
+##### 范例
+```c
+#include <stdio.h>
+#include <time.h>
+#include <pthread.h>
+#include <unistd.h>
+
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void *doit(void *arg)
+{
+    printf("pid = %d begin doit ...\n", static_cast<int>(getpid()));
+    pthread_mutex_lock(&mutex);
+    struct timespec ts = {2, 0};
+    nanosleep(&ts, NULL);
+    pthread_mutex_unlock(&mutex);
+    printf("pid = %d end doit ...\n", static_cast<int>(getpid()));
+
+    return NULL;
+}
+
+int main(void)
+{
+    printf("pid = %d Entering main ...\n", static_cast<int>(getpid()));
+    pthread_t tid;
+    pthread_create(&tid, NULL, doit, NULL);
+    struct timespec ts = {1, 0};
+    nanosleep(&ts, NULL);
+    if (fork() == 0)
+    {
+        doit(NULL);
+    }
+    pthread_join(tid, NULL);
+    printf("pid = %d Exiting main ...\n", static_cast<int>(getpid()));
+
+    return 0;
+}
+```
+
+上面函数主线程先调用`pthread_create()`创建一个子线程执行`doit()`，`doit()`里面先加锁，睡眠2s；主线程睡眠1s后调用`fork()`，子进程会复制父进程的内存映像，此时全局变量`mutex`处于加锁的状态，所以子进程自己的`mutex`也是加锁的，此时子进程是独立运行的，也去执行`doit()`，在里面试图加锁，因为本来`mutex`已经加锁，而且根本没有人会来解锁，所以子进程就会死锁。
+
+##### pthread_affork
+```c
+#include <pthread.h>
+
+int pthread_atfork(void (*prepare)(void), void (*parent)(void),
+	  void (*child)(void));
+```
+
+![](attachments/Pasted%20image%2020260128153141.png)
+
+pthread_atfork()在`fork()之前`调用。当调用fork时，内部`创建子进程前`在父进程中会调用prepare，内部`创建子进程成功后`，父进程会调用parent ，子进程会调用child。
+
+```c
+#include <stdio.h>
+#include <time.h>
+#include <pthread.h>
+#include <unistd.h>
+
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void *doit(void *arg)
+{
+    printf("pid = %d begin doit ...\n", static_cast<int>(getpid()));
+    pthread_mutex_lock(&mutex);
+    struct timespec ts = {2, 0};
+    nanosleep(&ts, NULL);
+    pthread_mutex_unlock(&mutex);
+    printf("pid = %d end doit ...\n", static_cast<int>(getpid()));
+
+    return NULL;
+}
+
+void prepare(void)
+{
+    pthread_mutex_unlock(&mutex);
+}
+
+void parent(void)
+{
+    pthread_mutex_lock(&mutex);
+}
+
+int main(void)
+{
+    pthread_atfork(prepare, parent, NULL);
+    printf("pid = %d Entering main ...\n", static_cast<int>(getpid()));
+    pthread_t tid;
+    pthread_create(&tid, NULL, doit, NULL);
+    struct timespec ts = {1, 0};
+    nanosleep(&ts, NULL);
+    if (fork() == 0) // 子进程执行doit
+    {
+        doit(NULL);
+    }
+    pthread_join(tid, NULL);
+    printf("pid = %d Exiting main ...\n", static_cast<int>(getpid()));
+
+    return 0;
+
+```
+
+在执行fork()创建子进程之前，先执行prepare()，将子线程加锁的mutex解锁下，然后为了与doit()配对，`在创建子进程成功后，父进程调用parent()再次加锁，这时父进程的doit()就可以接着解锁执行下去`。而对于子进程来说，由于在fork()创建子进程之前，mutex已经被解锁，故`复制的状态也是解锁的`，所以执行doit()就不会死锁了
+
+
 ## 范例 
+
+## close-on-exec
+
+我们经常会碰到需要fork子进程的情况，而且子进程很可能会继续exec新的程序。这就不得不提到子进程中无用文件描述符的问题！
+
+子进程以写时复制（COW，Copy-On-Write）方式获得父进程的数据空间、堆和栈副本，这其中也包括文件描述符。刚刚fork成功时，父子进程中相同的文件描述符指向系统文件表中的同一项（这也意味着他们共享同一文件偏移量）。
+
+![](attachments/Pasted%20image%2020251210144015.png)
+
+接着，一般我们会在子进程中调用exec执行另一个程序，此时会用全新的程序替换子进程的正文，数据，堆和栈等。此时保存文件描述符的变量当然也不存在了，我们就无法关闭无用的文件描述符了。
+
+所以通常我们会`fork`子进程后在子进程中直接执行`close`关掉无用的文件描述符，然后再执行`exec`。但是在复杂系统中，有时我们`fork`子进程时已经不知道打开了多少个文件描述符（包括socket句柄等），这此时进行逐一清理确实有很大难度。我们期望的是能在`fork`子进程前打开某个文件句柄时就指定好：“这个句柄我在fork子进程后执行exec时就关闭”。其实时有这样的方法的：即所谓的 `close-on-exec`。
+
+### close-on-exec 的作用
+
+|**操作**|**标志是否设置**|**文件描述符 (FD) 状态**|
+|---|---|---|
+|**`fork()`** (创建子进程)|设置或未设置|**始终保持打开**。子进程继承父进程的所有 FD。|
+|**`exec()`** (在子进程中加载新程序)|**未设置**|FD 保持**打开**，在新程序中继续可见和可用。|
+|**`exec()`** (在子进程中加载新程序)|**已设置 (FD_CLOEXEC)**|FD 在新程序启动前**自动关闭**。|
+
+
+
+### fork + exec 没有 `close-on-exec` 的影响
+
+如果没有设置 `FD_CLOEXEC` 标志，当父进程通过 `fork()` 创建子进程，并在子进程中调用 `exec()` 执行一个不相关的新程序时，就会产生以下严重的副作用和安全隐患：
+
+#### fd资源泄露和浪费
+
+- **描述：** 父进程打开的所有文件描述符（包括 Socket 连接、文件句柄、管道等）会被新执行的程序（子进程）继承并保持打开。
+ 
+- **影响：** 即使新程序完全不需要这些资源，它们也会占据系统的文件描述符配额，可能导致新程序或系统达到 **文件描述符限制 (FD Limit)** 而无法打开新的资源。
+比如：
+```bash
+accept() failed (24: Too many open files) while accepting new connection on 0.0.0.0:80
+```
+
+#### 意外的数据传输
+
+- **描述：** 如果父进程打开了一个 Socket 连接（例如，一个监听 Socket 或一个已建立的连接），子进程在 `exec` 之后，新程序也拥有对这个 Socket 的读写能力。
+
+- **影响：** 新程序可能会意外地向这个连接中写入数据，或者读取本应由父进程处理的数据，导致**通信混乱**或**协议错误**。
+
+#### 安全风险（权限泄露）
+
+- **描述：** 这是最关键的影响。如果父进程在执行 `exec` 之前打开了**敏感资源**，例如：
+    - 一个以高权限（如 `root`）打开的配置文件句柄。
+    - 一个秘密的 Unix 域 Socket。
+    - 一个用于权限控制的锁文件。
+        
+- **影响：** 这些敏感的 FD 会被新的、可能权限较低或不被信任的程序继承。如果新程序可以猜到这些 FD 的数字（通常是最小未使用的数字），它就可以**绕过权限检查**，直接访问或操作这些敏感资源，造成**权限泄露**或**安全漏洞**。
+
+
+
+#### 范例
+
+
+### `close-on-exec` 标记
+
+#### fcntl 函数 + FD_CLOEXEC
+```c
+ int fd=open("foo.txt",O_RDONLY);
+ int flags = fcntl(fd, F_GETFD);
+ flags |= FD_CLOEXEC;
+ fcntl(fd, F_SETFD, flags);
+
+```
+
+这样，当fork子进程后，仍然可以使用fd。但执行exec后系统就会字段关闭子进程中的fd了。
+
+#### open 函数 + O_CLOEXEC
+
+![](attachments/Pasted%20image%2020251210144551.png)
+
+#### socket  函数 + SOCK_CLOEXEC
+
+![](attachments/Pasted%20image%2020251210144809.png)
+
+#### epoll_create1 函数 + EPOLL_CLOEXEC
+
+`epoll_create1` 以及 `epoll_create` 创建的 epoll_fd 也是属于 fd的一种，可拿 `socket` 函数类比；因此 fork 之后，也是被子进程继承的。
+
+![](attachments/Pasted%20image%2020251210145052.png)
+ 
+
+#### pipe2 函数 + O_CLOEXEC
+
+![](attachments/Pasted%20image%2020251210151119.png)
+
+#### eventfd 函数 + EFD_CLOEXEC
+
+![](attachments/Pasted%20image%2020251210194942.png)
+
+#### 小结
+
+在现代 Linux C 编程中，最佳实践是除非明确需要子进程继承某个 FD，否则一律设置 `FD_CLOEXEC` 标志。
+对于绝大多数 I/O 操作，使用带有 `O_CLOEXEC` 或 `SOCK_CLOEXEC` 标志的函数版本，这比之后再使用 `fcntl()` 设置更高效和可靠。
+
 
 # vfork
 

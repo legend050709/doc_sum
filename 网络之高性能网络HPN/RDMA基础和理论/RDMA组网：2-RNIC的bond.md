@@ -15,21 +15,35 @@ mlx5_bond_0 port 1 ==> bond0 (Up)
 ## RDMA相关知识
 ![](attachments/Pasted%20image%2020250710193532.png)
 
+
+# 传统ethernet 以太网 的bond
+我们知道操作系统里面，可以将2个实际的物理网卡，合体形成一个“逻辑网卡”，从而达到如主备/提升带宽等目的。
+
+![](attachments/Pasted%20image%2020250314195703.png)
+
+## mode模式 和 hash策略
+mode 可以选择：
+![](attachments/Pasted%20image%2020240904105710.png)
+
+流量的hash策略：
+
+|策略值|名称|哈希计算依据|适用场景|
+|---|---|---|---|
+|`layer2`|Layer 2|源/目标 MAC 地址|默认策略，简单但负载不均|
+|`layer2+3`|Layer 2+3|MAC + IP 地址|基础 IP 负载均衡|
+|**`layer3+4`**|Layer 3+4|IP 地址 + 端口号|**推荐策略** (TCP/UDP 流量)|
+|`encap2+3`|Encapsulation 2+3|外层 MAC + IP|VLAN/隧道环境|
+|`encap3+4`|Encapsulation 3+4|外层 IP + 端口|高级隧道环境|
+
 # RDMA RoCE Bonding
 
 参考：[rdma bond](https://www.openfabrics.org/images/eventpresos/workshops2014/DevWorkshop/presos/Tuesday/pdf/13_rdma_bonding.pdf)
 
 参考：[rdma and user space ethernet bonding](https://www.openfabrics.org/images/eventpresos/2016presentations/303RDMAUserSpc.pdf)
 
-## 传统ethernet 以太网 的bond
-我们知道操作系统里面，可以将2个实际的物理网卡，合体形成一个“逻辑网卡”，从而达到如主备/提升带宽等目的。
-
-![](attachments/Pasted%20image%2020250314195703.png)
 
 
-## Roce 的bond
-
-### 限制
+## 限制
 但是RoCE网卡，是否也跟普通网卡一样，支持Bond能力呢？
 答案是的，RoCE也可以组Bond，只是比普通网卡多了一些约束。
 
@@ -43,9 +57,9 @@ mlx5_bond_0 port 1 ==> bond0 (Up)
 （2.1） `mode4`的时候：==在多个成员口之间分配的是QP，而不是包==。当QP从`RESET`状态变为`INIT`状态时，随机选择一个物理口。
 是不是一旦`QP`确定了哪个成员口之后，后续的数据都是从这个成员口出去，而不是像Linux内核的以太网口的bonding一样，可以配置基于数据包的策略来选择成员口。
 
-### RoceV2 的bond 的实现
+## RoceV2 的bond 的实现
 
-#### 先看传统以太网在链路层进行bonding
+### 传统以太网在链路层进行bonding 和  RDMA Roce Bond的对比
 
 ![](attachments/Pasted%20image%2020250710142327.png)
 
@@ -54,7 +68,7 @@ mlx5_bond_0 port 1 ==> bond0 (Up)
 （1）bonding的实现 在内核协议栈的三四层和物理口之间。
 （2）物理接口无状态的转发数据包。
 （3）对于上层来说，bonding是透明的，即应用层其实是不感知的。
-（4）传输层实在内核协议栈实现的。
+（4）传输层是在内核协议栈实现的。
 ```
 
 对于RDMA而言，进行bonding就存在一些挑战：
@@ -64,7 +78,7 @@ mlx5_bond_0 port 1 ==> bond0 (Up)
 ![](attachments/Pasted%20image%2020250710194626.png)
 
 
-#### 传输层的bonding
+### 传输层的bonding
 ![](attachments/Pasted%20image%2020250710213604.png)
 
 HAL: `hardware abstract layer`, 硬件抽象层。
@@ -74,31 +88,43 @@ bonding driver: 硬件独立的`bonding`驱动；
 ![](attachments/Pasted%20image%2020250710220111.png)
 
 
+## 问题
+### rdma bond 口的命名问题
+如果不在udev进行配置rdma的设备的名称(基于PCIe号进行配置)， 驱动就会自动命名。
 
+**（1）udev中设置RNIC名称**
+```bash
+SUBSYSTEM=="infiniband", ACTION=="add", KERNELS=="0000:17:00.0", PROGRAM="rdma_rename %k NAME_FIXED mlx5_10
+```
 
-### 问题
-#### 单卡双口的bond和多卡的bond
+![](attachments/test-1.png)
+
+**（2）udev不设置RNIC名称**
+
+![](attachments/test2.png)
+
+### 单卡双口的bond和多卡的bond
 猜测：
 "单卡双口的两个物理口进行bonding，如果某个成员口down掉，由于两个口属于同一个卡，此时流量到达另外一个口，应该也是可以查找到down掉的口的QP信息的。
 但是如果是多个卡，那么一个卡的口down掉了，另外一个卡的口上是没有down掉卡的QP信息的，无法无损的进行failover。因为对于RDMA流量而言，RNIC是带有状态的"。
 
-#### QP的归属
+### QP的归属
 ==创建一个QP，这个QP只会在一个成员口上创建，不会在2个成员口中都存在==。
 
 即：在多个成员口之间分配的是QP。
 
-#### QP对应的成员口的选择
+### 在成员口上分配资源(如：QP)
 传统的以太网的`bonding`，选择成员口的时候，比如 `bond mode4`, 可以选择`hash`策略为： `layer3+4`；
 `RoceV2` 是 基于以太网`ethernet + IP/UDP(dport: 4791)`， 但是应该无法基于  `layer3+4` 进行`hash`来选择具体的哪个成员口。
 因为 `Ethernet/IP/UDP`的封装是在 `RNIC`上进行的，应用层通过 `ibverbs` API 接口下发数据时，此时是没有五元组信息的，应该只有QP信息。
 
-##### 能够基于QP信息得到五元组信息么？
+#### 能够基于QP信息得到五元组信息么？
 
-##### 如何确定QP创建在哪个 slave 成员口？
+#### 如何确定QP创建在哪个 slave 成员口？
 **我的理解**：
 由 `Linux bonding 驱动`和`底层 RDMA 驱动`在 QP 创建时（或首次使用时），根据配置的 `bonding` 模式（如 active-backup 的当前 active 口，或 load balancing 模式的哈希结果）隐式、透明地选择一个`活动的 slave 成员口`进行绑定。应用不直接指定。
 
-##### 后续流量路径
+#### 后续流量路径
 **我的理解**：
 
  **核心原则**：==绝大多数情况下，一旦一个 QP 被绑定到一个 slave 成员口后，这个 QP 的所有流量（发送和接收）都会固定通过这个指定的 slave 成员口。
@@ -116,11 +142,11 @@ QP 代表了一个通信端点对端点（或一对多）的连接上下文。�
 
 
 
-##### 负载均衡单位
+#### 负载均衡单位
 **我的理解**：
 ==负载均衡（在支持的模式下）是在 QP 粒度上进行的（即不同的 QP 走不同的 slave 口），而不是在单个 QP 的流量内部进行分流==。
 
-##### RDMA bonding 情况下，QP的port亲和性
+#### RDMA bonding 情况下，QP的port亲和性
 
 ![](attachments/Pasted%20image%2020251021122542.png)
 
@@ -201,7 +227,6 @@ struct ibv_qp_attr {
 
 ```
 
-###### 
 
 **猜测**：
 `port_num` 用于指定一个特定的端口号，表示该 QP 使用的物理端口。在大多数情况下，`port_num` 是与设备端口的索引对应的，通常从 1 开始。
@@ -210,9 +235,10 @@ struct ibv_qp_attr {
 ==因此，不知道上面的方法是否可靠==。
 
 
-##### 应用透明性
+#### 应用透明性
 **我的理解**：
 整个过程对 RDMA 应用是透明的（除了需要处理路径失效事件外）。应用只与 `bonding` 设备 (比如：`mlx5_bond_0`) 交互。
+
 
 # RDMA多路径
 ## 方法：基于IP层的ECMP

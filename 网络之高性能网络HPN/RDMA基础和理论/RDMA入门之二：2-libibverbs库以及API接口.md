@@ -1,5 +1,7 @@
 ```table-of-contents
 ```
+# 概述
+用户空间程序使用称为verbs的函数直接访问 RDMA NIC（RNIC）。要将Verbs 发布到 RNIC，应用程序会调用用户态 RDMA 驱动程序。 然后，驱动程序在主机的内存中准备一个工作队列元素 (Work Queue Element ，WQE)，并通过程序化 IO (Programmed IO，PIO：也就是 MMIO) 在 RNIC 上敲响门铃。
 
 # `libibverbs`库
 ```bash

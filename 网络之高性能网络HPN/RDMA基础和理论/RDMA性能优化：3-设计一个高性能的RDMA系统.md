@@ -82,17 +82,64 @@ MMIO（Memory-Mapped I/O，内存映射I/O）：
 
 ### 策略一：减少CPU的MMIO次数
 
-CPU通过MMIO向NIC发送消息来启动网络操作（这个过程即是Doorbell机制）。
+CPU通过MMIO向NIC发送消息来启动网络操作（这个过程即是Doorbell机制，即写网卡寄存器）。
+
 #### CPU传递WQE的方式
 这个消息可以是：
 （1）包含新的工作任务（WQE）：即：CPU通过MMIO写WQE，传递给RNIC。
+
 （2）通过使用最后一个WQE的地址之类的信息来得到新的WQE信息：即 先通过MMIO告知NIC关于WQE的位置，然后NIC通过一个或多个DMA操作去相应位置读取WQE。
+
 
 **（1）第一种情况：通过MMIO传递WQE**
 如下图，第一种情况下（图6.a），通过64字节的MMIO写组合来传输WQE；
+PIO（Programmed I/O / MMIO 写） 指的是：CPU 通过 MMIO，把数据“拷贝 + 写寄存器”的方式，直接写进 RNIC（网卡）内部，而不是通过 DMA。当 payload 变大时，这个过程就会变慢。
 
+```bash
+PIO（Programmed I/O / MMIO）——“小数据快速路径”
+
+CPU
+  |
+  |  mov / store
+  v
+RNIC (MMIO BAR 空间)
+
+
+特点：
+- CPU 直接通过 PCIe MMIO 写
+- 每个 cache line / store 都要过 PCIe
+- 完全吃：
+    - CPU 执行
+    - PCIe 带宽
+    - posted write 延迟
+        
+
+常用于：
+- inline data
+- 小消息
+- latency-sensitive 场景
+```
 
 **（2）第二种情况：通过MMIO传递WQE地址，然后RNIC通过DMA读取WQE **：
+
+```bash
+DMA（Direct Memory Access）——“正常的大数据路径”
+
+CPU
+  |
+  |  (只写 WQE / doorbell)
+  v
+RNIC  <--- DMA --- Host Memory
+
+特点：
+- CPU 只负责：
+    - 填 WQE
+    - doorbell
+- 数据由 RNIC 自己 DMA 拉
+- 对大 payload 非常高效
+
+RDMA READ / WRITE 的 payload 一般走 DMA
+```
 
 如下图，第二种情况（图6.b）则是先通过MMIO告知NIC关于WQE的相关信息，然后NIC通过一个或多个DMA操作去相应位置读取WQE。
 

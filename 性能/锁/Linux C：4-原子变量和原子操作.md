@@ -1,10 +1,26 @@
 ```table-of-contents
 ```
+
 # 原子操作
+
+## 背景
+
+我们知道无论是何种情况，只要有共享的地方，就离不开同步，也就是concurrency。对共享资源的安全访问，在不使用锁、同步原语的情况下，只能依赖于硬件支持的原子性操作，离开原子操作的保证，无锁编程(lock-free programming)将变得不可能。
+
+我们发现原子性操作可以简单划分为两部分： 
+
+``` bash
+1. 原子性读写(atomic read and write)：本例中的原子load(读)、原子store(写) 
+2. 原子性交换(Atomic Read-Modify-Write -- RMW)：本例中的 compare_exchange_weak、compare_exchange_strong 
+```
+
 ## 定义
-- 原子操作是被保证以单独一个事务被执行的操作。参照数据库中的概念。
-- 其他线程，可以看到原子操作执行之前的系统状态，或者看到原子操作完全执行结束后的系统状态，但不能看到原子操作执行中的系统状态。（All done or nothing）。
-- 在底层，原子操作是一些特殊的硬件指令，若是硬件不支持是没有办法实现多线程的原子操作的。
+（==All done or nothing==）。
+原子操作可认为是一个不可分的操作；要么发生，要么没发生，我们看不到任何执行的中间过程，不存在部分结果(partial effects)。可以想象的到，原子操作要保证要么全部发生，要么全部没发生，这样原子操作绝对不是一个廉价的消耗低的指令，相反，原子操作是一个较为昂贵的指令。
+
+注：在底层，原子操作是一些特殊的硬件指令，若是硬件不支持是没有办法实现多线程的原子操作的。
+
+
 
 ## 范例
 ![](attachments/Pasted%20image%2020250412151120.png)
@@ -86,24 +102,40 @@ void bar() {
 ## CPU的指令重排（乱序执行）
 
 
-# 内存模型
 
-指令重排虽然一定程度加快了程序的执行，但却带来了额外的问题，快是快了，但程序的正确性却没了。
+# 原子操作API
+## 内核的原子操作API
+## gcc内置的原子操作API
+### `__sync_*` 系列函数
+```bash
 
-这个时候就需要有另外的技术来解决的问题, 就是我们要说的 memory order/barrier/fence. 这里提到3个词 memory order, memory barrier, memory fence, 其实本质上说的都是一个问题(内存可见性).
+```
+### `__atomic_*`系列函数
+```bash
 
-同时，为了更好的理解内存模型，请看之前文章 [《# 每个程序员都应该了解的内存知识（What every programmer should know about memory）》](https://zhuanlan.zhihu.com/p/611133924) 的 ### Load/Store Buffer 部分，先对 Store Buffer 这个东西有个初步的印象。
+```
 
-此外，为了更好的理解内存模型，应该从硬件视角去理解，推荐看《Memory Barriers: a Hardware View for Software Hackers》
 
-![](attachments/Pasted%20image%2020250412151904.png)
 
-CPU 在向 Cache 写入的时候，会先向 Store Buffer 里写入，Store Buffer 累积一些写入，然后再写到 Cache 。每个 CPU 有属于它自己的 Cache ，这就带来了缓存一致性的问题，CPU 之间通过 MESI 等协议解决这个问题。
-对于 Store Buffer 而言，它写到自己的 Cache 就等于写到内存了，其他 CPU 就应该能看见了，至于复杂的一致性问题，交给 MESI.
-MESI 协议用于实现缓存一致性，其定义了四种状态“modified”, “exclusive”, “shared”, “invalid”。
+## 其他
+### DPDK中的原子操作
+[DPDK中的原子操作](https://doc.dpdk.org/api/rte__stdatomic_8h_source.html)
 
+# 区分
+## 原子变量和 volatile
+## 
 # 参考
 ```bash
-# 原子操作与内存模型/序/屏障 （Atomic operation & Memory model）
-https://zhuanlan.zhihu.com/p/611868395
+（1）并发编程：
+# Java并发编程—可见性、原子性和有序性问题：并发编程Bug的源头
+https://zhangquan.me/2023/05/22/java-bing-fa-bian-cheng-ke-jian-xing-yuan-zi-xing-he-you-xu-xing-wen-ti-bing-fa-bian-cheng-bug-de-yuan-tou/
+【总结的很不错；+++++】
+
+# Java 并发编程实战、极客时间
+https://time.geekbang.org/column/intro/100023901?tab=catalog
+
+# 并发编程三大特性——原子性、可见性、有序性
+https://www.cnblogs.com/yeyang/p/13576636.html
+
+
 ```

@@ -36,11 +36,19 @@ gdb --args <可执行文件> <参数1> <参数2> ...
 
 ## 父子进程处理
 ### set follow-fork-mode child
-#### 背景
-在调试程序时，如果目标程序调用了 `fork()` 函数，GDB 需要决定是在父进程还是子进程中继续调试。`set follow-fork-mode` 用来指定 GDB 在 `fork()` 发生后跟踪哪一方。
+#### 问题
+在调试程序时，如果目标程序调用了 `fork()` 函数。
+但是在gdb中启动程序，然后设置断点，发现 一直不触发中断。
+
+#### 分析
+很多“断点不生效”，其实是**断点打在 A 进程，但是 你在看 B 进程跑**
+
+在调试程序时，如果目标程序调用了 `fork()` 函数，GDB 需要决定是在父进程还是子进程中继续调试。
+`set follow-fork-mode` 用来指定 GDB 在 `fork()` 发生后跟踪哪一方。
 
 - **`parent`（默认值）**： GDB 在 `fork()` 调用后继续调试父进程。
 - **`child`**： GDB 在 `fork()` 调用后停止调试父进程，转而调试子进程。
+
 
 #### 含义
 - 如果设置为 `child`，GDB 会自动切换到子进程，并忽略父进程。
@@ -49,6 +57,42 @@ gdb --args <可执行文件> <参数1> <参数2> ...
 #### 使用场景
 - 调试多进程程序时： 如果程序调用了 `fork()`，你想要调试子进程的逻辑，而不是父进程。
 - 调试守护进程（Daemon）： 通常守护进程在启动时会通过 `fork()` 创建一个子进程作为真正的服务进程，使用 `set follow-fork-mode child` 可以直接跟踪子进程。
+
+### detach-on-fork
+```bash
+set detach-on-fork off: 
+	父子都留在 gdb 里
+	
+set detach-on-fork on: 默认值
+	gdb 只管一个，另一个放飞
+```
+
+### 查看
+```bash
+//1 查看一下进程和线程的信息
+info inferiors; 
+	在GDB 语境下，`inferiors` 指的是：被 GDB 控制和调试的进程实例；
+	也可以更通俗地理解为：GDB 正在调试的各个进程 / fork 之后产生的父/子进程对象
+
+info threads;
+
+//2 或者切换进程和线程的信息
+inferior <infer number>;
+thread <thread number>;
+
+//3 查看对应的模式
+show follow-fork-mode
+show detach-on-fork
+
+```
+
+### 推荐使用
+```bash
+set follow-fork-mode child
+set detach-on-fork off
+```
+
+![](attachments/Pasted%20image%2020260210110653.png)
 
 # gdb查看
 ## 源码查看
@@ -97,6 +141,211 @@ Line 330 of "poll/epoll.c" starts at address 0x69e2b0 <kucl_epoll_wait> and ends
 ```
 
 ![](attachments/Pasted%20image%2020250918123402.png)
+
+## 查看出现coredump的程序的map映射
+
+如果程序正在运行，则可以通过`/proc/PID/maps` 来查看当前的进程的内存的映射信息。如果程序出现了coredump，也可以通过 gdb 中的 `info proc mappings` 来查看到 挂掉的程序的 maps信息。 如下所示：
+
+```bash
+(gdb) info proc mappings
+Mapped address spaces:
+
+          Start Addr           End Addr       Size     Offset objfile
+......
+        0x2200200000       0x2200400000   0x200000        0x0 /anon_hugepage (deleted)
+        0x2200400000       0x2200600000   0x200000        0x0 /anon_hugepage (deleted)
+        0x2200600000       0x2200800000   0x200000        0x0 /anon_hugepage (deleted)
+        0x2200800000       0x2200a00000   0x200000        0x0 /anon_hugepage (deleted)
+        0x2200a00000       0x2200c00000   0x200000        0x0 /anon_hugepage (deleted)
+        0x2200c00000       0x2200e00000   0x200000        0x0 /anon_hugepage (deleted)
+        0x2200e00000       0x2201000000   0x200000        0x0 /anon_hugepage (deleted)
+        0x2201000000       0x2201200000   0x200000        0x0 /anon_hugepage (deleted)
+        0x2201200000       0x2201400000   0x200000        0x0 /anon_hugepage (deleted)
+        0x2201400000       0x2201600000   0x200000        0x0 /anon_hugepage (deleted)
+        0x2201600000       0x2201800000   0x200000        0x0 /anon_hugepage (deleted)
+        0x2201800000       0x2201a00000   0x200000        0x0 /anon_hugepage (deleted)
+        0x2201a00000       0x2201c00000   0x200000        0x0 /anon_hugepage (deleted)
+......
+......
+        0x3221800000       0x3221a00000   0x200000        0x0 /anon_hugepage (deleted)
+        0x3221a00000       0x3221c00000   0x200000        0x0 /anon_hugepage (deleted)
+        0x3221c00000       0x3221e00000   0x200000        0x0 /anon_hugepage (deleted)
+        0x3221e00000       0x3222000000   0x200000        0x0 /anon_hugepage (deleted)
+        0x3222000000       0x3222200000   0x200000        0x0 /anon_hugepage (deleted)
+        0x3222200000       0x3222400000   0x200000        0x0 /anon_hugepage (deleted)
+        0x3222400000       0x3222600000   0x200000        0x0 /anon_hugepage (deleted)
+        0x3222600000       0x3222800000   0x200000        0x0 /anon_hugepage (deleted)
+        0x3222800000       0x3222a00000   0x200000        0x0 /anon_hugepage (deleted)
+      0x200000200000     0x200000400000   0x200000        0x0 /dev/hugepages/spdk_pid62656map_0 (deleted)
+      0x200003a00000     0x200003c00000   0x200000        0x0 /dev/hugepages/spdk_pid62656map_28 (deleted)
+      0x200003c00000     0x200003e00000   0x200000        0x0 /dev/hugepages/spdk_pid62656map_29 (deleted)
+      0x200014c00000     0x200014e00000   0x200000        0x0 /dev/hugepages/spdk_pid62656map_165 (deleted)
+      0x7fc18069e000     0x7fc18879e000  0x8100000    0x25000 /dev/shm/spdkchunkstore_perf_trace.pid62656 (deleted)
+      0x7fc18c3a4000     0x7fc18c404000    0x60000        0x0 /usr/lib64/libpcre.so.1.2.0
+      0x7fc18c404000     0x7fc18c604000   0x200000    0x60000 /usr/lib64/libpcre.so.1.2.0
+      0x7fc18c604000     0x7fc18c605000     0x1000    0x60000 /usr/lib64/libpcre.so.1.2.0
+      0x7fc18c605000     0x7fc18c606000     0x1000    0x61000 /usr/lib64/libpcre.so.1.2.0
+      0x7fc18c606000     0x7fc18c62a000    0x24000        0x0 /usr/lib64/libselinux.so.1
+      0x7fc18c62a000     0x7fc18c829000   0x1ff000    0x24000 /usr/lib64/libselinux.so.1
+      0x7fc18c829000     0x7fc18c82a000     0x1000    0x23000 /usr/lib64/libselinux.so.1
+      0x7fc18c82a000     0x7fc18c82b000     0x1000    0x24000 /usr/lib64/libselinux.so.1
+      0x7fc18c82d000     0x7fc18c843000    0x16000        0x0 /usr/lib64/libresolv-2.17.so
+      0x7fc18c843000     0x7fc18ca43000   0x200000    0x16000 /usr/lib64/libresolv-2.17.so
+      0x7fc18ca43000     0x7fc18ca44000     0x1000    0x16000 /usr/lib64/libresolv-2.17.so
+      0x7fc18ca44000     0x7fc18ca45000     0x1000    0x17000 /usr/lib64/libresolv-2.17.so
+      0x7fc18ca47000     0x7fc18ca4a000     0x3000        0x0 /usr/lib64/libkeyutils.so.1.5
+      0x7fc18ca4a000     0x7fc18cc49000   0x1ff000     0x3000 /usr/lib64/libkeyutils.so.1.5
+      0x7fc18cc49000     0x7fc18cc4a000     0x1000     0x2000 /usr/lib64/libkeyutils.so.1.5
+      0x7fc18cc4a000     0x7fc18cc4b000     0x1000     0x3000 /usr/lib64/libkeyutils.so.1.5
+      0x7fc18cc4b000     0x7fc18cc59000     0xe000        0x0 /usr/lib64/libkrb5support.so.0.1
+      0x7fc18cc59000     0x7fc18ce59000   0x200000     0xe000 /usr/lib64/libkrb5support.so.0.1
+      0x7fc18ce59000     0x7fc18ce5a000     0x1000     0xe000 /usr/lib64/libkrb5support.so.0.1
+      0x7fc18ce5a000     0x7fc18ce5b000     0x1000     0xf000 /usr/lib64/libkrb5support.so.0.1
+      0x7fc18ce5b000     0x7fc18ce8c000    0x31000        0x0 /usr/lib64/libk5crypto.so.3.1
+      0x7fc18ce8c000     0x7fc18d08b000   0x1ff000    0x31000 /usr/lib64/libk5crypto.so.3.1
+      0x7fc18d08b000     0x7fc18d08d000     0x2000    0x30000 /usr/lib64/libk5crypto.so.3.1
+      0x7fc18d08d000     0x7fc18d08e000     0x1000    0x32000 /usr/lib64/libk5crypto.so.3.1
+      0x7fc18d08e000     0x7fc18d091000     0x3000        0x0 /usr/lib64/libcom_err.so.2.1
+      0x7fc18d091000     0x7fc18d290000   0x1ff000     0x3000 /usr/lib64/libcom_err.so.2.1
+      0x7fc18d290000     0x7fc18d291000     0x1000     0x2000 /usr/lib64/libcom_err.so.2.1
+      0x7fc18d291000     0x7fc18d292000     0x1000     0x3000 /usr/lib64/libcom_err.so.2.1
+      0x7fc18d292000     0x7fc18d36b000    0xd9000        0x0 /usr/lib64/libkrb5.so.3.3
+      0x7fc18d36b000     0x7fc18d56a000   0x1ff000    0xd9000 /usr/lib64/libkrb5.so.3.3
+      0x7fc18d56a000     0x7fc18d578000     0xe000    0xd8000 /usr/lib64/libkrb5.so.3.3
+      0x7fc18d578000     0x7fc18d57b000     0x3000    0xe6000 /usr/lib64/libkrb5.so.3.3
+      0x7fc18d57b000     0x7fc18d5c5000    0x4a000        0x0 /usr/lib64/libgssapi_krb5.so.2.2
+      0x7fc18d5c5000     0x7fc18d7c5000   0x200000    0x4a000 /usr/lib64/libgssapi_krb5.so.2.2
+      0x7fc18d7c5000     0x7fc18d7c6000     0x1000    0x4a000 /usr/lib64/libgssapi_krb5.so.2.2
+      0x7fc18d7c6000     0x7fc18d7c8000     0x2000    0x4b000 /usr/lib64/libgssapi_krb5.so.2.2
+      0x7fc18d7c8000     0x7fc18d828000    0x60000        0x0 /usr/lib64/libmlx5.so.1.19.35.0
+      0x7fc18d828000     0x7fc18da28000   0x200000    0x60000 /usr/lib64/libmlx5.so.1.19.35.0
+      0x7fc18da28000     0x7fc18da29000     0x1000    0x60000 /usr/lib64/libmlx5.so.1.19.35.0
+      0x7fc18da29000     0x7fc18da2a000     0x1000    0x61000 /usr/lib64/libmlx5.so.1.19.35.0
+      0x7fc18da2c000     0x7fc18da49000    0x1d000        0x0 /usr/lib64/libibverbs.so.1.14.35.0
+      0x7fc18da49000     0x7fc18dc49000   0x200000    0x1d000 /usr/lib64/libibverbs.so.1.14.35.0
+      0x7fc18dc49000     0x7fc18dc4a000     0x1000    0x1d000 /usr/lib64/libibverbs.so.1.14.35.0
+      0x7fc18dc4a000     0x7fc18dc4b000     0x1000    0x1e000 /usr/lib64/libibverbs.so.1.14.35.0
+      0x7fc18dc4b000     0x7fc18de03000   0x1b8000        0x0 /usr/lib64/libc-2.17.so
+      0x7fc18de03000     0x7fc18e003000   0x200000   0x1b8000 /usr/lib64/libc-2.17.so
+      0x7fc18e003000     0x7fc18e007000     0x4000   0x1b8000 /usr/lib64/libc-2.17.so
+      0x7fc18e007000     0x7fc18e009000     0x2000   0x1bc000 /usr/lib64/libc-2.17.so
+      0x7fc18e00e000     0x7fc18e023000    0x15000        0x0 /usr/lib64/libgcc_s-4.8.5-20150702.so.1
+      0x7fc18e023000     0x7fc18e222000   0x1ff000    0x15000 /usr/lib64/libgcc_s-4.8.5-20150702.so.1
+      0x7fc18e222000     0x7fc18e223000     0x1000    0x14000 /usr/lib64/libgcc_s-4.8.5-20150702.so.1
+      0x7fc18e223000     0x7fc18e224000     0x1000    0x15000 /usr/lib64/libgcc_s-4.8.5-20150702.so.1
+      0x7fc18e224000     0x7fc18e30d000    0xe9000        0x0 /usr/lib64/libstdc++.so.6.0.19
+      0x7fc18e30d000     0x7fc18e50c000   0x1ff000    0xe9000 /usr/lib64/libstdc++.so.6.0.19
+      0x7fc18e50c000     0x7fc18e514000     0x8000    0xe8000 /usr/lib64/libstdc++.so.6.0.19
+      0x7fc18e514000     0x7fc18e516000     0x2000    0xf0000 /usr/lib64/libstdc++.so.6.0.19
+      0x7fc18e52b000     0x7fc18e52f000     0x4000        0x0 /usr/lib64/libuuid.so.1.3.0
+      0x7fc18e52f000     0x7fc18e72e000   0x1ff000     0x4000 /usr/lib64/libuuid.so.1.3.0
+      0x7fc18e72e000     0x7fc18e72f000     0x1000     0x3000 /usr/lib64/libuuid.so.1.3.0
+      0x7fc18e72f000     0x7fc18e730000     0x1000     0x4000 /usr/lib64/libuuid.so.1.3.0
+      0x7fc18e730000     0x7fc18e737000     0x7000        0x0 /usr/lib64/librt-2.17.so
+      0x7fc18e737000     0x7fc18e936000   0x1ff000     0x7000 /usr/lib64/librt-2.17.so
+      0x7fc18e936000     0x7fc18e937000     0x1000     0x6000 /usr/lib64/librt-2.17.so
+      0x7fc18e937000     0x7fc18e938000     0x1000     0x7000 /usr/lib64/librt-2.17.so
+      0x7fc18e938000     0x7fc18e99f000    0x67000        0x0 /usr/lib64/libssl.so.1.0.2k
+      0x7fc18e99f000     0x7fc18eb9f000   0x200000    0x67000 /usr/lib64/libssl.so.1.0.2k
+      0x7fc18eb9f000     0x7fc18eba3000     0x4000    0x67000 /usr/lib64/libssl.so.1.0.2k
+      0x7fc18eba3000     0x7fc18ebaa000     0x7000    0x6b000 /usr/lib64/libssl.so.1.0.2k
+      0x7fc18ebaa000     0x7fc18ebbf000    0x15000        0x0 /usr/lib64/libz.so.1.2.7
+      0x7fc18ebbf000     0x7fc18edbe000   0x1ff000    0x15000 /usr/lib64/libz.so.1.2.7
+      0x7fc18edbe000     0x7fc18edbf000     0x1000    0x14000 /usr/lib64/libz.so.1.2.7
+      0x7fc18edbf000     0x7fc18edc0000     0x1000    0x15000 /usr/lib64/libz.so.1.2.7
+      0x7fc18edc0000     0x7fc18eff4000   0x234000        0x0 /usr/lib64/libcrypto.so.1.0.2k
+      0x7fc18eff4000     0x7fc18f1f4000   0x200000   0x234000 /usr/lib64/libcrypto.so.1.0.2k
+      0x7fc18f1f4000     0x7fc18f210000    0x1c000   0x234000 /usr/lib64/libcrypto.so.1.0.2k
+      0x7fc18f210000     0x7fc18f21d000     0xd000   0x250000 /usr/lib64/libcrypto.so.1.0.2k
+      0x7fc18f221000     0x7fc18f267000    0x46000        0x0 /usr/lib64/libtcmalloc.so.4.4.5
+      0x7fc18f267000     0x7fc18f466000   0x1ff000    0x46000 /usr/lib64/libtcmalloc.so.4.4.5
+      0x7fc18f466000     0x7fc18f468000     0x2000    0x45000 /usr/lib64/libtcmalloc.so.4.4.5
+      0x7fc18f468000     0x7fc18f46a000     0x2000    0x47000 /usr/lib64/libtcmalloc.so.4.4.5
+      0x7fc18f616000     0x7fc18f61b000     0x5000        0x0 /usr/lib64/libsnappy.so.1.1.4
+      0x7fc18f61b000     0x7fc18f81a000   0x1ff000     0x5000 /usr/lib64/libsnappy.so.1.1.4
+      0x7fc18f81a000     0x7fc18f81b000     0x1000     0x4000 /usr/lib64/libsnappy.so.1.1.4
+      0x7fc18f81b000     0x7fc18f81c000     0x1000     0x5000 /usr/lib64/libsnappy.so.1.1.4
+      0x7fc18f81c000     0x7fc18f91d000   0x101000        0x0 /usr/lib64/libm-2.17.so
+      0x7fc18f91d000     0x7fc18fb1c000   0x1ff000   0x101000 /usr/lib64/libm-2.17.so
+      0x7fc18fb1c000     0x7fc18fb1d000     0x1000   0x100000 /usr/lib64/libm-2.17.so
+      0x7fc18fb1d000     0x7fc18fb1e000     0x1000   0x101000 /usr/lib64/libm-2.17.so
+      0x7fc18fb1e000     0x7fc18fb28000     0xa000        0x0 /usr/lib64/libnuma.so.1.0.0
+      0x7fc18fb28000     0x7fc18fd28000   0x200000     0xa000 /usr/lib64/libnuma.so.1.0.0
+      0x7fc18fd28000     0x7fc18fd29000     0x1000     0xa000 /usr/lib64/libnuma.so.1.0.0
+      0x7fc18fd29000     0x7fc18fd2a000     0x1000     0xb000 /usr/lib64/libnuma.so.1.0.0
+      0x7fc18fd2a000     0x7fc18fd2c000     0x2000        0x0 /usr/lib64/libdl-2.17.so
+      0x7fc18fd2c000     0x7fc18ff2c000   0x200000     0x2000 /usr/lib64/libdl-2.17.so
+      0x7fc18ff2c000     0x7fc18ff2d000     0x1000     0x2000 /usr/lib64/libdl-2.17.so
+      0x7fc18ff2d000     0x7fc18ff2e000     0x1000     0x3000 /usr/lib64/libdl-2.17.so
+      0x7fc18ff2e000     0x7fc18ff6c000    0x3e000        0x0 /usr/lib64/libpcap.so.1.5.3
+      0x7fc18ff6c000     0x7fc19016b000   0x1ff000    0x3e000 /usr/lib64/libpcap.so.1.5.3
+      0x7fc19016b000     0x7fc19016d000     0x2000    0x3d000 /usr/lib64/libpcap.so.1.5.3
+      0x7fc19016d000     0x7fc19016e000     0x1000    0x3f000 /usr/lib64/libpcap.so.1.5.3
+      0x7fc19016f000     0x7fc1901d3000    0x64000        0x0 /usr/lib64/libnl-route-3.so.200.23.0
+      0x7fc1901d3000     0x7fc1903d2000   0x1ff000    0x64000 /usr/lib64/libnl-route-3.so.200.23.0
+      0x7fc1903d2000     0x7fc1903d5000     0x3000    0x63000 /usr/lib64/libnl-route-3.so.200.23.0
+      0x7fc1903d5000     0x7fc1903da000     0x5000    0x66000 /usr/lib64/libnl-route-3.so.200.23.0
+      0x7fc1903dc000     0x7fc1903fa000    0x1e000        0x0 /usr/lib64/libnl-3.so.200.23.0
+      0x7fc1903fa000     0x7fc1905fa000   0x200000    0x1e000 /usr/lib64/libnl-3.so.200.23.0
+      0x7fc1905fa000     0x7fc1905fc000     0x2000    0x1e000 /usr/lib64/libnl-3.so.200.23.0
+      0x7fc1905fc000     0x7fc1905fd000     0x1000    0x20000 /usr/lib64/libnl-3.so.200.23.0
+      0x7fc1905fd000     0x7fc190605000     0x8000        0x0 /usr/lib64/libprotobuf-c.so.1.0.0
+      0x7fc190605000     0x7fc190804000   0x1ff000     0x8000 /usr/lib64/libprotobuf-c.so.1.0.0
+      0x7fc190804000     0x7fc190805000     0x1000     0x7000 /usr/lib64/libprotobuf-c.so.1.0.0
+      0x7fc190805000     0x7fc190806000     0x1000     0x8000 /usr/lib64/libprotobuf-c.so.1.0.0
+      0x7fc190806000     0x7fc19081a000    0x14000        0x0 /usr/lib64/libkucl.so
+      0x7fc19081a000     0x7fc190a4f000   0x235000    0x14000 /usr/lib64/libkucl.so
+      0x7fc190a4f000     0x7fc190ad5000    0x86000   0x249000 /usr/lib64/libkucl.so
+      0x7fc190ad5000     0x7fc190ad6000     0x1000   0x2cf000 /usr/lib64/libkucl.so
+      0x7fc190ad6000     0x7fc190adc000     0x6000   0x2cf000 /usr/lib64/libkucl.so
+      0x7fc190adc000     0x7fc190b5a000    0x7e000   0x2d5000 /usr/lib64/libkucl.so
+      0x7fc19119a000     0x7fc19119b000     0x1000        0x0 /usr/lib64/libaio.so.1.0.1
+      0x7fc19119b000     0x7fc19139a000   0x1ff000     0x1000 /usr/lib64/libaio.so.1.0.1
+      0x7fc19139a000     0x7fc19139b000     0x1000        0x0 /usr/lib64/libaio.so.1.0.1
+      0x7fc19139b000     0x7fc19139c000     0x1000     0x1000 /usr/lib64/libaio.so.1.0.1
+      0x7fc19139c000     0x7fc1913b3000    0x17000        0x0 /usr/lib64/libpthread-2.17.so
+      0x7fc1913b3000     0x7fc1915b2000   0x1ff000    0x17000 /usr/lib64/libpthread-2.17.so
+      0x7fc1915b2000     0x7fc1915b3000     0x1000    0x16000 /usr/lib64/libpthread-2.17.so
+      0x7fc1915b3000     0x7fc1915b4000     0x1000    0x17000 /usr/lib64/libpthread-2.17.so
+      0x7fc1915b8000     0x7fc1915d9000    0x21000        0x0 /usr/lib64/ld-2.17.so
+      0x7fc191766000     0x7fc191767000     0x1000   0x700000 /dev/infiniband/uverbs0
+      0x7fc191767000     0x7fc191768000     0x1000   0x500000 /dev/infiniband/uverbs0
+      0x7fc191768000     0x7fc191769000     0x1000     0x7000 /dev/infiniband/uverbs0
+      0x7fc191769000     0x7fc19176a000     0x1000     0x6000 /dev/infiniband/uverbs0
+      0x7fc19176a000     0x7fc19176b000     0x1000     0x5000 /dev/infiniband/uverbs0
+      0x7fc19176b000     0x7fc19176c000     0x1000     0x4000 /dev/infiniband/uverbs0
+      0x7fc19176c000     0x7fc19176d000     0x1000     0x3000 /dev/infiniband/uverbs0
+      0x7fc19176d000     0x7fc19176e000     0x1000     0x2000 /dev/infiniband/uverbs0
+      0x7fc19176e000     0x7fc19176f000     0x1000     0x1000 /dev/infiniband/uverbs0
+      0x7fc19176f000     0x7fc191770000     0x1000        0x0 /dev/infiniband/uverbs0
+      0x7fc191774000     0x7fc191775000     0x1000   0x600000 /dev/infiniband/uverbs0
+      0x7fc1917ca000     0x7fc1917cb000     0x1000   0x700000 /dev/infiniband/uverbs0
+      0x7fc1917cb000     0x7fc1917cc000     0x1000   0x500000 /dev/infiniband/uverbs0
+      0x7fc1917cc000     0x7fc1917cd000     0x1000   0x307000 /dev/infiniband/uverbs0
+      0x7fc1917cd000     0x7fc1917ce000     0x1000   0x306000 /dev/infiniband/uverbs0
+      0x7fc1917ce000     0x7fc1917cf000     0x1000   0x305000 /dev/infiniband/uverbs0
+      0x7fc1917cf000     0x7fc1917d0000     0x1000   0x304000 /dev/infiniband/uverbs0
+      0x7fc1917d0000     0x7fc1917d1000     0x1000   0x303000 /dev/infiniband/uverbs0
+      0x7fc1917d1000     0x7fc1917d2000     0x1000   0x302000 /dev/infiniband/uverbs0
+      0x7fc1917d2000     0x7fc1917d3000     0x1000   0x301000 /dev/infiniband/uverbs0
+      0x7fc1917d3000     0x7fc1917d4000     0x1000   0x300000 /dev/infiniband/uverbs0
+      0x7fc1917d9000     0x7fc1917da000     0x1000    0x21000 /usr/lib64/ld-2.17.so
+      0x7fc1917da000     0x7fc1917db000     0x1000    0x22000 /usr/lib64/ld-2.17.so
+```
+
+### 应用场景
+DPDK程序的`double free`问题。
+比如：如果将spdk的大页内存申请好了之后，然后通过外部内存的方式注册到`dpdk`中，通过外部的`heap`来进行管理。如果程序退出的时候，先清理`spdk`的内存空间，即通过`munmap`取消映射，如果在dpdk中还存在操作这块内存空间，就会出现`double free`的问题。
+
+为了验证是否真的是存在double free, 可以通过上面的方法进行验证。
+```bash
+
+gdb中 info proc mappings；
+
+看 fault 地址：
+如果这个地址已经不在映射区间,则是 hugepage 被 munmap；
+```
+
 
 # gdb 输出
 

@@ -117,6 +117,7 @@ Write API：单端操作，Sender 主动执行，只需要本端明确源和目�
 （8）Local App 从 CQ 得到任务完成的反馈。
 
 
+
 ## RDMA Write
 ### 单向数据 Write API 流程
 
@@ -143,8 +144,286 @@ Write API：单端操作，Sender 主动执行，只需要本端明确源和目�
 #### Compare-and-Swap
 #### Fetch-and-Add
 
+## RDMA Read 和 RDMA Write 对比
 
-## RDMA write with imm
+在 RDMA 网络中，Write 操作是“推（Push）”模式，而 Read 操作是“拉（Pull）”模式。
+WRITE在RDMA和PCIe级别上需要更少的状态维护，因为发起者不需要等待响应。然而，对于READ，请求必须在发起者的内存中维护，直到响应到达。
+同样，在PCIe级别，从target机器上看，RDMA READ是使用non-posted的事务执行的，而RDMA WRITE使用开销更低的posted事务。
+
+因此，RDMA Write适合数据路径，RDMA Read 适合元数据或者控制路径。
+
+![](attachments/Pasted%20image%2020260205114441.png)
+
+### 为什么 Unsignaled RDMA Write 和 Signaled RDMA Write 的时延差距显著？
+
+Signaled / Unsignaled 的区别，不在网络、不在 PCIe，而在：  “这条 WR 是否在本端产生 CQE（Completion Queue Entry）”。
+注：READ 天然是 signaled 的。
+
+
+```bash
+
+
+(1) Read: READ 天然是 signaled 的
+
+READ request
+ → READ response
+ → DMA 写数据
+ → 本端 RNIC DMA 写 CQE
+ → App poll CQ
+
+-----------
+
+(2) Signaled Write:
+
+Signaled verb（带信号的 WR）: 提交的 WR 设置了 `IBV_SEND_SIGNALED`，完成后会在本端 CQ 里生成一个 CQE，应用线需要轮询CQ；
+
+App
+ └─ post WR
+      ↓
+   RNIC 执行
+      ↓
+   Target DMA write
+      ↓
+   本端 RNIC DMA 写 CQE
+      ↓
+   App poll CQ
+
+
+- 过程：
+你的程序发送数据 -> 硬件处理 -> 硬件写回一个状态报告（CQE） -> 你的程序通过轮询（Polling）看到这个报告，确认任务真的结束了。
+
+- 代价：
+产生和处理 CQE 会消耗 PCIe 带宽和 CPU 周期。
+
+- 原文理解：
+文中提到在 Signaled 模式下，WRITE 和 READ 的延迟相似。这是因为无论哪种操作，CPU 都必须等待硬件走完整个流程并生成回执，这个等待过程抹平了两者微小的执行差异。
+
+------
+
+(3) Unsignaled Write:
+
+Unsignaled verb（不带信号的 WR）:提交的 WR 没有 `IBV_SEND_SIGNALED`，不会产生 CQE，WR 执行完成后对应用是“静默的”；
+
+App
+ └─ post WR
+      ↓
+RNIC
+ └─ 发 RDMA WRITE 包
+      ↓
+Target RNIC
+ └─ DMA 写 host memory
+      ↓
+(结束，无 CQE)
+
+特点：
+- 单向网络
+- PCIe posted write
+- 没有 CQE DMA, 没有 CQ poll
+
+
+- 过程：
+你的程序把任务丢给硬件后，不再等待回执，直接假设它会成功（或者每隔 100 个任务才要一个信号来确认进度）。
+    
+- 优点：
+减少了硬件写回 CQE 的开销，降低了 CPU 的中断/轮询压力。
+
+- 原文理解：
+当不要求回执时（Unsignaled），WRITE 的“真身”——即数据包单向发送的特性就体现出来了。由于不需要像 READ 那样等待目标端把数据传回来，WRITE 的延迟几乎只有 READ 的一半。
+
+---------
+
+```
+
+
+|**特性**|**Signaled (带信号)**|**Unsignaled (不带信号)**|
+|---|---|---|
+|**完成通知**|每个操作都会生成一个 CQE（回执）|只有显式要求的操作才生成 CQE|
+|**CPU 消耗**|较高（需要频繁检查回执）|极低（“发后即忘”）|
+|**延迟表现**|相对稳定，受限于回执处理|**极低**（反映了真实的单向网络传输耗时）|
+|**吞吐量**|受限于 CQE 处理速度|**极高**（硬件处理路径极简化）|
+|**安全性**|容易追踪每个包是否成功发送|需开发者通过其他手段（如定期插入一个 Signaled 包）确保队列不溢出|
+
+
+#### 小结
+同样的数据大小，`Unsignaled WRITE` 的时延 只有 `READ` 的 `1/2` 左右；`Signaled WRITE` 和 `READ` 的时延接近。
+
+```bash
+`Signaled inline WRITE` 可以比 `Signaled WRITE` 更快，因为 避免了一次 `DMA` 操作，避免的是`payload DMA`, `CQE DMA` 仍然存在。
+
+因此，小 payload：
+- inline → 少一次 DMA
+- signaled → 仍有 CQE
+```
+
+
+### RDMA WRITE 为什么是 Pcie posted？
+这里讨论的是 RNIC ↔ Host Memory 的 PCIe 行为，不是网络包本身。
+
+RDMA WRITE 的本质语义：主动方 push 数据 → 被动方内存。
+
+```bash
+在 target 机器上发生了什么？
+
+[ Network ]
+    |
+    v
+RNIC
+    |
+    |  PCIe Memory Write (posted)
+    v
+Host Memory
+
+
+关键点：
+- RNIC 收到网络包
+- RNIC：
+    - 已经有 payload
+    - 目标地址已知
+
+- 所以：
+    - 直接发 PCIe Memory Write
+    - 不需要再读内存
+    - 不需要 completion
+
+```
+
+RDMA READ 的本质语义：主动方 pull 数据 ← 被动方内存
+```bash
+在 target 机器上发生了什么？
+
+[ Network ]
+    |
+    v
+RNIC (收到 READ request)
+    |
+    |  PCIe Memory Read (non-posted)
+    v
+Host Memory
+    |
+    |  Completion + Data
+    v
+RNIC
+    |
+    |  Network Send
+    v
+Requester
+
+关键点：
+2. RNIC 手里没有数据
+3. 数据在 host memory
+4. RNIC 必须：
+    - 发 PCIe Memory Read（non-posted）
+    - 等 completion
+    - 拿到 data
+5. 再把数据封装成 RDMA READ response 发回去
+
+```
+
+
+把两个路径并排看就很直观了。
+```bash
+(1) RDMA WRITE（target机器视角）：
+
+RX packet
+   ↓
+RNIC
+   ↓  posted write
+Host memory
+
+
+- 1 次 PCIe 事务
+- 无 completion
+- 无额外网络包
+
+
+（2）RDMA READ（target）
+RX read request
+   ↓
+RNIC
+   ↓ non-posted read
+Host memory
+   ↑ completion + data
+RNIC
+   ↓ network response
+Requester
+
+- 1 次 PCIe read request
+- 1 次 PCIe completion
+- 1 次网络 response
+- RNIC 内部要维护状态
+
+无论从 PCIe 还是网络角度，都更重。
+
+这和你之前看到的“WRITE 延迟≈READ 一半”完全一致“。
+现在可以从硬件层闭环了：
+- WRITE：
+    - 单向
+    - pcie posted
+    - 无 completion
+        
+- READ：
+    - 双向
+    - pcie non-posted
+    - completion + response
+
+```
+
+### 性能上
+#### RDMA Read 的Read After Read (RAR) Blocking 问题
+
+在 RDMA 中，网卡处理 Read 请求时有一个限制：**未完成的 Read 操作数量是有限的（Outstanding Reads）**。 如果前一个 Read 操作因为网络拥塞或对端响应慢而卡住，后续的 Read 操作即使已经准备好，也可能因为**硬件层面的序要求（Ordering Rules）**或者**资源槽位被占满**而无法发出。
+
+##### RDMA READ 的关键约束
+READ 的 数据返回顺序 必须和请求顺序一致（QP 有序语义）；NIC 需要：
+```bash
+- 为 READ response 分配 buffer
+- 追踪哪些 request 已完成
+```
+
+很多 NIC 设计选择：限制同时 outstanding 的 READ 数 或者 串行化 READ response。
+于是就出现：READ1 没回来 → READ2 发不出去 / 回不来，这就是 RAR Blocking。
+
+##### 为什么 RDMA Write 没有RAR Blocking 问题
+**无须等待反馈（Fire and Forget）**：
+RDMA Write 在可靠传输模式下虽然也有 ACK，但它不依赖于 ACK 返回数据。Write 操作在网卡硬件内部的处理逻辑更简单。即使前一个 Write 包在路上，后续的 Write 包依然可以顺着管道发出去，不存在“为了等回传数据而卡住队列”的情况。
+
+**资源占用少**：RAR 阻塞通常是因为网卡内部的 `Read Queue` 满了。Write 操作不占用这个特定的读队列资源，因此避开了这种阻塞机制。
+在高并发场景下，维护成千上万个未完成的 Read 操作对 HCA（网卡）的内存（ICM）是巨大的挑战。Write 操作不需要在 HCA 中维护复杂的数据返回状态，因此在大规模集群中扩展性更好。
+
+注：虽然 Write 没有 RAR 阻塞，但如果网络彻底拥塞，Write 也会遇到回压（Backpressure），只是它不会像 Read 那样因为“等待数据返回”而轻易触碰硬件瓶颈。
+
+### 使用 RDMA Read 的场景
+#### “拉取”模式控制权在接收方
+
+如果你不希望发送方随意打扰你的内存，或者接收方（客户端）的处理能力有限，使用 Read 会更安全。
+- **场景：** 客户端从服务器拉取配置信息或大块日志。
+- **理由：** 客户端可以根据自己的节奏（处理能力、剩余内存空间）来决定什么时候拉、拉多少，避免被服务器发送的大量 Write 数据冲垮。
+
+#### 一对多的大规模数据分发
+
+- **场景：** 一个中心节点存储了元数据，多个从节点需要访问。
+- **理由：** 如果使用 Write，中心节点需要记录所有从节点的内存地址并主动推送，维护成本极高。使用 Read，中心节点只需要把数据放在那，让各节点自便，实现了解耦。
+
+#### 降低“数据一致性”风险
+
+在某些复杂的分布式事务中，使用 Write 可能会导致对端内存被意外覆盖（如果偏移量计算错误）。
+- **场景：** 数据库远程读取（Remote Fetch）。
+- **理由：** Read 操作只具有“读”权限，不会破坏对端的内存状态。对于数据的安全性要求极高的金融或核心存储系统，Read 提供了一种天然的隔离感。
+
+### 小结
+
+|**维度**|**选 RDMA Write**|**选 RDMA Read**|
+|---|---|---|
+|**性能追求**|**极高**（追求满带宽、低延迟）|中等（受 RTT 延迟影响明显）|
+|**控制中心**|发送方（数据源头）|接收方（数据需求方）|
+|**资源消耗**|极低|较高（占用网卡 Outstanding 资源）|
+|**典型应用**|存储后端复制、大规模计算梯度同步|分布式哈希表查询、配置拉取|
+
+如果你追求**极致的数据传输性能**，请设计基于 Write 的架构；
+如果你追求**系统解耦和接收端的流量控制**，Read 会让你写代码时更省心。
+
+
+## RDMA Write with imm
 
 ### 理解
 
@@ -176,9 +455,9 @@ Recv WR 在这个场景中：
 
 - **（3）接收方应用程序：**
 应用程序通过 轮询（Polling）或 中断（Interrupts）机制检查其 CQ。当它获取到包含立即数的 CQE 时，就知道：
-1. 数据已成功写入预期的内存区域。
-2. 可以从写入的目标地址开始读取/处理数据了。
-3. 立即数本身可以作为一种信令或元数据**（例如，表示写入的数据长度、消息类型或序列号）。
+6. 数据已成功写入预期的内存区域。
+7. 可以从写入的目标地址开始读取/处理数据了。
+8. 立即数本身可以作为一种信令或元数据**（例如，表示写入的数据长度、消息类型或序列号）。
 
 
 ##### 优缺点
@@ -297,6 +576,8 @@ LatencyTotal​≈Latency_WRITE​+Latency_SEND
 |---|---|---|---|
 |**`SEND/RECV`**|**双边消息传递**，提供类似 TCP 的消息语义。|**简单、安全**，无需远程地址和密钥交换，是构建 RPC 的理想选择。|**控制流、RPC、小消息**。|
 |**`WRITE with Imm`**|**单边数据传输 + 双边信令**。|**最高效**的**数据放置**和**带宽**，同时提供原子通知。|**高速数据流、内存数据库**等需要精确控制远程内存布局的场景。|
+
+
 
 
 # 双边(two-side)操作（Messaging verbs）

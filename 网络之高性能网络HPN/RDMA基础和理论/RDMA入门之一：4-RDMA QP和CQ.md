@@ -28,10 +28,73 @@ RQ（Receive Queue）：存放 Receive WQE。
 ## CQ
 CQ（Complete Queue）：RNIC 每处理完一个 WQE 之后，就会写入一个 CQE 到 CQ，App 从 CQE 中确认一个 WC（Worker Completion）。
 
+# RDMA选择了SQ/RQ/CQ，而非传统的Ring Buffer？
+参考：[# 为什么RDMA选择了SQ/RQ/CQ，而非传统的Ring Buffer？](https://mp.weixin.qq.com/s/8kR6MQCguLB4zG64lhsImw)
+
+RDMA的设计选择往往被视为技术决定，但背后蕴含着深刻的工程哲学。这些选择反映了对分布式系统本质的理解，以及对性能、安全性和可扩展性的权衡。
+
+
+
+
 # QP
 ## Work queue
 ## SQ(send queue)
 ## RQ(receive queue)
+
+## WQE
+WQE是RDMA系统中表达操作意图的基本单位。它不仅仅是数据描述符，更是操作语义的完整表达。
+
+一个典型的WQE包含以下核心字段：
+```c
+struct ib_wqe {  
+    uint32_t opcode;        // 操作码：SEND, RDMA_WRITE, RDMA_READ等  
+    uint32_t flags;         // 标志位：立即数据、屏障等  
+    uint32_t wr_id;         // 工作请求ID，用于匹配完成事件  
+    uint32_t num_sge;       // Scatter-Gather条目数量  
+      
+    // 远程地址信息（用于RDMA操作）  
+    uint64_t remote_addr;   // 远程虚拟地址  
+    uint32_t rkey;          // 远程内存密钥  
+      
+    // 本地数据描述  
+    struct ib_sge sge_list[]; // Scatter-Gather条目数组  
+};
+```
+
+
+每个Scatter-Gather条目（SGE）描述一段连续的内存区域：==SGE的设计允许单个WQE描述非连续的内存布局，提高了内存使用的灵活性==。
+```c
+struct ib_sge {  
+    uint64_t addr;      // 内存地址（虚拟或物理）  
+    uint32_t length;    // 数据长度  
+    uint32_t lkey;      // 本地内存密钥  
+};
+```
+### WQE的语义层次
+
+WQE的设计体现了多层次的语义：
+
+#### 操作语义层
+
+- **传输语义**：SEND（发送消息）、RECV（接收消息）
+- **内存语义**：RDMA_READ（远程读取）、RDMA_WRITE（远程写入）
+- **原子语义**：ATOMIC_FETCH_ADD、ATOMIC_CMP_SWAP等
+
+#### 控制语义层
+
+- **完成语义**：是否需要完成通知
+    
+- **顺序语义**：内存屏障、栅栏操作
+    
+- **立即语义**：附加的立即数据
+    
+#### 安全语义层
+
+- **访问控制**：通过L-Key和R-Key验证权限
+    
+- **隔离保证**：Protection Domain的边界检查
+
+
 
 ## SRQ(shared receive queue)
 
@@ -622,6 +685,78 @@ If the QP was transitioned to this state automatically, the first Work Request t
 
 
 # CQ
+
+## CQE (Completion Queue Element)
+
+CQE是RDMA系统中操作完成的最终记录，它提供了操作结果的完整信息。
+```c
+struct ib_cqe {  
+    uint32_t wr_id;         // 对应的工作请求ID  
+    uint32_t status;        // 完成状态：成功、失败、错误类型  
+    uint32_t opcode;        // 完成的WQE操作码  
+    uint32_t vendor_err;    // 厂商特定的错误码  
+      
+    // 额外信息  
+    uint32_t byte_len;      // 传输的字节数  
+    uint64_t imm_data;      // 立即数据（如果有）  
+    uint32_t qpn;           // 队列对编号  
+    uint32_t src_qp;        // 源队列对（用于接收操作）  
+};
+```
+
+CQE的状态字段使用位编码提供详细的错误信息：
+- **IB_WC_SUCCESS**：操作成功完成
+- **IB_WC_WR_FLUSH_ERR**：操作被冲刷（QP重置等原因）
+- **IB_WC_RETRY_EXC_ERR**：重试次数超过限制
+- **IB_WC_RNR_RETRY_EXC_ERR**：接收方无响应重试超过限制
+
+
+### CQE的拓扑关系
+#### CQE与WQE之间的映射关系
+```bash
+WQE (wr_id = 0x1234) → 执行 → CQE (wr_id = 0x1234, status = SUCCESS)
+```
+
+这种ID映射确保了异步操作的确定性：**每个操作都有唯一的标识符，可以在完成时精确定位。**
+
+#### 队列间的层次关系
+
+```bash
+应用程序  
+    ↓ (提交WQE)  
+Send Queue / Receive Queue  
+    ↓ (HCA处理)  
+执行引擎  
+    ↓ (生成CQE)  
+Completion Queue  
+    ↓ (通知应用)  
+应用程序
+```
+
+
+#### 内存布局拓扑
+WQE和CQE在内存中的分布：
+
+```bash
+[ WQE_0 | WQE_1 | WQE_2 | ... | WQE_N ]  ← SQ/RQ  
+[ CQE_0 | CQE_1 | CQE_2 | ... | CQE_M ]  ← CQ
+```
+
+
+![](attachments/2a743ce4a042bb735aaecfa07be7ee15.png)
+
+
+队列的环形特性通过头尾指针管理：
+
+- **生产者指针**：应用程序更新（SQ/RQ）；
+    
+- **消费者指针**：HCA更新（SQ/RQ），应用程序读取（CQ）
+
+对于SQ/RQ而言，软件是生产者，硬件HCA是消费者；
+对于CQ而言，硬件HCA是生产者，软件是消费者；
+
+
+
 ## QP和CQ的关系
 
 ![](attachments/Pasted%20image%2020250318144055.png)

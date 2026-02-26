@@ -1660,6 +1660,9 @@ InfiniBand 规范中提到的 LRH（Local Route Header，本地路由报头）�
 	
 - 数据封装: 硬件将读取的数据封装成 RoCEv2 数据包，其中包括必要的 RoCEv2 头部信息和数据载荷。
 
+
+
+
 ### RoCEv2 数据包结构
 
 RoCEv2 数据包本质上是==在以太网帧中封装了 InfiniBand 数据包==，其主要结构如下：

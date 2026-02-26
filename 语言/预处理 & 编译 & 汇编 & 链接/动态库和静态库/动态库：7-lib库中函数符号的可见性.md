@@ -5,11 +5,19 @@
 因此，我们需要一些手段来控制符号的可见性。
 
 # 背景
-比如：`libtpa` 作为一个用户态协议栈的动态库，`libtpa.so`中使用了dpdk的静态库中的函数，`libtpa.so`做一个一个动态库供存储来使用。
-同时存储业务也使用了spdk的库，那么spdk和dpdk的函数可能存在冲突，那么需要考虑解决这种冲突。
+比如：`libtpa` 作为一个用户态协议栈的动态库，`libtpa.so`中使用了`dpdk`的静态库中的函数，`libtpa.so`作为一个动态库供存储业务来使用。
+同时存储业务也使用了`spdk`的动态库。
+`DPDK/SPDK`中存在一些同名的全局变量（比如一个链表），串接各个`ops`。
+加载`libtpa.so(包含DPDK的函数)` 是会给各个`ops`串接到全局变量中。
+加载`spdk`的动态库，也会尝试给同一个全局变量串接各个`ops`，串接时发现`ops`重复注册了，就出错了。
+
 
 ## 思路
-`libtpa.so`只暴漏特定的 `tpa_*` 开头的函数，其他的`dpdk`相关的函数符号不可见，就好了。
+`libtpa.so`库只暴漏特定的 `tpa_*` 开头的函数，其他的`dpdk`相关的函数符号不可见，就好了。
+这样：`libtpa.so`中`dpdk`相关的函数在`libtpa.so`库内是全局可见；在库`libtpa.so`之外，就不可见了。
+
+那么就会出现：即使是同名的全局变量（比如一个链表），由于各自==在自身的库中全局可见，库外不可见（可以理解为库级别的static）==；
+可以就相当于是2个全局变量，每个都是在自身的库中可见，那么就不存在重复注册的问题了。
 
 # 符号的可见性问题
 ## 基础范例
@@ -49,7 +57,7 @@ int main(){
 我们发现三个符号的类型均为大写字母T或D，说明他们是global的符号，全局可见。 因此我们的`main`函数可以打印出`5`。
 
 ## 隐藏符号的可见性
-如果我们想要隐藏`a.so`中的所有符号，只需要加上`-fvisibility=hidden`的`Compiler flag`即可，此时`a.so`中的所有符号都变成了不可见
+如果我们想要隐藏`a.so`中的所有符号，只需要==加上`-fvisibility=hidden`==的`Compiler flag`即可，此时`a.so`中的所有符号都变成了不可见
 ```shell
 > clang -fPIC -shared -fvisibility=hidden a.c -o a.so
 > nm a.so
@@ -62,8 +70,8 @@ int main(){
 
 由于这种方式会一次性hide掉所有符号，因此不够灵活，假如我们的动态库只需要导出`func1`，而隐藏`func0`和`myintvar`，该怎么做呢？我们至少有三种方法，包括使用`static`关键字，定义符号的`GNU visibility`，以及使用exported symbol list。每种方式都有各自的优缺点，我们接下来一一讨论
 
-### 编译时：使用static关键字
-在C/C++中被`static`声明的变量符号类型会变成local，也就是说禁止该符号被外部链接，则编译器不会为该符号生成任何信息，因此这种方式是一种最简单的方式，我们修改`a.c`如下
+### 编译时：使用static关键字修饰变量和函数
+在C/C++中被`static`声明的变量符号类型会变成`local`，也就是说禁止该符号被外部链接，则编译器不会为该符号生成任何信息，因此这种方式是一种最简单的方式，我们修改`a.c`如下
 ```cpp
 static int myintvar = 5;
  
@@ -109,7 +117,7 @@ ld: symbol(s) not found for architecture x86_64
 小结一下：==使用`static`这种方式更多的是用于控制文件内的符号可见性，而不用于控制低级别的符号可见性==。
 实际上，大多数函数或者变量不会依赖于static来控制符号可见性。
 
-### 编译时：使用`visibility`关键字
+### 编译时：使用`visibility`属性修饰变量和函数
 
 
 更常用的方法是使用GNU的visibility关键字，常用的有两个
@@ -136,7 +144,7 @@ int __attribute__ ((visibility ("hidden"))) func0 () {
                  U dyld_stub_binder
 ```
 
-可见其符号类型和上面一样，`myintvar`以及`_fun0`变成了local的。不同的是，`_myintvar`此时对所有动态库源文件可见(前面的`b.c`)。实际上，隐藏的符号(`_myintvar`,`_func0`)将不会出现在动态符号表中，但是还被保留在符号表中用于做静态链接。
+可见其符号类型和上面一样，`myintvar`以及`_fun0`变成了`local`的。不同的是，`_myintvar`此时对所有动态库源文件可见(前面的`b.c`)。实际上，隐藏的符号(`_myintvar`,`_func0`)将不会出现在动态符号表中，但是还被保留在符号表中用于做静态链接。
 
 > 注意，对于用 visibility 属性指定的变量，将它声明为 static 可能会让编译器感到混淆
 
@@ -145,7 +153,7 @@ int __attribute__ ((visibility ("hidden"))) func0 () {
 （1）在头文件中声明需要导出的函数和结构体时，使用`__attribute__((visibility("default")))`。
 （2）在编译时添加`-fvisibility=hidden`选项，隐藏所有未明确标记为导出的符号。
 
-### 链接时：使用Symbol List
+### 链接时：使用版本脚本（version script）控制
 
 对于符号的可见性，我们可以在链接时。
 通过==链接器脚本/版本脚本（version script）来控制。

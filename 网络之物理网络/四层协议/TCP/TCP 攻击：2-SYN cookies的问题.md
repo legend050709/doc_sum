@@ -122,8 +122,17 @@ static __u32 check_tcp_syn_cookie(__u32 cookie, __be32 saddr, __be32 daddr,
 `LB`中的 `syn-proxy`是使用 `syn-cookie` 实现的;
 `VS` 开启了 `syn-proxy`后，正常情况下，用户的`HTTP`请求的耗时会增加一个`RTT`。
 ![](attachments/image%20(4).png)
+
+
+# 总结
+
+
 # 参考
 ```bash
 # Linux TCP -SYN cookies的一个问题分析
 https://zhuanlan.zhihu.com/p/640934692
+
+# TCP开启SYN Cookies后导致数据丢失
+http://jiangzhuti.me/posts/TCP%E5%BC%80%E5%90%AFSYN-Cookies%E5%90%8E%E5%AF%BC%E8%87%B4%E6%95%B0%E6%8D%AE%E4%B8%A2%E5%A4%B1
+
 ```

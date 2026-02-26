@@ -34,8 +34,14 @@ yum install centos-release-scl centos-release-scl-rh -y
 安装完成后，会默认在 **/etc/yum.repos.d** 下生成 2 个 repo 源文件：
 `CentOS-SCLo-scl.repo` 和 `CentOS-SCLo-scl-rh.repo`。
 
+![](attachments/Pasted%20image%2020260120143809.png)
+
+
 #### CentOS-SCLo-scl.repo 调整
 由于CentOS 7、8 和 Stream 8 已停止更新、停止维护；官方已将原本的镜像列表（Mirrorlist）下架并归档，导致通过`yum.repo`中的原始链接无法再访问原来的镜像源。
+
+
+
 
 **不调整的影响**：
 如果不调整repo文件，那么centos 7 停止维护，那么提供的镜像列表(Mirrorlist)无法访问。那么后续的通过 yum 安装 devtoolset 等安装包就会出错。
@@ -158,7 +164,7 @@ $ yum search scl-utils --enablerepo='centos-sclo-rh'
 
 感觉安装 SCL YUM源，主要是 生成了 `yum.repo` 文件，用于后续的 `devtoolset` 的 安装提供 yum 源设置。
 
-### 安装 devtoolset
+### 安装 devtoolset 工具链
 ![](attachments/Pasted%20image%2020241211114721.png)
 
 不同的 devtoolset 对应了不同的 gcc 版本。
@@ -174,10 +180,12 @@ devtoolset-9 是 gcc 9.3
 
 比如：
 ```bash
+yum clean all
+yum makecache
 yum install devtoolset-9 -y
 ```
 
-### 启用高版本的GCC
+### 启用高版本的GCC（激活开发环境）
 
 使用命令：
 `source /opt/rh/devtoolset-9/enable`
@@ -190,6 +198,12 @@ yum install devtoolset-9 -y
 ```bash
 # which gcc
 /opt/rh/devtoolset-9/root/usr/bin/gcc
+
+比如：
+scl enable devtoolset-10 bash
+export CXX=/opt/rh/devtoolset-10/root/usr/bin/g++
+export CC=/opt/rh/devtoolset-10/root/usr/bin/gcc
+ln -s /opt/rh/devtoolset-10/root/usr/bin/gdb /usr/local/bin/gdb10
 ```
 
 #### 其他

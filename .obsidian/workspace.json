@@ -8,161 +8,175 @@
         "type": "tabs",
         "children": [
           {
-            "id": "2a8b8f7c7b7362ed",
+            "id": "fed6eac11610a582",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA工具：1-工具概述.md",
+                "file": "问题定位查询/内存查看/踩内存问题.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA工具：1-工具概述"
+              "title": "踩内存问题"
             }
           },
           {
-            "id": "a22137c6c0ace1cb",
+            "id": "4c0c1ddebd7826ff",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：1-RDMA无损网络.md",
+                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA入门之二：2-libibverbs库以及API接口.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA流控和拥塞控制：1-RDMA无损网络"
+              "title": "RDMA入门之二：2-libibverbs库以及API接口"
             }
           },
           {
-            "id": "743213186b7e8b09",
+            "id": "449fdfc9f3b1942c",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：1-RDMA无损网络.md",
+                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA入门之一：6-RDMA的操作.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA流控和拥塞控制：1-RDMA无损网络"
+              "title": "RDMA入门之一：6-RDMA的操作"
             }
           },
           {
-            "id": "b2008e8340eaccca",
+            "id": "539ea70ebfee5787",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA性能优化：3-设计一个高性能的RDMA系统.md",
-                "mode": "source",
-                "source": true
-              },
-              "icon": "lucide-file",
-              "title": "RDMA性能优化：3-设计一个高性能的RDMA系统"
-            }
-          },
-          {
-            "id": "1a86754f2fa3e59c",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA性能优化：3-设计一个高性能的RDMA系统.md",
+                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA性能优化：2-代码优化的建议和技巧.md",
                 "mode": "preview",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA性能优化：3-设计一个高性能的RDMA系统"
+              "title": "RDMA性能优化：2-代码优化的建议和技巧"
             }
           },
           {
-            "id": "5872eb1a75e4d53d",
+            "id": "a4d4c5d403c9142a",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：1-RDMA无损网络.md",
+                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA组网：2-RNIC的bond.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA流控和拥塞控制：1-RDMA无损网络"
+              "title": "RDMA组网：2-RNIC的bond"
             }
           },
           {
-            "id": "270b501aca425edf",
+            "id": "fd16f5a95b8788f2",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA通信库中间件：7-设计自定义的中间件.md",
-                "mode": "source",
-                "source": true
-              },
-              "icon": "lucide-file",
-              "title": "RDMA通信库中间件：7-设计自定义的中间件"
-            }
-          },
-          {
-            "id": "a4a19f007f618528",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "操作系统/进程 & 线程/进程：进程绑核之taskset命令和cpuset命令.md",
-                "mode": "source",
-                "source": true
-              },
-              "icon": "lucide-file",
-              "title": "进程：进程绑核之taskset命令和cpuset命令"
-            }
-          },
-          {
-            "id": "d5d5dbdea2046819",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA问题记录：ibv_fork_init 原理,局限性与最佳实践.md",
+                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA入门之一：4-RDMA QP和CQ.md",
                 "mode": "preview",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA问题记录：ibv_fork_init 原理,局限性与最佳实践"
+              "title": "RDMA入门之一：4-RDMA QP和CQ"
             }
           },
           {
-            "id": "9370aa672f77e130",
+            "id": "bc68df19392aac86",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：7-基于ECN的拥塞控制之DCQCN.md",
-                "mode": "preview",
-                "source": true
-              },
-              "icon": "lucide-file",
-              "title": "RDMA流控和拥塞控制：7-基于ECN的拥塞控制之DCQCN"
-            }
-          },
-          {
-            "id": "89b15470217ab36b",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：6-拥塞控制之以太网络层ECN.md",
+                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA入门之一：4-RDMA QP和CQ.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA流控和拥塞控制：6-拥塞控制之以太网络层ECN"
+              "title": "RDMA入门之一：4-RDMA QP和CQ"
+            }
+          },
+          {
+            "id": "72acc19a85d93217",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA可观测性：2-延迟监控.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "RDMA可观测性：2-延迟监控"
+            }
+          },
+          {
+            "id": "faa35df86ef42874",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA可观测性：2-延迟监控.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "RDMA可观测性：2-延迟监控"
+            }
+          },
+          {
+            "id": "19ce94999e544a45",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA可观测性：1-总览.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "RDMA可观测性：1-总览"
+            }
+          },
+          {
+            "id": "0007f6a4f105e54d",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "问题定位查询/perf/perf：1-理解和使用.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "perf：1-理解和使用"
+            }
+          },
+          {
+            "id": "8cc88bef4f5c07b8",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "网络之高性能网络HPN/GPU集合通讯库/NCCL：2-分布式训练基础知识.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "NCCL：2-分布式训练基础知识"
             }
           }
         ],
-        "currentTab": 10
+        "currentTab": 11
       }
     ],
     "direction": "vertical"
@@ -181,7 +195,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "fork",
+                "query": "vswitch",
                 "matchingCase": true,
                 "explainSearch": false,
                 "collapseAll": true,
@@ -220,7 +234,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 499.5024719238281
+    "width": 460.5
   },
   "right": {
     "id": "a93c1244e0a44ed2",
@@ -310,43 +324,45 @@
       "command-palette:打开命令面板": false
     }
   },
-  "active": "89b15470217ab36b",
+  "active": "8cc88bef4f5c07b8",
   "lastOpenFiles": [
-    "语言/预处理 & 编译 & 汇编 & 链接/动态库和静态库/静态库：5-高效生成动态库以及静态库供其他程序使用.md",
-    "操作系统/进程 & 线程/进程：fork和vfork以及clone.md",
-    "项目/DPDK/DPDK项目：1-non-EAL线程环境下使用DPDK.md",
-    "项目/DPDK/attachments/Pasted image 20251208223423.png",
-    "项目/DPDK/attachments/Pasted image 20251208223206.png",
-    "项目/DPDK/attachments/Pasted image 20251208223123.png",
-    "项目/DPDK/attachments/Pasted image 20251208220948.png",
-    "项目/DPDK/DPDK项目：2-gopacket 和 dpdk 结合.md",
-    "项目/DPDK/DPDK项目：3-内核管理的Linux C程序使用dpdk中库.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA问题记录：ibv_fork_init 原理,局限性与最佳实践.md",
-    "网络之高性能网络HPN/RDMA基础和理论/attachments/Pasted image 20251208202022.png",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：6-拥塞控制之以太网络层ECN.md",
-    "操作系统/进程 & 线程/进程：进程绑核之taskset命令和cpuset命令.md",
-    "网络之高性能网络HPN/RDMA基础和理论/attachments/Pasted image 20251208201204.png",
-    "网络之高性能网络HPN/RDMA基础和理论/attachments/Pasted image 20251208195806.png",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA工具：3-统计工具.md",
-    "语言/预处理 & 编译 & 汇编 & 链接/动态库和静态库/动态库：6-动态库的升级.md",
-    "操作系统/文件系统/inode理解.md",
-    "语言/预处理 & 编译 & 汇编 & 链接/动态库和静态库/attachments/Pasted image 20251208170556.png",
-    "语言/预处理 & 编译 & 汇编 & 链接/动态库和静态库/attachments/Pasted image 20251208170204.png",
-    "语言/预处理 & 编译 & 汇编 & 链接/动态库和静态库/attachments/Pasted image 20251208170010.png",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：7-基于ECN的拥塞控制之DCQCN.md",
-    "语言/shell & bash/shell中的内置命令和外部命令以及命令替换.md",
-    "Linux工具/编排工具/xarg命令.md",
-    "操作系统/进程 & 线程/进程：exec函数以及命令.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：5-RDMA拥塞控制技术和TCP-IP拥塞的对比.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：3-流控之以太链路层流控PFC.md",
-    "操作系统/进程 & 线程/进程：进程状态之D状态.md",
-    "操作系统/进程 & 线程/进程：进程限制之Linux上单机的进程和线程个数限制.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA通信库中间件：7-设计自定义的中间件.md",
+    "网络之高性能网络HPN/GPU集合通讯库/attachments/2e8407571a14a2e49708f068004f70dd.png",
+    "网络之高性能网络HPN/GPU集合通讯库/attachments/eee64834a374384e0f720dd6d4f00062.png",
+    "网络之高性能网络HPN/GPU集合通讯库/NCCL：3-集合通信操作.md",
+    "网络之高性能网络HPN/GPU集合通讯库/NCCL：5-Debug以及监控统计.md",
+    "网络之高性能网络HPN/GPU集合通讯库/NCCL：4-通信拓扑 (Topologies).md",
+    "网络之高性能网络HPN/GPU集合通讯库/NCCL：2-分布式训练基础知识.md",
+    "网络之高性能网络HPN/GPU集合通讯库/attachments/778daf0342ebfa018841ade7f58479ac.png",
+    "网络之高性能网络HPN/GPU集合通讯库/attachments/b50a02504a58dc96cf276705b2e62134.png",
+    "网络之高性能网络HPN/GPU集合通讯库/attachments",
+    "网络之高性能网络HPN/GPU集合通讯库/NCCL：1-概述.md",
+    "网络之高性能网络HPN/高性能互联技术与组网架构/CXL：1-总体介绍.md",
+    "网络之高性能网络HPN/高性能互联技术与组网架构/基本概念：3-NVSwitch之总体介绍.md",
+    "网络之高性能网络HPN/高性能互联技术与组网架构/基本概念：2-NVLINK之总体介绍.md",
+    "网络之高性能网络HPN/高性能互联技术与组网架构/基本概念：1-PICe之总体介绍.md",
+    "网络之云网络和容器网络/虚拟化/vSwitch：vSwitch技术解析与未来十年趋势展望.md",
+    "网络之云网络和容器网络/虚拟化/VFIO的理解.md",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA组网：3-单轨和多轨以及单平面和多平面.md",
+    "网络之高性能网络HPN/RDMA基础和理论/attachments/Pasted image 20260225193533.png",
+    "网络之高性能网络HPN/RDMA基础和理论/attachments/Pasted image 20260225182516.png",
+    "网络之高性能网络HPN/RDMA基础和理论/attachments/Pasted image 20260225182501.png",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA组网：4-无损lossless网络.md",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA组网：7-RDMA本机通信之loopback message.md",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA组网：6-Ethernet与RDMA融合的挑战.md",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA组网：5-有损lossy网络.md",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA组网：2-RNIC的bond.md",
+    "问题定位查询/perf/perf：1-理解和使用.md",
+    "问题定位查询/gdb and SystemTap/gdb学习：4-gdb常用方法.md",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA可观测性：1-总览.md",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA可观测性：2-延迟监控.md",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA可观测性：3-带内遥测(INT)之 ebpf和XDP.md",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA入门之三：3-IB规范和RDMA报文讲解.md",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA入门之一：4-RDMA QP和CQ.md",
+    "网络之高性能网络HPN/RDMA基础和理论/attachments/2a743ce4a042bb735aaecfa07be7ee15.png",
     "网络之高性能网络HPN/RDMA基础和理论/RDMA性能优化：3-设计一个高性能的RDMA系统.md",
-    "网络之高性能网络HPN/GPU集合通讯库/DeepEP：1-整体介绍.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：1-RDMA无损网络.md",
-    "语言/预处理 & 编译 & 汇编 & 链接/elf/nm使用.md",
-    "网络之物理网络/http & https/HTTP 代理/HTTP以及HTTPS Proxy.md",
+    "网络之高性能网络HPN/RDMA基础和理论/attachments/test2.png",
+    "网络之高性能网络HPN/RDMA基础和理论/attachments/test-1.png",
+    "问题定位查询/gdb and SystemTap/attachments/Pasted image 20260210110653.png",
     "网络之高性能网络HPN/高性能互联技术与组网架构/attachments",
     "网络之高性能网络HPN/AI训练框架",
     "网络之高性能网络HPN/高性能互联技术与组网架构",
@@ -356,7 +372,6 @@
     "网络之物理网络/http & https/未命名",
     "网络之物理网络/QUIC协议",
     "网络之高性能网络HPN/UEC和UET/UEC和UET基础和理论/attachments",
-    "网络之高性能网络HPN/UEC和UET/UEC和UET基础和理论",
     "未命名 3.canvas",
     "未命名 2.canvas",
     "未命名 1.canvas",

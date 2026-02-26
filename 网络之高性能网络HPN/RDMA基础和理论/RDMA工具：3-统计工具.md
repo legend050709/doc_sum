@@ -637,9 +637,13 @@ Usage: rdma resource
 
 ![](attachments/Pasted%20image%2020250721150524.png)
 
+
+
 ## 其他
 
-### `sys/kernel/debug`文件系统
+### `sys/kernel/debug/mlx5`文件系统
+
+==`/opt/mellanox/iproute2/sbin/rdma resource show xxx` 读取的其实是 `/sys/kernel/debug/mlx5/xxx`下的文件。==
 
 ![](attachments/Pasted%20image%2020250709123451.png)
 

@@ -155,11 +155,41 @@ $ ./main
 > 注：通过`strace`可以看到程序加载了哪些动态库文件，可以看到程序通过`dlopen`加载的动态库文件。
 
 # 动态库的加载时机
-在Linux下，**动态库（也称为共享库）的加载是在程序运行时进行的。当程序启动时，并不会立即加载所有的动态库，而是在需要使用到库中的函数时才会进行加载**。
 
-当程序启动时，操作系统会加载可执行文件（二进制文件），并将其映射到进程的地址空间中。因此，程序启动时，并没有加载任何动态库。只有当程序在运行时需要调用动态库中的函数时，动态链接器才会根据需要动态地加载相应的动态库，并将其映射到进程的地址空间中。
+## 启动时加载(Time-of-Loading)
+这是==最常见的情况==。当你编译程序时，如果链接了某个库（如 `gcc main.c -lssl`），该库的信息会被记录在可执行文件的 ELF 头（Linux）中。
 
-这种动态加载的机制使得程序只在需要时才加载动态库，从而**减小了程序的启动时间和内存占用**。这也为程序提供了更大的灵活性，可以根据需要加载不同的动态库，实现动态的功能扩展和插件机制。
+- **加载点：** 在 `main` 函数执行之前。
+    
+- **过程：** 操作系统加载器（ld-linux.so 或 ntdll.dll）会先扫描程序的依赖列表，递归地将所有依赖库映射到进程内存空间，并完成符号重定位。
+    
+- **失败后果：** 如果此时缺少某个库，程序会直接报错并**拒绝启动**。
+
+
+## 延迟加载 (Delay-Load)
+
+这是一种优化手段（在 Windows MSVC 中较常用）。
+
+- **加载点：** 当代码第一次调用该库中的某个**具体函数**时。
+    
+- **过程：** 链接器会生成一段特殊的“桩代码（Stub）”。只有程序运行流进入到这个桩代码时，加载器才会去寻找并加载对应的 DLL。
+    
+- **优点：** 加快程序启动速度。
+
+## 运行时加载(Run-time Dynamic Loading)
+
+完全由程序员控制的加载方式。
+在程序运行时动态加载库：这种方式是在程序运行时，通过调用系统函数，把动态库加载到程序中，然后执行动态库中的代码。
+这种方式和编译时链接相比：优势是可以在程序运行的过程中动态加载和卸载库。可以在不修改源程序的前提下，使用新的库。这种方式，比较常见的应用是程序的插件系统。
+
+
+- **加载点：** 程序运行过程中的任意时刻。
+    
+- **工具：** Linux 使用 `dlopen()`。
+    
+- **应用场景：** 插件系统（如 Photoshop 滤镜、游戏 Mod）、功能模块化。
+
+
 
 ## 动态库的链接流程
 动态库的链接以及加载，是在程序运行时进行的，而不是在程序启动时。**链接是指将程序中的函数调用与实际的函数地址进行关联，以便程序能够正确地调用动态库中的函数**。
@@ -179,15 +209,15 @@ $ ./main
 
 在Linux平台下，动态库的调用分为显式和隐式两种方式。
 
-## 隐式调用
-隐式调用又叫隐式加载或载入时加载。
+## 隐式调用(启动时加载)
+隐式调用又叫隐式加载或载入时加载（启动时加载）。
 
 通过在编译时设置包含动态库的头文件（`-Idir... -include file`），并指明动态库的位置和名称（`-Ldir... -lnamespec(libnamespec.so)`）。
 
 隐式调用由系统完成加载，对编程者透明。隐式调用必须包含动态库中的头文件。
 
 
-## 显式调用详解
+## 显式调用(运行时加载)
 在运行时加载，在程序运行过程中通过`dlopen`指定动态链接库文件，然后通过`dlsym`获取动态库里函数的地址。
 
 相比隐式调用，显式调用需要在程序中实现，写明要加载的动态库以及调用函数的名称。
@@ -323,6 +353,76 @@ open error:libtest.so: cannot open shared object file: No such file or directory
 **加载时机**：
 显式调用和隐式调用是动态库的使用方式，并不影响动态库的加载时机。动态库的加载仍然是在程序运行时进行的，即调用到动态库中的函数时加载动态库。
 
+# 动态库的查找路径
+## 搜索路径
+在Linux中，动态链接器（Dynamic Linker）负责在程序运行时加载所需的动态库。动态链接器会按照一定的顺序在不同的位置搜索动态库，这些位置包括：
+优先级如下所示：
+
+- （1）编译时指定的RPATH（Runtime Library Search Path）
+- （2）环境变量`LD_LIBRARY_PATH`指定的路径
+- （3）配置文件`/etc/ld.so.conf`中指定的路径
+- （4）默认的库路径，如`/usr/lib`和`/lib`
+
+### RPATH(runtime path)
+RPATH是在程序编译链接时，通过链接器选项-rpath指定的。它会被嵌入到生成的可执行文件中。在程序运行时，动态链接器会首先查看RPATH指定的路径。
+
+例如，我们可以在编译时这样指定RPATH：
+```bash
+
+g++ test.cpp -o test -lexample -Wl,-rpath=/home/user/libs
+./test
+```
+
+这里，`-Wl,-rpath=/home/user/libs`告诉链接器将`/home/user/libs`嵌入到可执行文件作为RPATH。在运行`test`时，动态链接器会首先在`/home/user/libs`下搜索动态库。
+
+### LD_LIBRARY_PATH 环境变量
+
+LD_LIBRARY_PATH是一个环境变量，我们可以在运行程序前设置它，来临时改变动态库的搜索路径。
+
+```bash
+export LD_LIBRARY_PATH=/path/to/mylib:$LD_LIBRARY_PATH
+./myprog
+```
+这里，我们将`/path/to/mylib`添加到了LD_LIBRARY_PATH的前面，所以动态链接器会在这个路径下搜索动态库。
+
+### `/etc/ld.so.conf` 配置文件
+```bash
+# cat /etc/ld.so.conf
+include ld.so.conf.d/*.conf
+
+# ll /etc/ld.so.conf.d/
+total 24
+-rw-r--r-- 1 root root 20 Aug 30  2022 atlas-i386-sse3.conf
+-rw-r--r-- 1 root root 17 Aug 30  2022 atlas-x86_64.conf
+-r--r--r-- 1 root root 63 Aug 30  2022 kernel-3.10.0-693.5.2.el7.x86_64.conf
+-r--r--r-- 1 root root 67 Aug 30  2022 kernel-4.18.0-2.4.3.3.kwai.x86_64.conf
+-rw-r--r-- 1 root root 17 Aug 30  2022 mariadb-x86_64.conf
+-rw-r--r-- 1 root root 22 Aug 30  2022 qt-x86_64.conf
+```
+
+/etc/ld.so.conf是一个系统级的配置文件，它包含了一组目录，动态链接器会在这些目录中搜索动态库。我们可以编辑这个文件，添加我们的库路径，然后运行`ldconfig`命令更新动态链接器的缓存。
+
+```bash
+echo "/path/to/my/libs" | sudo tee -a /etc/ld.so.conf
+sudo ldconfig
+```
+
+在这个例子中，我们将`/path/to/my/libs`添加到了/etc/ld.so.conf，然后运行了`ldconfig`命令。这样，动态链接器就会在`/path/to/my/libs`目录下搜索动态库。
+
+### 默认搜索路径(/lib or /usr/lib)
+最后是在默认的搜索路径中进行搜索。
+
+
+
+
+## 范例
+执行`main2`程序发现报错：
+```bash
+error while loading shared libraries: libtest.so: cannot open shared object file: No such file or directory
+```
+
+原因是共享库不在系统默认的路径里面，可以在shell执行`export LD_LIBRARY_PATH=./` 添加当前路径或者在` /etc/ld.so.conf` 增加路径并`ldconfig`生效。
+
 # 动态库更新
 ## 背景
 用户总是希望服务进程能保持稳定。如果可以 `7*24` 小时的工作，那就永远不要重启它。但是，软件产品的功能总是在不断的丰富。当用户发现一些新的功能正是他所需要的，他也许会主动要求进行一次升级。而当严重的安全问题出现时，用户就不得不接受强制的升级了。
@@ -357,13 +457,7 @@ SO特定函数动态替换主要包括三个关键过程：控制目标进程，
 
 **详细的动态替换的流程查看：`Linux利用动态库进行软件的热升级`**
 
-# 动态库的查找路径
-执行`main2`程序发现报错：
-```bash
-error while loading shared libraries: libtest.so: cannot open shared object file: No such file or directory
-```
 
-原因是共享库不在系统默认的路径里面，可以在shell执行`export LD_LIBRARY_PATH=./` 添加当前路径或者在` /etc/ld.so.conf` 增加路径并`ldconfig`生效。
 
 
 # 其他
@@ -599,6 +693,10 @@ install 的方式跟cp不同，先unlink再creat，当unlink的时候，已经ma
 
 # 参考
 ```bash
+
+# 深入理解Linux动态库加载：路径、问题与解决方案
+https://developer.aliyun.com/article/1466188
+
 # Linux下so动态链接库使用总结
 https://www.a-programmer.top/2018/06/13/%E8%A6%86%E7%9B%96so%E5%AF%BC%E8%87%B4coredump%E9%97%AE%E9%A2%98%E6%80%BB%E7%BB%93/
 

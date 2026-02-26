@@ -381,15 +381,15 @@ rte_mempool_empty(const struct rte_mempool *mp)
 
 ```
 
-## 其他
-### 一个core中进行`rte_mempool_get`，另外一个core进行`rte_mempool_put`是否有问题？
-#### 背景
+# 其他
+## 一个core中进行`rte_mempool_get`，另外一个core进行`rte_mempool_put`是否有问题？
+### 背景
 比如：在一个线程中通过 `rte_mempool_get` 获取到元素，然后将元素通过 `rte_ring` 传递到另外一个线程中，然后进行释放。
 
 如果使用了cache，是否存在问题。
 如果不适用cache，是否存在问题。
 
-#### 分析
+### 分析
 **（1）整体来说，是没有问题的**：
 
 因为：释放的时候，是将元素释放到当前线程所在的`core`的`cache`数组中，而不是基于元素原本所在的`cache`。
@@ -398,7 +398,27 @@ rte_mempool_empty(const struct rte_mempool *mp)
 **（2）额外的影响**：
 由于在一个线程中申请，在其他的线程中释放，那么申请的线程的`cache`会很快用完，那么就需要从公共资源池中申请，如果是多消费者，那么可能涉及到`cas`来操作`rte_ring`。
 
-### 存在cache时，mempool的总的元素的个数
+## 存在cache时，mempool的总的元素的个数
+
+## mempool可以动态进行resize扩缩容吗？
+在 DPDK 的标准实现中，`rte_mempool` 的大小在创建后是不支持动态 Resize（扩容或缩容）的。
+一旦你调用 `rte_mempool_create` 成功申请了内存，该池包含的对象数量（`element count`）就固定了。
+
+### 如果内存不够用了，有哪些替代方案？
+
+虽然不能直接 `resize`，但你可以通过以下几种工程手段实现类似的效果：
+
+#### A. 创建多个 Mempool
+
+这是最常见的做法。如果发现当前的池子（Pool A）快满了，你可以动态创建一个新的池子（Pool B）。
+
+**逻辑：** 应用程序维护一个 Mempool 列表。
+**注意：** 这种方式增加了管理的复杂性，因为你需要决定从哪个池子里申请内存。
+
+#### B. 使用 `rte_mempool_populate` 分步填充
+
+虽然池子的最大容量在创建时固定，但你可以使用 `rte_mempool_create_empty` 先创建一个“空壳”，然后根据需要多次调用 `rte_mempool_populate_*` 来逐步添加内存块。
+**局限：** 这依然无法突破最初设定的 `n`（对象总数）上限。
 
 # 参考
 ```bash

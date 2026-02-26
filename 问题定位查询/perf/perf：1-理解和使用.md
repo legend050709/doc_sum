@@ -187,6 +187,7 @@ perf 的使用方法也很丰富，目前只要会用 `perf record` 和 `perf re
 perf record -F 99 -C 1 --call-graph dwarf -o xxxx.data -- sleep 30
     -F: (freq) 采集的评率
     -p: 指定进程; 
+    -t: 指定线程号;
     -C：指定某个cpu；
     --call-graph: 栈回溯方式。
 	    fp, dwarf, lbr；
@@ -213,7 +214,12 @@ perf record -g -- <程序命令>
 **（2）挂载到正在运行的进程**：
 
 ```text
-perf record -p <PID> -g -- sleep <采样秒数>
+perf record -F 199 -p <PID> -g -- sleep <采样秒数>
+
+下面的可能更好一些：
+
+perf record -F 199 -g --call-graph dwarf -e cycles xxxx
+perf report
 ```
 
 **（3）挂载到正在运行的线程**：

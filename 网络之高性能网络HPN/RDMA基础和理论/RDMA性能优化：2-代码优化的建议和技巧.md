@@ -133,10 +133,12 @@ Sometimes they involved in accessing the RDMA device
 
 多个数据操作之间的调用之间，一般不需要执行上下文切换。
 
-在数据路径中执行控制操作（所有创建/销毁/查询/修改）非常昂贵, 因为：
+在数据路径中执行控制操作（比如：QP的创建/销毁/查询/状态修改）非常昂贵, 因为：
+```bash
 - 大多数时候，他们执行上下文切换
 - 有时他们分配或释放动态内存
 - 有时他们参与访问 RDMA 设备
+```
 
 作为一般经验法则，应**避免调用控制操作或减少其在数据路径中的使用**。
 以下动词(verbs接口)被视为数据操作：
@@ -158,8 +160,10 @@ Sometimes they involved in accessing the RDMA device
 注意：every Work Request is one message (no matter the number of S/G entries it has).
 ```
 
-## 使用工作完成事件时，在一次调用中确认多个事件
-**使用ack cq events机制的时候尽量一次ack尽可能多的events，一次释放完**。
+## 使用工作完成事件（CQE）时，在一次调用中确认多个事件(即：减少cqe的个数)
+当RNIC完成与verbs关联的网络操作时，它通过DMA写将一个完成事件（completion event）推到与QP对相关联完成队列(CQ)。使用完成事件会增加RNIC的PCIe总线的额外开销。这种开销可以通过使用选择性信号（selective signaling）来减少。当使用大小为S的选择性标记发送队列时，最多为`S−1`个连续动词可以取消标记，也就是说，不会为这些动词推送一个完成事件。接收队列不能有选择地发信号通知。由于 S 很大（~128），我们交替使用术语“选择性信号”和“无信号”。
+
+**另外，使用ack cq events机制的时候尽量一次ack尽可能多的events，一次释放完**。
 
 使用事件处理工作完成时，在一个调用中确认多个完成而不是每次调用多个调用将提供更好的性能，因为执行的互斥锁较少。
 
@@ -174,7 +178,7 @@ acknowledging several completions in one call instead of several calls each time
 
 `ibv_poll_cq()`中的`num_entries`尽量设置的大一些。保证能一次将CQ中现存的CQE全部poll出。
 
-## 避免使用许多分散/聚集条目
+## 避免使用许多分散/聚集sge条目
 在工作请求（发送请求或接收请求）中使用多个分散/聚集条目意味着 RDMA 设备将读取这些条目并将读取它们引用的内存。使用一个分散/聚集条目比使用多个分散/聚集条目提供更好的性能。
 
 `Using one scatter/gather entry will provide better performance than more than one`.  数据尽量放在一块，一次读完。
@@ -253,11 +257,20 @@ using the maximum available MTU size will decrease the "paid price" per packet; 
 Sending a few big messages is more effective than sending a lot of small messages. In application level one should collect data and send big messages over RDMA.
 ```
 
+即：
+（1）==一个 WR中包含多个sge==；
+> 注：一个WR中包含多个sge, 相当于是发送大消息，不是大包，包大小是基于MTU。如果是一个sge，可以理解为发送小消息。
+
+（2）一次`post_send`多个`WR`(以及一次 `post_recv`多个`WR`） ；每个`WR`的`sge`的个数不变。
+> 注：这样相当于是发送的消息的大小不变。但是一次下发了更多的数据。
+
+上面的两种方法，效果应该都是相当于是减少了`doorbell`(写寄存器)的次数；通过一次`doorbell`,多次`DMA`取数据。
+
 ### 处理多个未完成的发送请求
 ```bash
 Working with multiple outstanding Send Requests and keeping the Send Queue always full (i.e. for every polled Work Completion post a new Send Request) will keep the RDMA device busy and prevents it from being idle.
 ```
-这个思路在`rdma-core`中的历程中体现的很明显，那个架构就是把SR，RR的queue始终尽量多填充，整个流程没有任何拉齐时序的多余的操作！
+这个思路在`rdma-core`中的历程中体现的很明显，那个架构就是把SR（send-request），RR(receive-request)的queue始终尽量多填充，整个流程没有任何拉齐时序的多余的操作！
 
 ### 配置QP以允许多个 RDMA 读取和原子操作并行
 ```bash
