@@ -2,11 +2,88 @@
 ```
 # NVMe
 ## 介绍
+**Non-Volatile Memory Express (NVMe) 非易失性存储器高速接口协议**： 专为高性能 SSD 设计的本地通信协议（通过 PCIe 总线）。
+
+# NVMe SSD
+**SSD** = 固态硬盘（Solid State Drive），**NVMe** = Non-Volatile Memory Express（一种协议）
+**NVMe SSD** = 使用 NVMe 协议的 SSD，它不是一种“新型存储介质”，而是一种**访问协议 + 总线架构方式**。
+
+## SATA SSD 和 NVMe SSD
+
+ **SATA SSD特点**：
+```bash
+- 单队列
+- 中断驱动
+- 内核参与
+- 调度路径长
+```
+
+ **NVMe SD特点**：
+```bash
+- 多队列 per core
+- 用户态 polling
+- doorbell 通知
+- 减少锁
+- 减少中断
+```
+
+```bash
+SATA (AHCI):
+- 更偏 Reactor
+- 中断驱动
+- 内核调度
+
+
+NVMe:
+- 更偏 Proactor
+- 提前提交大量 IO
+- 硬件批量执行
+- 以队列为中心
+```
+
+
+为什么 NVMe 会比 SATA 快很多：
+```bash
+### 1️⃣ 队列并行度大幅提升
+SATA：1 queue × 32 depth  
+NVMe：64K × 64K
+
+### 2️⃣ 锁消失
+每核一个 queue，不需要全局锁
+
+### 3️⃣ 减少中断
+支持 polling
+
+### 4️⃣ PCIe 直连
+带宽从：
+- SATA3 ≈ 600MB/s
+- PCIe 4.0 x4 ≈ 8GB/s
+```
+
+
+## NVMe 和 SSD 的关系
+```bash
+SSD = 存储介质（NAND Flash）
+NVMe = 访问这个存储介质的协议
+
+SSD 是存储介质  
+NVMe 是访问存储的“高性能多队列协议”  
+SATA SSD 是老架构  
+NVMe SSD 是为多核 + 并行 + 低延迟时代设计的架构
+```
+
+|类比|说明|
+|---|---|
+|SSD|像网卡|
+|NVMe|像 RDMA 协议|
+|SATA|像 TCP over kernel|
+
+
 
 # NVMe-oF
 ##  介绍
-**Non-Volatile Memory Express (NVMe)**：
-- **非易失性存储器高速接口协议**，专为高性能 SSD 设计的本地通信协议（通过 PCIe 总线）。
+**Non-Volatile Memory Express (NVMe)**：非易失性存储器高速接口协议
+专为高性能 SSD 设计的本地通信协议（通过 PCIe 总线）。
 
 **over Fabrics (oF)**：
 - **基于网络架构扩展**。"Fabrics" 指高速网络结构（如以太网、InfiniBand、光纤通道等），允许 NVMe 命令和数据通过**网络传输**，而非仅限于本地 PCIe 总线。

@@ -1,7 +1,12 @@
 ```table-of-contents
 ```
 
+# io_uring
+![](attachments/Pasted%20image%2020260307230920.png)
+
+
 # libaio 和 io_uring
+
 # epoll和io_uring对比
 ## 参考
 ```bash
@@ -33,7 +38,8 @@ https://mp.weixin.qq.com/s?__biz=MzUxNjE3MTcwMg==&amp;mid=2247484665&amp;idx=1&a
 面对疾风吧！io_uring 优化 nginx 实战演练
 https://cloud.tencent.com/developer/article/1710838
 
-
+# 解密高性能异步I/O：io_uring的魔力与应用
+https://zhuanlan.zhihu.com/p/21039819177
 
 io_uring vs epoll ，谁在网络编程领域更胜一筹
 https://juejin.cn/post/7045098217121251335

@@ -150,7 +150,7 @@ Sometimes they involved in accessing the RDMA device
 - ibv_req_notify_cq 通知完成
 ```
 
-## 如果需要需要对一个QP执行post 多个WRs操作, 最好使用list将他们连起来，一次发送完。
+## 批量Post WR：如果需要需要对一个QP执行post 多个WRs操作, 最好使用list将他们连起来，一次发送完。
 
 当用verbs接口`ibv_post_*()`中的一个, 来发送工作请求WR时，在一次调用中将多个工作请求作为链表发布，而不是每次使用一个工作请求的调用。
 
@@ -160,7 +160,7 @@ Sometimes they involved in accessing the RDMA device
 注意：every Work Request is one message (no matter the number of S/G entries it has).
 ```
 
-## 使用工作完成事件（CQE）时，在一次调用中确认多个事件(即：减少cqe的个数)
+## 减少CQE的数量：使用工作完成事件（CQE）时，在一次调用中确认多个事件
 当RNIC完成与verbs关联的网络操作时，它通过DMA写将一个完成事件（completion event）推到与QP对相关联完成队列(CQ)。使用完成事件会增加RNIC的PCIe总线的额外开销。这种开销可以通过使用选择性信号（selective signaling）来减少。当使用大小为S的选择性标记发送队列时，最多为`S−1`个连续动词可以取消标记，也就是说，不会为这些动词推送一个完成事件。接收队列不能有选择地发信号通知。由于 S 很大（~128），我们交替使用术语“选择性信号”和“无信号”。
 
 **另外，使用ack cq events机制的时候尽量一次ack尽可能多的events，一次释放完**。
@@ -173,10 +173,99 @@ acknowledging several completions in one call instead of several calls each time
 
 类似于 `ibv_ack_cq_events(ev_cq, num_cq_events)`;
 
-## 一次poll 读取尽可能多的CQEs
+### 本端一次发送多个send wr，只有最后一个send wr才产生CQE
+比如：RC模式下，发送一个大的message，拆分为多个send wr（比如N个）。前面的 n-1个 send wr 是 unsignaled， 只有最后一个 send wr是 signaled；
+当收到最后一个send WR的CQE时，前面的n-1个send wr肯定是发送完成了的。最终，n个send wr也产生了一个CQE。
+
+
+==注：需要注意的是前 N-1 个send WR不产生CQE，不会导致send queue满==。
+> 因为前 N-1 个send WR不产生CQE，就无法将前N-1个WQE从send queue中移除。一旦第N个send WR产生CQE，就会将这N个send WR 从send queue移除。
+
+
+### RPC场景：本端send WR不产生CQE
+RC模式，RPC场景，即`ping-pong`一问一答，即本端send request，对端收到request，进行reponse。无论是发起端，还是相应端，只有recv wr才在本端产生CQE，send WR不产生CQE。
+
+但是，这样也会带来其他的问题：**`send WQE`回收不及时，以及 `send buffer` 的回收不及时**。
+
+|风险点|具体表现|
+|---|---|
+|无法确认 send 是否完成|unsignaled 的 send 不会生成 CQE，无法直接知道 “请求是否成功发送到对端”|
+|无法处理 send 失败|若 send 因网络 / 对端问题失败（如 QP 错误、内存非法），无 CQE 则无法感知失败|
+|发送队列（SQ）溢出|所有提交的发送请求（无论是否有信号）都被认为是“未完成的”（Outstanding），直到它们被一个后续的、有信号的 WR 的完成事件所“清理”|
+
+如果是 signaled send WR, NIC 会生成`SEND CQE`，程序 poll 到 CQE 后就知道，这个 WQE 已完成，就可以：
+```bash
+1> 回收 send buffer
+2> 复用 WQE slot
+```
+如果 UNSIGNALED, NIC 不会产生 CQE，于是程序，不知道 send 是否完成，会导致：
+```bash
+1> WQE 无法回收
+SQ 是一个 ring, SQ depth = N, 如果没有 completion, head 一直向前, tail 不动，最终SQ 满，出现ibv_post_send() 失败。
+相当于是：只有send queue，只有生产者，没有消费者。
+
+2> send buffer 的回收不及时。
+正常如果发送完成了之后，就可以回收 send buffer，但是现在不知道是否发送完成，就无法回收。
+```
+
+## 批量Poll CQE：一次poll 读取尽可能多的CQEs
 `ibv_poll_cq()`允许一次读取多个完成。如果CQ中的工作完成数小于尝试读取的工作完成数，则意味着CQ为空，无需检查其中是否还有更多工作完成。
 
 `ibv_poll_cq()`中的`num_entries`尽量设置的大一些。保证能一次将CQ中现存的CQE全部poll出。
+
+## 同一个QP的SQ和RQ关联到一个CQ还是2个CQ？
+### 使用一个CQ
+```c
+while (1) {
+    n = ibv_poll_cq(cq, 32, wc);
+
+    for (i=0; i<n; i++) {
+        if (wc[i].opcode == IBV_WC_RECV)
+            handle_recv();
+        else
+            handle_send();
+    }
+}
+```
+
+优点：实现简单；
+即使绑定同一 CQ，也必须按`opcode`（CQE 类型）+ `wr_id`（操作标识）过滤处理，不能依赖轮询顺序。
+
+### 使用两个CQ
+**（1）可以使用2个CPU**：
+拆 CQ 后可以：
+```bash
+thread0 → poll recv_cq
+thread1 → poll send_cq
+```
+
+另外，这种情况下，RPC的时延更低
+> 因为如果是公用一个CQ，send WR也会产生CQE，recv WR也会产生CQE；在一个线程中进行poll cq，会同时得到 send CQE和recv CQE。
+> 在发送端发送RPC请求后，收到对端响应之前，大概率会收到Send WR的CQE，需要进行处理，然后才是收到reponse的 recv CQE，进而导致RPC时延的计算偏大。
+
+注：==如果只有一个线程进行Poll cq，那么 send queue和recv queue共享一个CQ性能更好一些==。
+
+
+**（2）减少分支预测失败**：
+如果使用一个CQ：
+```bash
+SEND CQE
+RECV CQE
+SEND CQE
+RECV CQE
+```
+代码中：`switch(wc.opcode)` 可能会CPU 分支预测会失败。
+
+如果拆 CQ，使用2个CQ，就不会有分支：
+```bash
+recv_cq → 只有 RECV
+send_cq → 只有 SEND
+```
+
+**（3）CQ 深度设置**：
+不同 CQ 可针对性设置深度（接收 CQ 通常需要更大的深度，避免接收 CQE 溢出）；
+
+
 
 ## 避免使用许多分散/聚集sge条目
 在工作请求（发送请求或接收请求）中使用多个分散/聚集条目意味着 RDMA 设备将读取这些条目并将读取它们引用的内存。使用一个分散/聚集条目比使用多个分散/聚集条目提供更好的性能。

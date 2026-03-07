@@ -82,7 +82,7 @@ MMIO（Memory-Mapped I/O，内存映射I/O）：
 
 ### 策略一：减少CPU的MMIO次数
 
-CPU通过MMIO向NIC发送消息来启动网络操作（这个过程即是Doorbell机制，即写网卡寄存器）。
+CPU通过**MMIO**向NIC发送消息来启动网络操作（这个过程即是Doorbell机制，即写网卡寄存器）。
 
 #### CPU传递WQE的方式
 这个消息可以是：

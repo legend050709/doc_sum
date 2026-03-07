@@ -3,12 +3,12 @@
 
 # 有序性的层级
 ## 操作内有序(Intra-Operation Ordering)
- **数据包顺序（Packet Order）/ 操作内有序(Intra-Operation Ordering)**： 
+ **数据包顺序（Packet Order）/ 操作内有序(Intra-Operation Ordering)**： ==同一个操作/Message的多个数据包之间的顺序==
  单个操作（如Send或Write）可能被拆分成多个网络数据包传输，这些包是否按发送顺序到达。
 
 ## 操作间有序(Inter-Operation Ordering)
 
-**操作顺序（Operation Order）** 
+**操作顺序（Operation Order）** ：==同一个连接/QP(同一个send queue)上的多个操作的顺序==
 多个独立的RDMA操作（如连续发起两个Write， 或者RC服务类型下先Post write，然后Post Send）的完成顺序是否与提交顺序一致。
 
 ### 有序性和多个操作类型的关系
@@ -16,15 +16,13 @@
 RDMA RC服务类型，先post一个write wr，然后post 一个send wr，可以保序吗，即write 的wc一定先于send wc吗？ 保序是否和操作类型有关系吗？
 
 - 结论：
-**在 RC 服务类型下，操作在同一个发送队列 (SQ) 上是严格保序的，与操作类型无关。**
-
-
+**在 RC 服务类型下，操作在同一个发送队列 (SQ) 上是严格保序的，产生的CQE也是有序的，与操作类型无关。**
 
 
 ## 事件流顺序
 
-**事件流顺序（Event Flow Order）** 
-跨QP或跨节点的全局事件顺序（如内存更新与通知的组合），需应用层协议保证。
+**事件流顺序（Event Flow Order）** ：==多个QP之间的操作==
+跨QP或跨节点的全局事件顺序（如内存更新与通知的组合），在网卡硬件上无法保证有序，需应用层协议保证。
 
 # 典型乱序
 ## 原因
@@ -61,7 +59,7 @@ RDMA RC服务类型，先post一个write wr，然后post 一个send wr，可以�
 ```
 
 # 有序性的级别
-## 严格有序（Strict Ordering）
+## 严格有序（Strict Ordering）：同一个QP，消息内和消息间都有序
 **(1) 机制**：
 - 硬件保证**同一QP内**的操作按提交顺序完成（如RC服务）。
 - 发送队列（SQ）顺序 = 网络包顺序（PSN严格递增） = 接收端执行顺序。
@@ -100,9 +98,6 @@ Post(WR1​)→Post(WR2​）=====>
 
 `WC(WR_1)` 一定先于 `WC(WR_2)` 出现在 CQ 中。
 ```
-
-
-
 
 
 ## 消息内有序（Intra-Message Ordering）
@@ -166,9 +161,6 @@ struct Message {
 如果这个顺序性不能得到保证，那么接收方在收到信号后，去读取 `WRITE` 写入的数据时，可能会读到旧数据或不完整的数据，从而导致程序错误。因此，RC 的保序性对于这种异步控制流至关重要。
 
 
-# 有序性的实现
-
-
 # 服务类型和有序性
 
 |**服务类型**|**数据包顺序**|**操作顺序**|**典型场景**|
@@ -179,6 +171,117 @@ struct Message {
 |**RD (可靠数据报)**|✅ **消息内包有序**|❌ **消息间操作无序**|分布式共享内存的通信层|
 
 
+## RC服务类型的有序性
+### 发送端
+#### 发送端操作与 CQE 生成
+在 RC 服务类型下，对于同一个QP的操作：==在同一个发送队列 (SQ) 上的操作是严格保序的，产生的CQE也是有序的，与操作类型无关==。
+即：发送端的操作之间是有序的，和操作类型无关；发送端产生的CQE是有序的，和操作类型无关
+
+比如：
+**提交顺序**：你调用`ibv_post_send`依次提交 `write1(signaled)、send1(signaled)、write2 with imm(signaled)、send2(signaled)`，这些操作会按提交顺序进入 SQ 队列；
+
+**执行顺序**：硬件严格按 SQ 中的顺序执行这些操作，不会跳过或打乱；
+
+**CQE 生成顺序**：发送端的 CQE（Completion Queue Entry）会严格按照操作执行完成的顺序生成
+```bash
+——>write1 执行完成（收到接收端 ACK）→ 生成 write1 的 send CQE
+——>send1 执行完成 → 生成 send1 的 send CQE
+——>write2 执行完成 → 生成 write2 的 send CQE
+——>send2 执行完成 → 生成 send2 的 send CQE。
+```
+
+即使某一个操作（比如 write2）因为网络延迟稍长，发送端也会等前一个操作（send1）的 ACK 返回后，才会标记 send1 完成并生成 CQE，后续操作的 CQE 绝不会提前出现。
+
+#### 应用
+很多系统会利用这个特性做 **doorbell / flag**，比如：
+```bash
+write data
+send notify
+
+或者
+
+write_with_imm： 其本质是：RDMA WRITE  + recv completion，接收端：
+- 数据写入 memory 
+- 产生一个 recv CQE
+```
+
+接收端收到 recv cqe 时：数据已经写完。
+
+
+### 接收端数据可见性与 CQE 生成
+在 **RC QP** 上：
+- WQE 按 post 顺序发送
+- 包按 PSN 顺序发送
+- **接收端按 PSN 顺序处理**
+
+每个 RC QP 的发送报文都带递增的序列号（PSN），接收端会按序列号重组，乱序的报文会被缓存直到前面的报文到达；
+因此，==RC模式下，同一个QP上的多个操作/Message，接收端处理顺序（数据可见性与 CQE 生成的顺序）严格遵循发送端的提交顺序==。
+
+
+还是拿上面的举例：发送端对同一个QP，调用`ibv_post_send`依次提交 `write1(signaled)、send1(signaled)、write2 with imm(signaled)、send2(signaled)`。那么接收端：
+```bash
+1> write1 的数据会先被写入接收端的指定内存区域; (write 在接收端不产生CQE)
+2> 接收端收到 send1 的消息，生成 send1 的 recv CQE；
+3> write2（带 immediate）完成数据写入后，接收端会先确认 write2 的数据可见，再生成包含 immediate 值的 write2 CQE；
+4> 最后生成 send2 的 recv CQE。
+```
+接收端看到的 CQE 顺序一定是：`Send1` 的 CQE -> `Write2_with_Imm` 的 CQE -> `Send2` 的 CQE。
+
+
+### 注意事项
+
+#### 发送队列（SQ）和接收队列（RQ）共享CQ时，send cqe和recv cqe的顺序是不定的
+结论：如果你的同一个QP下的发送队列（SQ）和接收队列（RQ）共享同一个完成队列（CQ），那么 ==SQ 的 CQE 和 RQ 的 CQE 之间的相对顺序是不确定的（即发送完成通知和接收完成通知可能交错），但在 SQ 内部产生的 CQE 依然保持严格的先后顺序==。
+
+> 注：即使是SQ和RQ帮定到不同的CQ，poll 不同的CQ时，也是无法保证拿到CQE的顺序的。
+
+```bash
+Completion events may be generated in any order across different queues.
+
+- PCIe与内部处理：
+网卡（NIC）内部处理发送完成（收到ACK）和接收数据（收到Response）是并行的流程。
+即使ACK包先于Response包到达网卡，由于PCIe总线竞争、网卡内部调度策略或CQE写入内存的微小时间差，CPU在Poll CQ时看到的顺序可能会发生变化。
+
+- ACK捎带（Piggyback）与合并：
+为了提高效率，RDMA协议允许ACK被“捎带”在反向的数据包中，或者进行ACK合并。如果接收端处理极快，或者网络层将ACK延迟以等待随后的Response数据包一起发送，那么ACK和Response可能在同一个数据包或紧挨着的报文中到达发送端。此时，网卡几乎同时处理“发送确认”和“接收数据”，CQE的写入顺序取决于网卡具体的微架构实现，软件层无法预知.
+```
+
+RC服务类型，只有 **同一个 queue（send queue or recv queue）**，产生的CQE 才有序。不同queue (比如 同一个QP的send queue和recv queue)，不保证产生的CQE是有序的，即使绑定到了同一个CQ。
+
+```bash
+对于RC服务类型：
+
+- 如果你在发送端的同一个 QP 依次 post_send (send1)、post_send (send2)，那么这两个 send 的发送 CQE一定是 send1 在前、send2 在后；
+- 如果你在发送端的同一个 QP 依次 post_recv (recv1)、post_recv (recv2)，那么这两个 recv 的接收 CQE一定是 recv1 在前、recv2 在后；
+- 但 “发送 CQE” 和 “接收 CQE” 之间的顺序，完全没有保证。
+```
+
+
+##### 处理
+
+既然顺序无法保证，工程上的正确做法是：
+
+1. **按 CQE 类型过滤**：通过`ibv_wc`的`opcode`字段区分是发送 CQE（`IBV_WC_SEND`/`IBV_WC_RDMA_WRITE`等）还是接收 CQE（`IBV_WC_RECV`）；
+2. **给操作加唯一标识**：
+    - 发送时：通过`wr_id`字段（64 位）给每个 send 操作绑定唯一 ID；
+    - 接收时：对端响应时携带该 ID，本地接收 CQE 后通过 ID 关联到对应的发送操作；
+
+3. **状态机管理**：为每个发送操作维护状态（如 “已发送未确认”“已收到响应”），无论先收到哪种 CQE，都先更新状态，直到满足 “发送完成 + 响应收到” 的条件再处理。
+
+### 什么时候产生的CQE是乱序的
+（1）不同Queue产生的CEQ。
+```bash
+1> 同一个QP下的不同queue，比如：send queue和recv queue
+2> 多个不同的 QP（比如 QP1 执行 write1，QP2 执行 send1），则跨 QP 的操作不保证顺序
+```
+
+（2）多个线程共享一个CQ，进行Poll CQ时，那么可能产生的CQE是不定的。
+
+### 小结
+
+（1）单个 RC QP 内：`write1→send1→write2 (with imm)→send2` 的操作，==发送端CQE（同一个queue产生的CQE）、接收端CQE（同一个queue产生的CQE）、实际数据可见性==均严格按提交顺序生成 / 执行，不会无序；
+
+（2）RC服务类型，只有 **同一个 queue（send queue or recv queue）**，产生的CQE 才有序。不同queue (比如 同一个QP的send queue和recv queue)，不保证产生的CQE是有序的，即使绑定到了同一个CQ。
 
 # 有序性和send_flag
 

@@ -244,6 +244,50 @@ struct rte_mempool * rte_mempool_create(const char *name, unsigned n, unsigned e
 	int socket_id, unsigned flags);
 ```
 
+### 存在cache时，mempool的总的元素的个数
+
+```c
+struct rte_mempool *
+rte_mempool_create(const char *name, unsigned n, unsigned elt_size,
+	unsigned cache_size, unsigned private_data_size,
+	rte_mempool_ctor_t *mp_init, void *mp_init_arg,
+	rte_mempool_obj_cb_t *obj_init, void *obj_init_arg,
+	int socket_id, unsigned flags);
+
+struct rte_mempool_cache {
+	uint32_t size;	      
+	/**< Size of the cache: rte_mempool_create 设置的每个lcore的cache的大小，最大值为 RTE_MEMPOOL_CACHE_MAX_SIZE */
+	
+	uint32_t flushthresh; /**< Threshold before we flush excess elements */
+	uint32_t len;	      /**< Current cache count: 该lcore的cache中当下可用元素的个数，实际上 len 可能大于 size */
+#ifdef RTE_LIBRTE_MEMPOOL_STATS
+	uint32_t unused;
+	/*
+	 * Alternative location for the most frequently updated mempool statistics (per-lcore),
+	 * providing faster update access when using a mempool cache.
+	 */
+	struct {
+		uint64_t put_bulk;          /**< Number of puts. */
+		uint64_t put_objs;          /**< Number of objects successfully put. */
+		uint64_t get_success_bulk;  /**< Successful allocation number. */
+		uint64_t get_success_objs;  /**< Objects successfully allocated. */
+	} stats;                        /**< Statistics */
+#endif
+	/**
+	 * Cache objects
+	 *
+	 * Cache is allocated to this size to allow it to overflow in certain
+	 * cases to avoid needless emptying of cache.
+	 */
+	void *objs[RTE_MEMPOOL_CACHE_MAX_SIZE * 2] __rte_cache_aligned; /* 此中申请2倍的 RTE_MEMPOOL_CACHE_MAX_SIZE */
+} __rte_cache_aligned;
+```
+
+mempool 中元素的总个数就是：n 指定的。包含了 rte_ring 的元素的个数，以及cache的个数。
+rte_mempool_create 创建的时候，rte_ring 的大小就是 n，cache的当前的实际大小为0，设定的size = cache_size；
+因此，==rte_mempool_create 中的 n 就是 总大小，最终可供使用的总个数==。
+
+
 ### obj_init：创建mempoll的同时设置每个对象的回调函数进行对象的初始化
 ```c
 /**
@@ -261,8 +305,8 @@ typedef rte_mempool_obj_cb_t rte_mempool_obj_ctor_t; /* compat */
 ```
 
 #### mempool含有cache与否是否影响实体初始化时实体的idx？
-测试：可以写个程序测试下，打印出idx，看看idx的最大值，是否等于`实体个数+缓存个数*lcore个数`。
-
+应该是不影响。因为，创建mempool的时候，实际上是没有cache的。
+只有进行`rte_mempool_get/put`的时候，cache中才可能会有元素。
 
 #### 使用场景
 比如：正常情况下，创建一个实体大小为`4k`，一共有N个实体的`mempool`，那么`mempool`的每个元素的大小就是`4k`。
@@ -270,7 +314,15 @@ typedef rte_mempool_obj_cb_t rte_mempool_obj_ctor_t; /* compat */
 
 
 ## rte_mempool_get
+
+rte_mempool_get：默认先从cache中取，如果cache中够，直接返回；如果cache中不够时候，剩余的部分从公共池子rte_ring中取，并且取的时候，会多取cache_size个，相当于顺便将当前core的cache也给填充满。
+![](attachments/Pasted%20image%2020260305124330.png)
+
 ## rte_mempool_put
+
+rte_mempool_put：
+![](attachments/Pasted%20image%2020260305124828.png)
+
 
 ## rte_mempool_avail_count 和  rte_mempool_ops_get_count
 
@@ -296,7 +348,7 @@ DPDK 的 `rte_mempool` 是一个通用的内存对象池抽象层，其底层可
 
 （1）`rte_mempool_ops_get_count(const struct rte_mempool *mp)` 调用 `mempool` 底层实现（ops）的 `get_count()` 函数，返回**底层数据结构中可用的对象数量**。例如： 对于 `ring` 模式，就是 ring 中元素的个数（`rte_ring_count()`）；
 
-（2）`rte_mempool_avail_count()` = 底层池中剩余对象 + 每个线程/核 cache 中未用对象。因此，它给出的数量是**从全局视角**的、**逻辑上可用**的对象总数。
+（2）`rte_mempool_avail_count()` = 底层池（公共池）中剩余对象 + 每个线程/核 cache 中未用对象。因此，它给出的数量是**从全局视角**的、**逻辑上可用**的对象总数。
 即：`avail_count` ≈ `ops_get_count` + “所有 core cache 中的可用对象”。
 
 
@@ -397,8 +449,6 @@ rte_mempool_empty(const struct rte_mempool *mp)
 
 **（2）额外的影响**：
 由于在一个线程中申请，在其他的线程中释放，那么申请的线程的`cache`会很快用完，那么就需要从公共资源池中申请，如果是多消费者，那么可能涉及到`cas`来操作`rte_ring`。
-
-## 存在cache时，mempool的总的元素的个数
 
 ## mempool可以动态进行resize扩缩容吗？
 在 DPDK 的标准实现中，`rte_mempool` 的大小在创建后是不支持动态 Resize（扩容或缩容）的。

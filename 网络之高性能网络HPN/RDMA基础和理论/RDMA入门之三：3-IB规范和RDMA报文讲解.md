@@ -1023,7 +1023,6 @@ IBA（InfiniBand 架构）为RC服务提供了一种**端到端（或消息级�
     
 - (6) 响应方可以使用**非请求确认包 (Unsolicited Acknowledge Packet)** 向请求方异步发送信用（通过重发最近的确认包）
 
-
 ###### 信用从响应方到请求方的传输 (TRANSFERRING CREDITS)
 传输信用的机制有两种：
 1. **附带信用 (Piggybacked Credits)：**

@@ -403,7 +403,7 @@ total 0
 
 
 
-## hw_counters
+## 硬件计数器：hw_counters
 ```bash
 ### HW Counters (RDMA diagnostics)
 > The HW counters are counted per function and exposed on the function. Some counters are not counted per function.
@@ -450,9 +450,18 @@ total 0
 **QCN: Quantized Congestion Notification, 量化拥塞通知**
 **DCQCN: data center QCN, 数据中心量化拥塞通知**
 
+### 分类
+
+这些counters分为四大类：
+- ECN Mechanism
+- Transport Offloads
+- Lossy RoCE
+- Data Path
+
+![](attachments/1520f6d24480e6c552fed4b910863473.png)
+
+
 ### 字段说明
-
-
 
 |**Counter**|**Description**|**Group**|
 |---|---|---|
@@ -488,6 +497,112 @@ total 0
 |roce_slow_restart_trans|Counts the number of times RoCE slow restart changed state to slow restart<br><br>The counter was added in MLNX_OFED rev 5.0-1.0.0.0 and kernel v5.6.0|Informative|
 |roce_adp_retrans_to|Counts the number of adaptive retransmissions for RoCE traffic<br><br>The counter was added in MLNX_OFED rev 5.0-1.0.0.0 and kernel v5.6.0|Informative|
 |roce_slow_restart|Counts the number of times RoCE traffic reached timeout due to adaptive retransmission<br><br>The counter was added in MLNX_OFED rev 5.0-1.0.0.0 and kernel v5.6.0|Informative|
+
+#### ECN机制相关的四个counters
+##### **（1）On Notification Point**：通知点的统计
+- **np_ecn_marked_roce_packets**
+```bash
+the number of RoCEv2 packets received by the notification point which were marked for experiencing the congestion (ECN bits where '11' on the ingress RoCE traffic)
+```
+通知点收到的RoCEv2数据包的数量，这些数据包被标记为发生拥堵（ECN位在入口RoCE流量上为'11'）。
+
+
+- **np_cnp_sent**
+```bash
+the number of CNP packets sent by the Notification Point when it noticed congestion experienced in the RoCEv2 IP header.
+```
+当通知点注意到RoCEv2 IP头出现拥堵时，它所发送的CNP数据包的数量。
+
+##### **（2）On Reaction Point**：发应点的统计
+- **rp_cnp_handled**
+```bash
+the number of CNP packets handled by the Reaction Point HCA to throttle the transmission rate.
+```
+反应点HCA处理的CNP数据包的数量，以节制传输速率
+
+- **rp_cnp_ignored**
+```bash
+the number of CNP packets received and ignored by the Reaction Point HCA. This counter should not raise if RoCE Congestion Control was enabled in the network。
+```
+反应点HCA收到并忽略的CNP数据包的数量。如果网络中启用了RoCE拥塞控制，该计数器不应上升。
+
+
+##### **（3）看一下这四个参数作用的位置**
+
+![](attachments/Pasted%20image%2020260304203059.png)
+
+![](attachments/Pasted%20image%2020260304203159.png)
+
+![](attachments/Pasted%20image%2020260304203350.png)
+
+#### TRANSPORT OFFLOADS相关的13个counters
+##### (1) Receive Not Ready (for Send & Receive，仅针对iba收发)
+- **`rnr_nak_retry_err `**:  
+本机作为发送方，收到的RNR (Receiver Not Ready)  NAK数据包的数量（没有超过QP重试限制）。如果接收方qp的srq没有空闲了，这个计数会涨。
+```bash
+rnr_nak_retry_error (on Requestor): the number of received RNR NAK packets (QP retry limit was not exceeded)。收到的RNR (Receiver Not Ready)  
+```
+
+- **`out_of_buffer`**：
+本机作为接收方，收包的时候发现没有RWR(receive work request)了。如果自己qp的srq满了，这个计数会涨。
+```bash
+out_of_buffer (on Responder): the number of drops occurred due to lack of Receive WQEs。
+由于没有接收WQE而导致包的下降数量
+```
+
+##### (2) Error CQEs
+
+
+
+
+##### (3) Packet Sequence Number相关
+
+ - **`out_of_sequence`**：
+ 收到的乱序数据包的数量
+```bash
+out_of_sequence (on Responder): the number of out of sequence packets received
+```
+
+ - **`packet_seq_err`**：
+收到的NAK序列错误数据包的数量（没有超过QP重试限制）。
+```bash
+packet_seq_err (on Requestor): the number of received NAK sequence error packets (QP retry limit was not exceeded)
+```
+
+ - **`implied_nak_seq_err`**：
+当收到PSN大于预期的RDMA读取响应时，RDMA读取请求者检测到隐性NAK的次数。
+```bash
+implied_nak_seq_err (on RDMA Read Requestor): number of times the RDMA Read Requestor detects an implicit NAK when receiving RDMA Read Response with PSN larger than expected 
+```
+
+ - **`duplicate_request`**：
+收到的先前已执行的RDMA读取请求的数量
+```bash
+duplicate_request (on RDMA Read Responder): number of received RDMA Read Request that had been previously executed.
+```
+
+##### （4）Acknowledge Timeout
+
+ - **`local_ack_timeout`**：
+对于RC、XRC、DCT的QP来说，QP的ack计时器过期的次数。
+```bash
+local_ack_timeout (on Requestor): the number of times QP's ack timer expired for RC, XRC, DCT QPs
+```
+
+##### （5）ICRC（Invariant Cyclic Redundancy Code） Error
+
+ - **`rx_icrc_encapsulated`**：
+有ICRC错误的RoCE数据包的数量。
+```bash
+rx_icrc_encapsulated: the number of RoCE packets with ICRC errors
+```
+
+
+#### Lossy RoCE相关的11个计数器
+
+
+#### Data Path 相关的counters
+
 
 
 ### show_counters 脚本
@@ -845,4 +960,7 @@ https://enterprise-support.nvidia.com/s/article/understanding-mlx5-linux-counter
 
 # abi-file-stable-sysfs-class-infiniband
 https://docs.kernel.org/admin-guide/abi-stable-files.html#abi-file-stable-sysfs-class-infiniband
+
+# 硬件计数器详解@NVIDIA Mellanox NIC
+https://mp.weixin.qq.com/s/8TMcLtX7nfhpqSyZS7zCtA
 ```
