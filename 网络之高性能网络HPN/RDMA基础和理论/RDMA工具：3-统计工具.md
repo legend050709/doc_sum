@@ -543,6 +543,8 @@ the number of CNP packets received and ignored by the Reaction Point HCA. This c
 rnr_nak_retry_error (on Requestor): the number of received RNR NAK packets (QP retry limit was not exceeded)。收到的RNR (Receiver Not Ready)  
 ```
 
+![](attachments/7f203128f12a2e43f4e4063748057b87.png)
+
 - **`out_of_buffer`**：
 本机作为接收方，收包的时候发现没有RWR(receive work request)了。如果自己qp的srq满了，这个计数会涨。
 ```bash
@@ -552,10 +554,48 @@ out_of_buffer (on Responder): the number of drops occurred due to lack of Receiv
 
 ##### (2) Error CQEs
 
+- **req_cqe_error / resp_cqe_error**: 
+```bash
+the number of times CQE completed with error。
+```
+CQE出错的次数
 
+- **req_cqe_flush_error / resp_cqe_flush_error**: 
+```bash
+the number of times CQE completed with flushed error。
+```
+CQE完成时出现刷新错误的次数
+
+- **req_remote_access_errors / resp_remote_access_error**: 
+```bash
+the number of times remote access error is detected
+```
+检测到远程访问错误的次数。
+
+- **req_remote_invalid_request (on Requestor):** 
+```bash
+the number of times remote invalid request error is detected 
+```
+检测到远程无效请求错误的次数
+
+- **resp_local_length_error (on Responder)**: 
+```bash
+the number of times local length error is detected 
+```
+检测到local length error的次数。关于local length erro的解释：
+```bash
+this happens if a Work Request that was posted in a local Send Queue contains a message that is greater than the maximum message size that is supported by the RDMA device port that should send the message or an Atomic operation which its size is different than 8 bytes was sent. This also may happen if a Work Request that was posted in a local Receive Queue isn't big enough for holding the incoming message or if the incoming message size if greater the maximum message size supported by the RDMA device port that.
+
+即：
+1》send queue中posted WRs时，某个WR的长度大于 最大的message size；
+2》rece Queue中的WR的长度，不足以接收某个message。
+```
 
 
 ##### (3) Packet Sequence Number相关
+
+![](attachments/Pasted%20image%2020260308154316.png)
+
 
  - **`out_of_sequence`**：
  收到的乱序数据包的数量
@@ -574,6 +614,9 @@ packet_seq_err (on Requestor): the number of received NAK sequence error packets
 ```bash
 implied_nak_seq_err (on RDMA Read Requestor): number of times the RDMA Read Requestor detects an implicit NAK when receiving RDMA Read Response with PSN larger than expected 
 ```
+![](attachments/Pasted%20image%2020260308154452.png)
+
+
 
  - **`duplicate_request`**：
 收到的先前已执行的RDMA读取请求的数量
@@ -589,6 +632,10 @@ duplicate_request (on RDMA Read Responder): number of received RDMA Read Request
 local_ack_timeout (on Requestor): the number of times QP's ack timer expired for RC, XRC, DCT QPs
 ```
 
+![](attachments/Pasted%20image%2020260308154529.png)
+
+
+
 ##### （5）ICRC（Invariant Cyclic Redundancy Code） Error
 
  - **`rx_icrc_encapsulated`**：
@@ -599,11 +646,110 @@ rx_icrc_encapsulated: the number of RoCE packets with ICRC errors
 
 
 #### Lossy RoCE相关的11个计数器
+**（1）Adaptive Retransmit：自适应重传相关**
 
+![](attachments/73a1234fc3ee676d9b017e00da5f2980.png)
+
+ - **roce_adp_retrans (on Requestor)**: 
+```bash
+ counts the number of adaptive retransmissions for RoCE traffic 
+```
+RoCE流量的自适应重传的数量
+ 
+  - **local_ack_timeout_err (on Requestor)**: 
+```bash
+  the number of times QP's ack timer expired for RC, XRC, DCT QPs
+```
+对于RC、XRC、DCT的QP来说，QP的ack计时器超时的次数。
+
+
+
+**（2）Slow Restart from Idle**
+- **roce_slow_restart**:
+```bash
+ the number of times RoCE slow restart from idle is used  
+```
+使用RoCE从空闲状态缓慢重新启动的次数
+
+- **roce_slow_restart_cnps**: 
+```bash
+ the number of CNPs caused by RoCE slow restart from idle RoCE
+```
+从空闲状态缓慢重启造成的CNP数量
+
+- **rp_cnp_handled**:
+```bash
+the number of CNP packets handled by caused by RoCE slow restart from idle to throttle the transmission rate 
+```
+由RoCE从空闲状态慢速重启来节制传输速率所造成的CNP数据包的数量。
+
+- **rp_cnp_ignored**:
+```bash
+ the number of CNP packets received and ignored 
+```
+收到和忽略的CNP数据包的数量
+
+
+**（3）Slow Restart upon Packet Drop**
+
+![](attachments/e9c84b12a268c1fbb006eecb4d2b1907.png)
+
+
+- **out_of_sequence (on Responder)**: 
+```bash
+the number of out of sequence packets received 
+```
+收到的超序数据包的数量
+
+- **packet_seq_err (on Requestor)**: 
+```bash
+the number of received NAK sequence error packets (QP retry limit was not exceeded) 
+```
+收到的NAK序列错误数据包的数量（没有超过QP重试限制）。
+    
+- **np_cnp_sent**:
+```bash
+the number of CNP packets sent in case of out of sequence packets received (on Responder) or OOS NAK received (on Requestor) 
+```
+在收到失序数据包（在应答方）或收到OOS NAK（在请求方）的情况下发送的CNP数据包的数量
+    
+- **rp_cnp_handled (on Requestor)**: 
+```bash
+the number of CNP packets handled by caused by RoCE slow restart from out-of-sequence to throttle the transmission rate 
+```
+由RoCE慢速重启引起的CNP数据包的数量，以节制传输速率。
+
+- **rp_cnp_ignored (on Requestor)**: 
+```bash
+the number of CNP packets received and ignored 
+```
+收到和忽略的CNP数据包的数量
 
 #### Data Path 相关的counters
 
+ - **RDMA Read**：
+```bash
+rx_read_requests (on Responder)
+```
+ 收到的操作码为`RDMA Read Request`的数据包数量。
 
+ - **RDMA Write**：
+ ```bash
+rx_write_requests (on Responder): the number of received packets with opcode RDMAWrite.
+```
+收到的操作码为`RDMA Write`的数据包数量。
+
+ - **Atomic Operation**：
+ ```bash
+rx_atomic_requests (on Responder): the number of received packets with opcode CmpSwap or FetchAdd
+```
+收到的操作码为CmpSwap或FetchAdd的数据包的数量。
+
+ - **Dynamic Connection**：
+ ```bash
+rx_dct_connect (on DC Target): the number of received connection request for the associated DCTs 
+```
+收到的相关DCT的连接请求的数量
 
 ### show_counters 脚本
 ```bash

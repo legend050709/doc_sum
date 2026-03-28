@@ -711,14 +711,17 @@ enum ibv_send_flags {
 
 #### IBV_SEND_SIGNALED
 
-##### 使用无信号完成（Working with Unsignaled completions）
-参考：[使用无信号完成](https://blog.csdn.net/bandaoyu/article/details/119145598)
+##### 使用静默完成/无信号完成（Working with Unsignaled completions）
+参考：
+[使用无信号完成](https://blog.csdn.net/bandaoyu/article/details/119145598)
+[Working with Unsignaled completions](https://www.rdmamojo.com/2014/06/30/working-unsignaled-completions/)
 
 默认情况下，所有工作请求（WR）在处理完成后都会生成工作完成(WC)。但是，当处理完成时，发送请求(SR)可能会也可能不会生成工作完成(WC) - 这完全由应用程序控制，这称为静默完成/无信号完成 ( **Unsignaled Completions)**。
 
-##### 什么是'无信号完成'
-`Unsignaled Completion` 是一种机制，允许应用程序发布发送请求(SR)，当它们的处理结束时，只要工作请求(WR)的处理没有出错，就不会（在与发送队列SQ相关联的完成队列CQ中）生成工作完成(WC)。
-> 注：如果发送请求(SR)以错误结束，即使它被发布为使用静默完成(Unsignaled Completion)，它也会生成一个工作完成(WC)。
+##### 什么是'静默完成/无信号完成(Unsignaled Completions)) '
+`Unsignaled Completion` 是一种机制，允许应用程序发布发送请求(SR： send request)，当它们的处理结束时；==只要工作请求(WR)的处理没有出错，就不会（在与发送队列SQ相关联的完成队列CQ中）生成工作完成(WC)==。
+
+> 注：**如果发送请求(SR)以错误结束，即使它被发布为使用静默完成(Unsignaled Completion)，它也会生成一个工作完成(WC)**。
 
 ##### 为什么要使用'无信号完成'？
 
@@ -733,12 +736,12 @@ Handling less Work Completions will help to reduce the CPU usage of the applicat
 
 处理'工作请求'WR，会消耗设备的作用：
 ```bash
-- 由 RDMA 设备生成'工作完成'WC
-- 轮询(Polling )完成队列获取'工作完成'WC
+- 由 RDMA 设备(硬件)生成'工作完成'WC
+- 轮询(Polling )完成队列（CQ）获取'工作完成'WC
 - 读取'工作完成'WC并检查其状态
 ```
 
-处理较少的工作完成(WC) 将有助于降低应用程序的 CPU 使用率，从而提高应用程序的效率并改善处理消息的延迟。
+处理较少的工作完成(WC) 将有助于**降低应用程序的 CPU 使用率**，从而提高应用程序的效率并改善处理消息的延迟。
 使用`Unsignaled completion`告诉RDMA设备处理完不要生成WC；
 
 ##### 什么时候使用'无信号完成'？
@@ -750,10 +753,10 @@ Handling less Work Completions will help to reduce the CPU usage of the applicat
 另外，完结的'接收请求'RR产生的'工作完成'WC可能包含重要信息（操作码opcode、消息大小size、来源origin等），
 但完结的'发送请求'sr的'工作完成'wc不包含重要信息。
 
-因此，'无信号完成' 一般是 针对'发送请求'sr 来使用。
+因此，**'无信号完成' 一般是 针对'发送请求'sr 来使用**。
 
 在'发送请求'sr中可以指定的操作有两组：
-（1）需要对端返回响应的操作：请求远程端发送数据的操作（RDMA Read and Atomic operations）
+（1）需要对端返回响应的操作：请求远程端发送数据的操作（RDMA Read and RDMA Atomic operations）
 （2）不需要对端响应的操作：将数据发送到远程端的操作（Send and RDMA Write operations with or without immediate data）
 
 ```bash
@@ -784,7 +787,7 @@ Handling less Work Completions will help to reduce the CPU usage of the applicat
 ##### 如何使用'无信号完成'？
 
  对'无信号完成'的支持是按 `Queue Pair`配置的。
- (1) 创建`Queue Pair`时，应将其创建为在'发送队列'中支持'无信号完成'（属性 `qp_init_attr.sq_sig_all` 应设置为 0）。
+ (1) 创建`Queue Pair`时，应将其创建为在'发送队列'中支持'无信号完成'（属性 `qp_init_attr.sq_sig_all` 应设置为 0； 默认应该就是0）。
  (2) 对于每个已发布的'发送请求'SR'：
  如果在 `wr.send_flags` 中设置了标志 `IBV_SEND_SIGNALED`，则在该'发送请求'sr'处理结束时将生成'工作完成'wc。
  如果清除此标志，则不会生成'工作完成'wc（只要它的完成没有错误）。
@@ -795,13 +798,30 @@ Handling less Work Completions will help to reduce the CPU usage of the applicat
 
 这意味着如果使用配置为使用'无信号完成'(`Unsignaled Completions`)的`Queue Pair`，则必须确保偶尔的（在'发送队列'SQ充满未完成的'发送请求'SR之前）`posted`一个会生成`WC`的`Send Request`。
 
-> ==注：查看代码时，发现只有产生CQE时才会清理send queue的指针。如下所示：==
+> ==注：查看代码时，发现只有产生CQE时才会移动send queue的尾指针(消费者指针)。如下所示：==
 ```bash
 rdma-core中的：
-	ibv_poll_cq -->
-	providers/mlx5/cq.c中 mlx5_parse_cqe 中查看对于 wq->tail 的操作。
+	ibv_poll_cq --> mlx5_poll_cq --> poll_cq (providers/mlx5/cq.c)--> mlx5_poll_one--->
+	mlx5_parse_cqe 中查看对于 wq->tail 的操作。
 
 注：mlx5_wq_overflow 来在 _mlx5_post_send 时判断是否send queue是否满了。
+```
+
+![](attachments/Pasted%20image%2020260319105407.png)
+分析：==对于send queue，这个相当于是在软件层来操作SQ的头指针和尾指针，不需要硬件(消费者)来操作尾指针，这样可以提升性能。== 因为硬件操作尾指针，需要IOMMU通过PCIe来访问，影响性能。
+
+```bash
+SQ头指针的移动：
+	软件post_send的时候，移动head指针。
+
+SQ尾指针的移动：
+	产生CQE时候，可以得到关联的WR，可以得知这个WR在queue中的位置，进而可以移动尾指针（在CPU 进行 poll_cq的时候，移动 SQ的尾指针）。
+
+SQ是否为满判断：
+	mlx5_wq_overflow 来在 _mlx5_post_send 时判断是否send queue是否满了。
+
+哪些WR可以产生CQE：
+	signaled的WR 或者 unsignaled的WR产生了错误
 ```
 
 不遵循此规则可能会导致'发送队列'SQ被'发送请求'SR灌满，那将不会生'成工作完成'，可能会导致下面的情况：

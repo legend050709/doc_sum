@@ -11,8 +11,6 @@
 这些步骤，尤其是多次数据拷贝和CPU密集的协议处理，带来了显著的延迟 (Latency)和CPU 开销 (CPU Overhead)，并可能限制吞吐量 (Throughput)。
 
 
-
-
 # RDMA的特性和优势
 ## 特性
 RDMA 通过以下关键特性解决了这些问题：

@@ -9,8 +9,15 @@ RNIC属于智能网卡的一类，是一种专门设计用于支持RDMA技术的
 ## RNIC组成
 除了数据包缓冲区（TX/RX Buffer），RNIC还具有多个处理单元（PU,Processing Unit）和各种类型的内部高速缓冲区，这些不同的高速缓冲区存储特定类型的数据。如ICM Cache，用来存储QP的上下文（QPC）；内存转换表（MTT）内存保护表（MPT）；WQE Cache，存储预取的SQ和RQ队列中的WQE。
 
-### ICM Cache
-**ICM Cache**（Internal Control Memory Cache）是RNIC（RDMA Network Interface Card）内部用于缓存关键控制数据结构的高速存储区域，旨在加速对频繁访问的元数据（如QP上下文、地址转换表等）的访问，从而降低延迟并提升性能。
+### ICM Cache(内部上下文内存缓存)
+**ICM Cache**（Internal Context Memory Cache）是RNIC（RDMA Network Interface Card）内部用于缓存关键控制数据结构的高速存储区域，旨在加速对频繁访问的元数据（如QPC、地址转换表等）的访问，从而降低延迟并提升性能。
+
+ICM 是 NIC 用来存储各种 RDMA 对象上下文（context）的“逻辑内存空间”；包括：
+```bash
+- QP context（QPC）
+- CQ context（CQC）
+- SRQ context（SRQC）
+```
 
 #### ICM Cache的硬件实现
 1. **存储介质**
@@ -47,6 +54,84 @@ Step 3：RNIC发出DMA请求读取主机DRAM中的数据，然后将数据处理
 经过此番操作，由 MR 代表的内存暴露出来了，远端可以对其进行访问。
 出于安全的考虑，只有被允许的远端才可以访问，这些远端持有远端访问密钥，即Remote Key（简称 RKey），只有带有正确 RKey 的请求才能够访问成功。
 
+### MR和PD、QP、ib_ctx的关系
+
+```bash
+struct ibv_context *ibv_open_device(struct ibv_device *device);
+struct ibv_pd *ibv_alloc_pd(struct ibv_context *context);
+
+
+struct ibv_mr *ibv_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
+                       int access);
+
+struct ibv_qp *ibv_create_qp(struct ibv_pd *pd,
+                          struct ibv_qp_init_attr *qp_init_attr);
+
+
+struct ibv_srq *ibv_create_srq(struct ibv_pd *pd,
+                            struct ibv_srq_init_attr *srq_init_attr);
+
+
+struct ibv_cq *ibv_create_cq(struct ibv_context *context, int cqe,
+                          void *cq_context,
+                          struct ibv_comp_channel *channel,
+                          int comp_vector);
+---------------------------------------------------------
+
+                ┌──────────────────────────┐
+                │       ib_context         │
+                │   (一个 RDMA 设备)       │
+                └──────────┬───────────────┘
+                           │
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+   ┌────────┐        ┌────────┐        ┌────────┐
+   │   PD   │        │   CQ   │        │   CQ   │
+   │(隔离域)│        │完成队列│        │完成队列│
+   └───┬────┘        └────────┘        └────────┘
+       │
+       │
+ ┌─────┼──────────────────────────────┐
+ │     │                              │
+ │  ┌──────┐                    ┌────────┐
+ │  │  QP  │                    │  SRQ   │
+ │  │队列对│                    │共享RQ  │
+ │  └──┬───┘                    └──┬─────┘
+ │     │                           │
+ │     │                           │
+ │     └──────────────┬────────────┘
+ │                    │
+ │               ┌────────┐
+ │               │   MR   │
+ │               │内存区域│
+ │               └────────┘
+ │
+ └────────────────────────────────────
+ 
+```
+
+![](attachments/deepseek_mermaid_20260319_e9d21a%201.png)
+
+
+**关系说明：**
+
+- ib_ctx: 代表一个 RDMA 设备/HCA
+- 设备下可以创建多个 **CQ**（图中粉色）和多个 **PD**（图中蓝色）。
+- 每个 PD 内部可以创建 **QP**、**SRQ**、**MR**。
+- QP 需要关联到 CQ。
+- SRQ 可以被同 PD 内的多个 QP 共享。
+- MR： MR 注册的内存，只允许同一个 PD 里的 QP/SRQ 访问
+
+
+#### PD
+`PD` 是一个**设备内的逻辑隔离单元**。
+同一个设备上可以创建多个 `PD`，每个 `PD` 内部的 `MR` 只能被同 `PD` 内的 `QP` 访问。
+这种隔离机制允许不同应用在同一设备上安全地共享硬件资源，而不会互相干扰。因此，创建 `PD` 时必须指定它属于哪个设备（即 `ib context`），因为 `PD` 本身是设备的一个子资源。
+
+比如：
+- 在 PD-1 中注册的 MR1，其 LKey 可能是 `0x123`。
+- 在 PD-2 中注册的 MR1，其 LKey 也可以是 `0x123`。
+- 硬件在执行 DMA 时，会将 ==`PD_ID + LKey`== 组合作为唯一标识去查表。如果 QP (属于 PD-1) 拿着 PD-2 的 Key 来访问，硬件会直接报错 (Access Error)。
 
 
 ### MR的属性
@@ -72,14 +157,15 @@ RDMA要求应用程序在使用内存前显式注册内存区域（Memory Region
 
 ### 什么是pin内存？
 
-pin内存也叫锁页，就是固定虚拟地址和物理地址的映射，防止对应物理页面被swap。
+pin内存也叫锁页，就是固定虚拟地址和物理地址的映射，**防止物理页面被swap**。
 
 注：==只要涉及IO地址翻译，无论是IOMMU还是MTT都需要pin内存==。
 
 ### 使用RDMA的时候为什么需要pin内存？
 使用RDMA的时候为什么要pin内存？
 因为网卡要直接内存访问（DMA），RDMA操作(read/write等)得到的是虚拟地址，需要MTT（Memory Translation Table）进行地址翻译。
-准确的说是虚拟地址（VA）到物理地址的翻译（PA），而**pin内存是为了不让这个物理地址被其他的程序使用**；
+准确的说是虚拟地址（VA）到物理地址的翻译（PA），而**==pin内存是为了不让这个物理地址被其他的程序使用==**；
+
 否则RDMA要访问虚拟地址A，本来对应的是物理地址a；如果不pin内存，这个时候操作系统把物理地址a进行swap，然后物理地址a又被另外一个进程拿去用了，这个时候RDMA再去访问虚拟地址A，经过MTT转换还是往a这个物理地址写，那就写了其他进程的内存了。
 
 
@@ -87,8 +173,10 @@ pin内存也叫锁页，就是固定虚拟地址和物理地址的映射，防�
 #### 内核协议栈
 平时写程序用的都是虚拟内存，都要经过MMU地址翻译成物理内存，怎么我们写普通程序就不用pin内存？
 
-传统TCP通信通过操作系统内核协议栈处理数据：用户态数据 → 内核态Socket Buffer → 网卡DMA缓冲区。内核自身负责分配和固定（pin）用于DMA的内核缓冲区（如sk_buff），用户空间内存无需pin。
-因为数据会被复制到内核的固定区域。而**内核中网卡驱动分配出的内存本身就是物理地址固定的**。并且通过内核的DMA映射接口（如dma_map_single()）临时建立DMA映射，完成后立即解除映射。
+传统TCP通信通过操作系统内核协议栈处理数据：用户态数据 → 内核态Socket Buffer → 网卡DMA缓冲区。
+==内核自身负责分配和固定（pin）用于DMA的内核缓冲区（如sk_buff的数据部分，其实就是page），用户空间内存无需pin==。
+
+因为数据会被复制到内核的固定区域。而 ==内核中网卡驱动分配出的内存本身就是物理地址固定的==。 并且通过内核的DMA映射接口（如dma_map_single()）临时建立DMA映射，完成后立即解除映射。
 
 #### DPDK用户态协议栈
 如果是用户态协议栈，那用户态协议栈本身要不要pin内存呢。一般用户态协议栈都基于DPDK，而DPDK一般使用hugepage，**hugepage是不支持swap的，因此不显式pin也是没有问题的**。
@@ -114,7 +202,7 @@ pin内存也叫锁页，就是固定虚拟地址和物理地址的映射，防�
 ### 介绍
 **FMR（Fast Memory Region/Registration）** 是RDMA中用于**优化内存注册/注销性能**的技术。
 传统的内存注册（通过 `ibv_reg_mr`）涉及操作系统和硬件的交互，开销较大（尤其是频繁注册/注销的场景）。
-FMR 通过 **预分配和复用内存注册资源** 来减少开销，适用于需要频繁注册/注销内存的场景（例如短生命周期的小块内存操作）。
+FMR 通过 **预分配和复用内存注册资源** 来减少开销，==适用于需要频繁注册/注销内存的场景==（例如短生命周期的小块内存操作）。
 
 
 ## PA-MR
@@ -151,7 +239,7 @@ ODP（On-Demand Paging）
 
 #### 背景
 借助ODP技术，应用程序无需确定用户注册的虚拟地址位于物理页的实际位置。
-在RDMA杂谈[对MR的介绍](https://zhuanlan.zhihu.com/p/156975042)中我们直到传统情况下本地的HCA是需要维护VA->PA的映射表的，如下图所示，且注册MR时需要通过锁页保证VA->PA的映射不会更改。而使用ODP后HCA不再需要维护映射表，而是当页面不存在时向操作系统请求新的VA->PA的转化。
+在RDMA杂谈[对MR的介绍](https://zhuanlan.zhihu.com/p/156975042)中我们知道，传统情况下本地的HCA是需要维护VA->PA的映射表的，如下图所示，且注册MR时需要通过锁页保证VA->PA的映射不会更改。而使用ODP后HCA不再需要维护映射表，而是当页面不存在时向操作系统请求新的VA->PA的转化。
 
 #### 分类
 ODP（On-Demand Paging）分为 隐式ODP 「 iODP：Implicit ODP」和 显式ODP  「Explicit ODP」。
@@ -203,6 +291,9 @@ MW允许用户更灵活的控制远端对本地内存的访问：动态的授予
 ## PD
 
 ## MR、MW和PD以及QP的关系
+
+![](attachments/deepseek_mermaid_20260319_e9d21a%202.png)
+
 除了上述中的 MR 和 MW，RDMA 中的内存管理还和 Protect Domain（简称 PD） 和 Queue Pair （简称 QP） 相关，这里不详细阐述这两个概念。下图详细介绍了，这些概念之间的依赖关系：
 
 ![](attachments/Pasted%20image%2020250317103530.png)

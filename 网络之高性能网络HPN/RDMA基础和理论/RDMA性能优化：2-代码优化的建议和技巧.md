@@ -173,13 +173,41 @@ acknowledging several completions in one call instead of several calls each time
 
 类似于 `ibv_ack_cq_events(ev_cq, num_cq_events)`;
 
-### 本端一次发送多个send wr，只有最后一个send wr才产生CQE
+### 本端一次发送多个send wr，只有最后一个send wr(signaled)才产生CQE
 比如：RC模式下，发送一个大的message，拆分为多个send wr（比如N个）。前面的 n-1个 send wr 是 unsignaled， 只有最后一个 send wr是 signaled；
 当收到最后一个send WR的CQE时，前面的n-1个send wr肯定是发送完成了的。最终，n个send wr也产生了一个CQE。
 
 
-==注：需要注意的是前 N-1 个send WR不产生CQE，不会导致send queue满==。
+==注：需要注意的是前 N-1 个send WR不产生CQE，可能会导致send queue满==。
 > 因为前 N-1 个send WR不产生CQE，就无法将前N-1个WQE从send queue中移除。一旦第N个send WR产生CQE，就会将这N个send WR 从send queue移除。
+- 从这里得知：==对于SQ，硬件作为消费者，尾指针的移动只有是能够产生CQE的WR(signaled)的消息发送完，才会移动；对于不产生CQE的WR，即使消息完成发送，硬件也不会移动尾指针==。
+
+
+> ==注：查看代码时，发现只有产生CQE时才会移动send queue的尾指针(消费者指针)。如下所示：==
+```bash
+rdma-core中的：
+	ibv_poll_cq --> mlx5_poll_cq --> poll_cq (providers/mlx5/cq.c)--> mlx5_poll_one--->
+	mlx5_parse_cqe 中查看对于 wq->tail 的操作。
+
+注：mlx5_wq_overflow 来在 _mlx5_post_send 时判断是否send queue是否满了。
+```
+
+![](attachments/Pasted%20image%2020260319105407.png)
+分析：==对于send queue，这个相当于是在软件层来操作SQ的头指针和尾指针，不需要硬件(消费者)来操作尾指针，这样可以提升性能。== 因为硬件操作尾指针，需要IOMMU通过PCIe来访问，影响性能。
+
+```bash
+SQ头指针的移动：
+	软件post_send的时候，移动head指针。
+
+SQ尾指针的移动：
+	产生CQE时候，可以得到关联的WR，可以得知这个WR在queue中的位置，进而可以移动尾指针（在CPU 进行 poll_cq的时候，移动 SQ的尾指针）。
+
+SQ是否为满判断：
+	mlx5_wq_overflow 来在 _mlx5_post_send 时判断是否send queue是否满了。
+
+哪些WR可以产生CQE：
+	signaled的WR 或者 unsignaled的WR产生了错误
+```
 
 
 ### RPC场景：本端send WR不产生CQE
@@ -198,6 +226,7 @@ RC模式，RPC场景，即`ping-pong`一问一答，即本端send request，对�
 1> 回收 send buffer
 2> 复用 WQE slot
 ```
+
 如果 UNSIGNALED, NIC 不会产生 CQE，于是程序，不知道 send 是否完成，会导致：
 ```bash
 1> WQE 无法回收
@@ -213,13 +242,79 @@ SQ 是一个 ring, SQ depth = N, 如果没有 completion, head 一直向前, tai
 
 `ibv_poll_cq()`中的`num_entries`尽量设置的大一些。保证能一次将CQ中现存的CQE全部poll出。
 
+这样做的，主要目的是消费者(CPU)尽可能快一点消费多一些CQE，**防止CQ溢出(overrun), 因为CQ溢出的危害实在是太大了**。
+
+### CQE的生成
+对于RDMA的Recv操作，RDMA除了接收对端传回的有效载荷，还需要通过DMA传输相应的完成队列元素（CQE）。
+如下图最左侧显示，**NIC会分别生成两个单独的DMA来处理Payload和CQE**。
+
+![](attachments/Pasted%20image%2020250319060413.png)
+```bash
+图7 对于对端RNIC使用Send操作发送少量数据时，本端RNIC的Recv操作优化
+```
+
+即：**CQE的生成，是网卡DMA通过PCIe写内存生成CQE的**。因为，应用程序在Poll CQ的时候，就不需要通过PCIe来访问了。
+
+
+### Poll CQ的损耗
+- 硬件生成 CQE → DMA 写到主存（CQE是CQ的一部分，CQ在主机内存，不在网卡内存） → 走 PCIe（网卡硬件主动发起）
+- 用户态 poll CQ → CPU 读内存 → 不走 PCIe（只是读本地内存）
+
+**硬件写CQE，和软件读CQE的安全性问题**：
+```bash
+CQE 有一个 owner bit：
+（1）NIC 写 CQE 时：
+1 写 CQE
+2 flip owner bit
+
+（2）CPU poll时：
+if (owner == expected)
+    CQE ready
+
+上面的机制，避免了CPU 和 NIC 同时读写，这是 lock-free 的关键。
+```
+### 小结
+对于WQ：应用程序是生产者，硬件是消费者。应用程序`post WQE（Post send/recv）`之后，需要通过PCIe 敲门铃（通过MMIO写硬件寄存器）的方式来通知硬件，有新的WQE任务要处理（CPU通知硬件，就是MMIO）。
+
+对于CQ：硬件是生产者，应用程序是消费者。硬件通过PCIe写CQE，应用程序通过Poll CQ取CQE。（高性能IO中，硬件不需要通知CPU，因为CPU是Polling CQ的； 对于传统IO，硬件是通过中断来通知CPU的。）
+
 ## 同一个QP的SQ和RQ关联到一个CQ还是2个CQ？
+
+**问题**：
+```bash
+有这样的一个通讯库，有多个线程，每个线程中都有多个连接，一个连接对应一个QP；每个连接都只在本线程中被访问，不会跨线程访问。
+使用的是RC模式，send/recv操作，client和server之间通过ping-pong这种一问一答的方式进行通信。 
+
+现在有一个问题，在每个线程中是创建一个CQ，还是2个CQ，性能更好？ 
+1》如果是一个CQ，那么这个线程中的每个qp的SQ和RQ都关联这个CQ；这个线程在poll cq的时候，需要区分是SWR还是RWR的CQE，然后进行不同的处理。 
+2》如果是两个CQ，那么这个线程中的每个qp的SQ关联一个CQ，RQ关联另外一个CQ；在这个线程中，poll 2个CQ，然后处理。
+```
+
+这个问题其实是 RDMA 通讯库设计里非常经典的一个取舍：**每线程 1 CQ vs 每线程 2 CQ（send / recv 分离）**
+
+### 分析
+
+前提条件：
+```bash
+- 多线程
+- 每线程多个 QP
+- QP 不跨线程
+- RC
+- ping-pong（严格 request → response）
+- 每个线程 busy poll CQ
+```
+
+如果**只有一个线程进行Poll cq，那么是一个CQ好，还是2个CQ好**呢？
+其实就应该看：一个CQ分支预测失败的开销，和两个CQ带来的多一个`ibv_poll_cq`哪个更大？
+猜测：应该是一个CQ的性能更好一些。
+
 ### 使用一个CQ
+
 ```c
 while (1) {
     n = ibv_poll_cq(cq, 32, wc);
 
-    for (i=0; i<n; i++) {
+    for (i = 0; i < n; i++) {
         if (wc[i].opcode == IBV_WC_RECV)
             handle_recv();
         else
@@ -230,6 +325,12 @@ while (1) {
 
 优点：实现简单；
 即使绑定同一 CQ，也必须按`opcode`（CQE 类型）+ `wr_id`（操作标识）过滤处理，不能依赖轮询顺序。
+
+**使用 1 个 CQ 的重要注意事项：防止溢出(overrun)**
+将该线程下所有 QP 的 SQ 和 RQ 都绑定到这 1 个 CQ 上，必须极其注意 CQ 的深度（Size）设置。
+
+
+
 
 ### 使用两个CQ
 **（1）可以使用2个CPU**：
@@ -243,11 +344,8 @@ thread1 → poll send_cq
 > 因为如果是公用一个CQ，send WR也会产生CQE，recv WR也会产生CQE；在一个线程中进行poll cq，会同时得到 send CQE和recv CQE。
 > 在发送端发送RPC请求后，收到对端响应之前，大概率会收到Send WR的CQE，需要进行处理，然后才是收到reponse的 recv CQE，进而导致RPC时延的计算偏大。
 
-注：==如果只有一个线程进行Poll cq，那么 send queue和recv queue共享一个CQ性能更好一些==。
-
-
 **（2）减少分支预测失败**：
-如果使用一个CQ：
+如果使用一个CQ：每次 poll 到 CQE 后，必须先通过 `wc.opcode` 判断是 SEND（写完成）还是 RECV（读完成），再分支处理；
 ```bash
 SEND CQE
 RECV CQE
@@ -256,15 +354,237 @@ RECV CQE
 ```
 代码中：`switch(wc.opcode)` 可能会CPU 分支预测会失败。
 
-如果拆 CQ，使用2个CQ，就不会有分支：
+使用2个CQ，就不会有分支：poll 收 CQ 时，拿到的 100% 是 RECV CQE；poll 发 CQ 时，拿到的 100% 是 SEND CQE，**完全省去 opcode 判断分支**。
 ```bash
 recv_cq → 只有 RECV
 send_cq → 只有 SEND
 ```
+- 硬件层面：CQE 的 opcode 字段在内存中是离散的，CPU 分支预测器对 “随机混合的 SEND/RECV” 预测命中率低（约 50%），分支失败会导致流水线清空，这是隐性性能损耗；
+- 软件层面：CQ分离后处理逻辑更简洁，无需在处理函数中加 if-else，代码执行路径更短。
 
-**（3）CQ 深度设置**：
+
+**（3）灵活的CQ 深度设置以及Poll 策略**：
 不同 CQ 可针对性设置深度（接收 CQ 通常需要更大的深度，避免接收 CQE 溢出）；
+RC ping-pong 场景中，“recv CQ” 是核心（需要及时处理并回包），“send CQ” 仅需清理资源（优先级低）；
+- 2 个 CQ 可针对性调优：
+    - recv CQ：用较小的 poll 批量（如 16/32），高频 poll，保证收包延迟；
+    - send CQ：用较大的 poll 批量（如 128/256），低频 poll，减少调用次数；
+> 注：收 CQ 用小批量、发 CQ 用大批量，本质是围绕 **“延迟敏感型任务”** 和 **“吞吐量型任务”** 的差异化优化。
 
+- 1 个 CQ 无法区分优先级，只能用统一的 poll 参数，要么牺牲收包延迟，要么增加 poll 开销。
+
+
+### 中断模式下查看以及设置产生中断的CPU
+
+```bash
+
+/**
+ * ibv_create_cq - Create a completion queue
+ * @context - Context CQ will be attached to
+ * @cqe - Minimum number of entries required for CQ
+ * @cq_context - Consumer-supplied context returned for completion events
+ * @channel - Completion channel where completion events will be queued.
+ *     May be NULL if completion events will not be used.
+ * @comp_vector - Completion vector used to signal completion events.
+ *     Must be >= 0 and < context->num_comp_vectors.
+ */
+ 
+struct ibv_cq *ibv_create_cq(struct ibv_context *context, int cqe,
+			     void *cq_context,
+			     struct ibv_comp_channel *channel,
+			     int comp_vector);
+```
+
+`ibv_create_cq`的`comp_vector`参数直接指定完成向量，驱动会将该向量对应的中断号绑定到指定的CPU-Core。
+```bash
+- 当你调用 `ibv_create_cq(context, ..., comp_vector)` 时，你指定了 `comp_vector`。
+- 这个 `comp_vector` 对应网卡硬件的一个 MSI-X 中断向量。
+- 操作系统会将这个 MSI-X 向量映射为一个 Linux IRQ 号。
+
+注：`comp_vector` 的设计初衷就是让不同的 CQ 可以绑定到不同的 CPU Core，实现并行处理和缓存局部性（Cache Locality）。
+```
+
+
+中断模式下，产生的中断是**硬件中断**，但是中断处理，会分为中断的上下部分。
+如果是轮询模式，则不会产生中断。
+
+#### 查看中断号以及绑定的CPU
+
+**（1）查看中断号**：
+
+方法一：
+```c
+ll /sys/class/net/eth03/device/msi_irqs/
+
+比如：
+# ls /sys/class/net/eth03/device/msi_irqs/
+418  420  422  424  426  428  430  432  434  436  438  440  442  444  446  448  450  452  454  456  458  460  462  464  466  468  470  472  474  476  478  480
+419  421  423  425  427  429  431  433  435  437  439  441  443  445  447  449  451  453  455  457  459  461  463  465  467  469  471  473  475  477  479  481
+```
+
+方法二：
+```bash
+vim /proc/interrupts
+```
+
+![](attachments/Pasted%20image%2020260312151012.png)
+
+如上所示，`mlx5_comp2@pci:0000:3b:00.0`，这个完成向量(comp_vector)是2，对应的中断号是本行的第一个字段，得到中断号之后，就可以得到该中断的CPU亲和性。
+> 注：在 `/proc/interrupts` 中能看到的 RDMA 网卡中断号（如 mlx5_comp1），就是==硬件中断==。
+
+
+**（2）查看中断号绑定的CPU亲和性**：
+```bash
+（1）查看：
+# cat /proc/irq/483/smp_affinity_list
+29
+
+（2）设置：
+# systemctl stop irqbalance
+# systemctl disable irqbalance
+# echo 6 > /proc/irq/419/smp_affinity_list
+```
+
+#### 查看某个CPU上实际产生的中断的次数
+**背景**：
+如果应用程序的性能差，但是又不知道是什么导致的性能差，此时可以看看线程所在的CPU上的中断的占比，来判断是否是中断响应导致性能差。
+
+
+（1）先用`top->1`, 查看是否软中断和硬中断比较高：
+如下所示：
+![](attachments/1773302711267.png)
+
+
+#### 对于中断模式，如果设置了完成向量对应的中断的CPU亲和性为1，但该线程绑定在CPU2上，那么epoll_wait还可以感知到事件的发生吗？有什么影响？
+
+可以感知到，epoll_wait能正常工作。
+
+**中断在 CPU 1，处理在 CPU 2**，但中断处理和事件通知是两个不同阶段的事情：
+
+- **中断处理阶段**：中断亲和性设置为CPU1，意味着当硬件产生CQE时，**网卡发出的MSI-X中断信号会被CPU1处理**。具体来说，CPU1会执行驱动注册的中断处理函数，这个函数负责从硬件事件队列(EQ)中读取事件，然后将事件加入到内核处理队列中。
+    
+- **事件通知阶段**：中断处理完成后，内核会唤醒等待在该CQ上的所有线程。这是内核的通用机制——**唤醒操作与线程当前绑定的CPU无关**。只要线程在`epoll_wait`上等待，它就会被标记为可运行，调度器会将其放在CPU2的运行队列中。
+
+
+所以完整路径是：**硬件触发中断 → CPU1执行中断处理并唤醒等待队列 → CPU2上的应用线程被调度执行 → epoll_wait返回**。
+
+### 使用CQ的注意事项
+#### 如果CQ溢出(overrun)了，会有什么影响?
+当 CQ 满时，NIC 无法再写 CQE，此时 HCA 会触发 CQ error，所有关联 的QP 进入 error state。
+即：
+```bash
+- NIC 检测到 CQ 已满
+- 触发 CQ error：当底层检测到CQ溢出时，会生成一个CQ错误，并向应用程序触发 `IBV_EVENT_CQ_ERR` 异步事件
+- CQ 状态变为 error
+- 与该 CQ 关联的 QP 进入 error state： 
+	- QP 状态：RTS → ERR
+	- NIC 会把未完成的 WR 全部 flush，意味着：未完成请求全部失败；
+	- ibv_poll_cq() 可能得到 IBV_WC_WR_FLUSH_ERR，而不是正常的CQE；
+
+简化流程:
+CQ full
+   ↓
+CQ overrun
+   ↓
+CQ error event
+   ↓
+QP error
+```
+
+为什么 CQ overrun 设计得这么“狠”？
+```bash
+原因是 CQE 不能丢。
+如果 NIC 在 CQ 满时简单丢弃 CQE，会导致：应用不知道哪些 WR 已完成, 这会破坏 RDMA 的基本语义，例如：
+send buffer 是否可以释放？
+recv buffer 是否可以复用？
+
+因此硬件的策略是：宁可终止连接，也不能 silently drop CQE。
+```
+
+#### CQ溢出(overrun)的原因
+
+CQ 本质是一个 NIC 写（生产者）、CPU 读（消费者）的环形队列。
+如果 **`NIC 产生 CQE 的速度 > CPU poll CQ 的速度`**,  最终会发生 CQ 被写满，此时 NIC 无法再写新的 CQE，这就是 CQ overrun / CQ overflow。
+
+**（1）配置层面**
+- CQ 深度不足
+- 中断 moderation 设置不当（如果使用中断模式）：
+如果启用了中断聚合（Interrupt Moderation），网卡会积攒多个 CQE 后才触发一次中断。如果积攒速度过快而应用响应中断稍慢，可能在单次中断处理周期内 CQ 就满了。
+
+**（2）软件层面**：poll cq 消费不及时
+- poll 被阻塞：poll CQ 的线程被其他耗时操作抢占（比如加锁等待、磁盘 IO、sleep、日志打印、网络同步调用），导致长时间未执行`ibv_poll_cq`；
+- poll 策略不合理：例如：`ibv_poll_cq(cq, 1, &wc)`; 每次只取一个 CQE。
+- poll 线程被调度暂停(多个线程竞争一个CPU core)
+
+**（3）硬件层面**
+- 突发流量：比如 ping-pong 场景中多个客户端同时发起请求，短时间内 CQE 生成速度骤增，超过 poll 的处理能力；
+- QP异常：QP 状态异常（如 RC 连接断连重连）导致 CQE 批量生成，或网卡固件 bug 引发 CQE 计数错误（极少数）。
+
+#### 程序运行中，CQ overrun后能否补救？
+一旦检测到 `CQ overrun`（可以通过 `ibv_get_async_event()` 捕获异步事件 `IBV_EVENT_CQ_ERR`来感知），**不可“补救”** 或恢复该 CQ 的正常使用，**必须重建**资源才可以恢复通信。
+
+Verbs API (`libibverbs`) 没有提供“清空 CQ”或“重置 CQ 指针”的接口来修复溢出。CQ 的设计是一次性的，**CQ一旦出错，必须销毁重建**。
+```bash
+销毁重建：
+1》销毁
+- 立即停止向受影响的 QP 提交新的 Work Request。
+- 先将关联的 QP 重置或销毁（`ibv_destroy_qp` 或先 modify 到 RESET 状态）。
+- 销毁溢出的 CQ (`ibv_destroy_cq`)。
+
+2》重建
+- 创建一个新的 CQ（建议适当增加深度）。
+- 创建新的 QP。
+- 重新执行 QP 的状态机流转（INIT -> RTR -> RTS 等），重新建立连接（如果是 RC/UC 类型）。
+```
+
+#### 工程实践中的预防CQ overrun的方法
+预防 CQ overflow 的核心原则：
+```bash
+减少 CQE
+提高 poll 速度
+增大 CQ 容量
+限制 outstanding WR
+```
+
+**(1) CQ size 设计要足够大**
+很多高性能 RDMA RPC 系统的配置：
+```bash
+CQ size       = 16384 ~ 65536
+outstanding   = 128 ~ 512
+signal ratio  = 1/32 ~ 1/128
+poll batch    = 16 ~ 64
+```
+
+**(2) 减少send CQE的数量**
+```bash
+合理使用 unsignaled send
+在 RC 模式下，不是每个 send 都必须产生 CQE。
+```
+
+**(3) 发送端流控**：限制 outstanding Send WR
+```bash
+很多 CQ overflow 其实是 应用层无限 post send。
+正确做法：credit control。比如，只有当 Send CQE 回来， credit++， 才允许继续 send。
+
+监控与动态调整：
+1> 查询 CQ 使用情况：  
+现代 RDMA 网卡驱动通常支持通过 sysfs 或 `ibv_exp_cq` 接口获取 CQ 的繁忙程度（如已使用的 CQE 数量）。  
+应用程序可定期采样，若接近阈值则动态调整发送速率或通知上层降低负载。
+
+2> 自适应流控：
+基于 CQ 剩余容量实现发送端的背压(backpressure)机制：当 CQ 使用率超过一定百分比（如 80%）时，自动降低下发 WR 的速率，或暂停下发直到 CQ 被清空到安全水位。
+```
+
+**(4) poll CQ 必须足够快**
+```bash
+1> 使用 batch poll
+2> 让 poll thread CPU pinned, 避免 scheduler 抢占。
+3> 避免poll cq的线程阻塞
+```
+
+**（5）增加CQ数量**
+send CQ和recv CQ分开；
+单线程中设置多个CQ：比如高吞吐场景，按 QP 分组（每 8~16 个 QP 共享一个收 CQ / 发 CQ），分散单 CQ 的压力。
 
 
 ## 避免使用许多分散/聚集sge条目

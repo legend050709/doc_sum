@@ -641,6 +641,64 @@ MLNX-OFED 是 Mellanox（已被 NVIDIA 收购）基于 OFED 的一个定制版�
 ==IBTA主要负责开发、维护和增强Infiniband协议标准规范(IB Spec)==；
 ==OFA负责开发和维护Infiniband协议和上层应用API==。
 
+### OCP
+Open Compute Project（开放计算项目）：是一个由科技公司联合发起的**开源硬件社区**，核心是通过开放协作，重构数据中心的服务器、网络、存储、电源、散热等硬件设计，追求更高效率、更低成本与更快创新速度。
+
+核心要点（一句话版）：OCP 是**数据中心硬件界的 “开源社区 + 标准组织”**，把服务器、网卡、交换机等**硬件设计公开共享**，让企业和厂商能**基于标准**快速定制、迭代，**避免重复造轮子**，适配超大规模与 AI 算力需求。
+
+```bash
+Linux Foundation —— 软件开源
+OCP Foundation —— 数据中心硬件开源
+```
+
+- **起源**：Facebook 发现传统服务器厂商（如  Dell Technologies、  Hewlett Packard Enterprise）提供的服务器：成本高、设计不透明、不适合超大规模数据中心；于是 Facebook 自己设计服务器，把设计方案开源，让供应商按这个标准生产；这就是 OCP 的开始。
+
+- **核心逻辑**：像软件开源一样，==硬件设计开放共享、标准统一==，加速创新、降低门槛、提升兼容性。
+
+#### OCP 的主要成员
+OCP 现在已经是全球最大的开放硬件组织之一，成员包括很多科技公司，例如：
+```bash
+- Meta Platforms
+- Microsoft
+- Google
+- Intel
+- NVIDIA
+- Broadcom
+```
+以及大量服务器厂商和云厂商。
+
+#### OCP 主要做什么
+##### 开源数据中心硬件设计
+```bash
+服务器主板
+机架
+交换机
+电源
+散热系统
+```
+厂商可以直接按照这些设计生产设备。
+
+##### 制定开放标准
+例如网络硬件：
+```bash
+- OCP NIC
+- OCP switch
+- OCP rack
+```    
+这样不同厂商设备可以互相兼容。
+
+##### 技术项目协作
+OCP 内部有很多技术项目组，例如：
+```bash
+- 网络
+- 存储
+- AI 加速器
+- 数据中心电源
+```
+企业可以在这些项目里一起设计新技术。
+
+
+
 ## 开发社区
 
 ### Linux社区
@@ -1174,6 +1232,8 @@ DMA: Direct Memory Access (直接内存访问)
 #### MR
 Memory Region，内存区域。
 MR是注册到RDMA网卡的一块内存区域，RDMA网卡只能访问用户注册过的MR范围内的内存。注册时会在内存中创建MR内存的VA->PA映射页表，并pin住相应的物理页。之后RDMA网卡才能通过这个页表来获取用户态下发的VA对应的PA，从而访问到物理内存。这个过程和IOMMU注册和访问的过程类似，RDMA网卡实现了IOMMU的类似功能。
+
+![](attachments/deepseek_mermaid_20260319_e9d21a.png)
 
 #### PD
 PD：Protection Domain，保护域。

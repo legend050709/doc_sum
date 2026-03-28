@@ -15,6 +15,9 @@ SQ和RQ都属于WQ(work queue)。
 ## WQ
 WQ（Work Queue）：App 要收/发数据，就会放置一个 WR（Work Request）到 WQ 作为 WQE（WQ Element）。WQE 是 RNIC 硬件执行任务单元，包含了软件需要硬件执行的动作。RNIC 会获取到 WQE 进行处理。
 
+> 注：Work Queue Elements，简称 WQEs，发音为“wookies”；
+> Completion Queue Element，简称 CQE，发音为“cookie”
+
 ### SQ 和 RQ
 
 因为 RDMA 支持全双工通信，所以 WQ 进一步细分为 SQ 和 RQ，并称为 QP（Queue Pairs）。通信双方使用一对 QP，通过 BTH QPN 唯一标识，并以此创建 Channel。1 个 RDMA App 可以按需创建多对不同的 QPs 和 Channels。这些 QP 可以用于不同的通信目的，例如：使用不同的服务类型。
@@ -28,12 +31,77 @@ RQ（Receive Queue）：存放 Receive WQE。
 ## CQ
 CQ（Complete Queue）：RNIC 每处理完一个 WQE 之后，就会写入一个 CQE 到 CQ，App 从 CQE 中确认一个 WC（Worker Completion）。
 
+## 其他
+### Send WQE / Recv WQE / CQE 是在主机内存，还是网卡的片上内存？
+
+WQE（Work Queue Entry）和 CQE（Completion Queue Entry）主要存放在**主机内存（RAM）** 中，而不是网卡的片上内存。它们位于主机内存中预分配的**队列缓冲区（Queue Buffer）** 内，由驱动负责管理，而网卡通过 DMA 的方式直接访问这些队列元素。NIC 只在片上缓存（cache）这些结构的“部分”或“热点”。
+
+|队列元素|存储位置|管理方|访问方式|
+|---|---|---|---|
+|**WQE** (工作队列元素)|主机内存中的 SQ/RQ 环形缓冲区|驱动程序负责填写|网卡通过 PCIe DMA **读取**|
+|**CQE** (完成队列元素)|主机内存中的 CQ 环形缓冲区|网卡硬件负责填写|驱动程序通过 CPU **读取**（轮询）|
+
+RDMA 的核心设计原则就是 **“数据和控制面都在主机内存，网卡通过 DMA 直接访问”**，从而避免 CPU 参与数据搬运和复杂的队列管理。
+
+#### Send WQE 流程
+流程如下：
+```bash
+CPU 填 WQE → 放到主机内存 SQ
+        ↓
+NIC DMA 读取 WQE
+        ↓
+NIC 执行（发包）
+        ↓
+NIC DMA 写 CQE → 主机内存 CQ
+        ↓
+CPU poll CQ
+```
+
+#### Recv WQE 流程
+当 packet 到达：
+```bash
+NIC：
+  从 RQ / SRQ 中取一个 WQE
+  → DMA 写数据到对应 buffer
+```
+
+#### 网卡片上内存 (On-Chip Memory / SRAM) 到底存了什么？
+
+片上内存很小（几 MB～几十 MB），只存**极少量、高频使用的状态**：
+
+1. **QP Context (QPC：QP上下文)**：
+    - 这是最重要的。每个 QP 的状态（PSN 序列号、QKey、目标地址、当前 WQ 的 Head/Tail 指针、CQ 的指针、状态机状态 ESTABLISED/RESET 等）必须存在网卡的**片上高速 SRAM**中。
+    - **原因**：网卡处理每个包都需要极快地访问这些状态。如果每次都要去主机内存读 QP 上下文，延迟会太高，无法达到线速。
+    - **容量限制**：这就是为什么网卡有 `max_qp` 限制。片上 SRAM 有限，能存的 QP 上下文数量是有限的。
+
+2. **WQE/CQE 的 FIFO 缓存**：
+    - 网卡从主机内存读来的 WQE，会先放在内部的 FIFO 里排队等待执行。
+    - 网卡生成的 CQE，也会先放在内部 FIFO 里，攒一波再写回主机内存。
+
+3. 页表（MPT / MTT）
+
+#### 小结
+
+Send WQE、Recv WQE、CQE 以及数据(data)，都在主机内存中，NIC 通过 PCIe DMA 访问它们；
+NIC 片上只缓存少量上下文和热点数据，而不会存完整队列。
+
+```bash
+WQE  → 主机内存（NIC DMA 读）
+Data → 主机内存（NIC DMA 读/写）
+CQE  → 主机内存（NIC DMA 写）
+
+
+Host Memory  = 数据 + 队列
+NIC          = 执行引擎 + 状态缓存
+PCIe         = 通信通道
+```
+
+
+
 # RDMA选择了SQ/RQ/CQ，而非传统的Ring Buffer？
 参考：[# 为什么RDMA选择了SQ/RQ/CQ，而非传统的Ring Buffer？](https://mp.weixin.qq.com/s/8kR6MQCguLB4zG64lhsImw)
 
 RDMA的设计选择往往被视为技术决定，但背后蕴含着深刻的工程哲学。这些选择反映了对分布式系统本质的理解，以及对性能、安全性和可扩展性的权衡。
-
-
 
 
 # QP
@@ -681,9 +749,6 @@ If the QP was transitioned to this state automatically, the first Work Request t
 
 但是，如果只看到了 `IBV_WC_WR_FLUSH_ERR` 错误，没有看到其他的错误。此时就看下对端设备的QP是否存在错误，以及本端是否存在异步事件。
 
-
-
-
 # CQ
 
 ## CQE (Completion Queue Element)
@@ -984,13 +1049,15 @@ struct ibv_wc {
     uint32_t        imm_data;
     uint32_t        qp_num;
     uint32_t        src_qp;
-    int         wc_flags;
+    int             wc_flags;
     uint16_t        pkey_index;
     uint16_t        slid;
     uint8_t         sl;
     uint8_t         dlid_path_bits;
 };
 ```
+
+**wc中几个重要的字段：wr_id， imm_data, wc_flags, opcode， status**
 
 ![](attachments/Pasted%20image%2020251025060539.png)
 

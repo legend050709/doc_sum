@@ -126,6 +126,37 @@ perf record -F 99 -t xxx --call-graph dwarf -- sleep 30
 最后在谷歌浏览器上打开该火焰图文件（perf.svg）：
 ![](attachments/Pasted%20image%2020240130153922.png)
 
+### 完整脚本
+```bash
+# cat get_perf_flame_graph.sh
+#!/usr/bin/env bash
+
+set -e
+
+if [ $# -lt 2 ]; then
+    echo "Usage: $0 <tid> <output_name>"
+    exit 1
+fi
+
+TID=$1
+OUT=$2
+
+DURATION=20
+PERF_DATA=${OUT}.data
+PERF_OUT=${OUT}.perf
+FOLDED=${OUT}.folded
+SVG=${OUT}.svg
+
+echo "Profiling TID=${TID} for ${DURATION}s..."
+
+perf record -F 99 -t ${TID} --call-graph dwarf -o ${PERF_DATA}  -- sleep ${DURATION}
+
+perf script -i ${PERF_DATA} > ${PERF_OUT}
+
+./FlameGraph/stackcollapse-perf.pl ${PERF_OUT} &> ${FOLDED}
+./FlameGraph/flamegraph.pl ${FOLDED} > ${SVG}
+```
+
 
 ### 小结
 ```bash
@@ -148,7 +179,7 @@ perf report -i ./perf.data --sort comm,dso,symbol
 perf report -i ./perf.data 
 ```
 
-# 红蓝差分火焰图（Differential Flame Graph）
+# 差分（红蓝差分）火焰图（Differential Flame Graph）
 
 差分火焰图（Differential Flame Graph）通过对比两组火焰图的数据差异，将性能变化可视化。
 通常，一组火焰图为基准状态，另一组为调整后的状态。对比结果会用不同颜色表示变化——如红色表示性能退化，绿色表示性能提升。差分火焰图在性能调优和资源利用的对比分析中很有帮助，尤其是测量两种IPC的差异对比。
@@ -213,6 +244,8 @@ cd FlameGraph
 
 # 基于折叠结果做差
 ./difffolded.pl -n A.folded B.folded > diff.folded
+注：上面生成的差分火焰图以采样数据B为基准。既然是这样的话，当涉及到回归的时候，我们应当将初始数据作为采样数据B，这样我们的比较基准就是初始数据，这样能够更好的进行比较。
+
 
 # 生成差分火焰图
 ./flamegraph.pl diff.folded > diff.svg

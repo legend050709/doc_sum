@@ -88,6 +88,42 @@ DPDK 官方 的 Mellanox Cx4 25G网卡的性能调优：
 
 ![](attachments/Pasted%20image%2020230911201214.png)
 
+# 不支持sniffer时，使用高版本的tcpdump可以直接抓取
+```bash
+# ethtool --set-priv-flags eth03 sniffer on
+ethtool: bad command line argument(s)
+For more information run ethtool -h
+
+#  ethtool --show-priv-flags eth03
+Private flags for eth03:
+rx_cqe_moder       : on
+tx_cqe_moder       : off
+rx_cqe_compress    : off
+tx_cqe_compress    : off
+rx_striding_rq     : on
+rx_no_csum_complete: off
+xdp_tx_mpwqe       : on
+skb_tx_mpwqe       : on
+dropless_rq        : off
+per_channel_stats  : on
+tx_xdp_hw_checksum : off
+skb_xmit_more      : off
+tx_port_ts         : off
+```
+
+如上所示，不支持 sniffer. 此时可以下载高版本的 tcpdump；
+==对于Mellanox网卡，直接用高版本的 tcpdump抓取 ib 设备，就可以抓取`DPDK，RDMA`等`bypass-kernel`的流量==。
+> 注意：**使用的是ib设备名称进行抓包，而不是eth设备名称**。
+
+
+```bash
+# ibdev2netdev
+mlx5_bond_0 port 1 ==> bond1 (Up)
+
+# tcpdump -nni mlx5_bond_0
+
+```
+
 # 补充说明
 ## flow  bifurcation 流分叉介绍
 ![](attachments/Pasted%20image%2020230912101922.png)

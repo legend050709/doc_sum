@@ -1,7 +1,7 @@
 ```table-of-contents
 ```
 # 概述
-DPDK 是一个为高速网络环境而设计的工具库，通过绕过内核（kernel bypsss）的方式获得强大的数据处理性能。DPDK 为了获得高吞吐，充分利用了硬件特点并灵活使用了各种数据结构，本文将探索其中的一个重要数据结构——无锁队列。
+DPDK 是一个为高速网络环境而设计的工具库，通过绕过内核（`kernel bypsss`）的方式获得强大的数据处理性能。DPDK 为了获得高吞吐，充分利用了硬件特点并灵活使用了各种数据结构，本文将探索其中的一个重要数据结构——无锁队列。
 
 # 无锁环形队列的特点
 无锁环形队列就能理解这是一种环形队列，它没有锁。队列是一种我们常见的数据结构，保证了元素的先进先出，环形队列则是头尾相连，它是一个环形，通常呢是一个固定大小的闭环队列。
@@ -263,6 +263,39 @@ ssize_t rte_ring_get_memsize_elem(unsigned int esize, unsigned int count)
 	return sz;
 }
 ```
+
+### rte_ring_create 和 rte_ring_create_elem
+
+
+|维度|rte_ring_create|rte_ring_create_elem|
+|---|---|---|
+|元素大小|固定为 `sizeof(void *)`（指针大小，64 位系统 8 字节）|自定义元素大小（bytes），可设任意值|
+|设计初衷|早期版本接口，仅支持存储指针|新版增强接口，支持存储任意结构 / 数据块|
+|内存分配|内部按「指针数」分配内存|按「元素数 × 自定义元素大小」分配内存|
+|核心操作接口|`rte_ring_enqueue/dequeue`（操作指针）|`rte_ring_enqueue_elem/dequeue_elem`（操作自定义元素）|
+|兼容性|兼容所有 DPDK 版本|DPDK 18.05+ 引入，低版本无此接口|
+
+简单来说，**`rte_ring_create` 是 `rte_ring_create_elem` 在 `esize = sizeof(void *)` 时的特例**。
+
+|场景|rte_ring_create（指针）|rte_ring_create_elem（自定义元素）|
+|---|---|---|
+|存储指针（如 mbuf）|最优（原生设计）|无优势，且浪费内存（元素大小≥指针）|
+|存储小数据块（≤64B）|需指针解引用（缓存 miss 风险）|更优（数据直接存在 ring 内存，缓存友好）|
+|多生产者 / 多消费者|无锁性能一致|无锁性能一致（底层无锁逻辑相同）|
+|内存开销|小（仅存指针）|大（元素数 × 自定义大小）|
+|操作耗时|极短（仅拷贝指针）|随元素大小增加（拷贝数据块）|
+
+
+其他操作：
+
+|操作|传统 API（基于指针）|元素 API（基于大小）|
+|---|---|---|
+|入队（单对象）|`rte_ring_enqueue(r, ptr)`|`rte_ring_enqueue_elem(r, obj, esize)`|
+|出队（单对象）|`rte_ring_dequeue(r, &ptr)`|`rte_ring_dequeue_elem(r, obj, esize)`|
+|批量入队|`rte_ring_enqueue_bulk(r, ptr_array, n, NULL)`|`rte_ring_enqueue_bulk_elem(r, obj_array, esize, n, NULL)`|
+|批量出队|`rte_ring_dequeue_bulk(r, ptr_array, n, NULL)`|`rte_ring_dequeue_bulk_elem(r, obj_array, esize, n, NULL)`|
+
+
 
 ## 环形队列的缓冲区大小
 ### 背景

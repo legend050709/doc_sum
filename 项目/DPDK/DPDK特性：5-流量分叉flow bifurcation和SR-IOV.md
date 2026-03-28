@@ -855,7 +855,7 @@ ip addr show
 SR-IOV +  Flow filter(rte_flow/ fdir)
 
 或者 Mellanox 网卡 +  Flow  director
-
+> 注：感觉 Mellanox 网卡的流分叉， 也是在网卡内部默认启动了SR-IOV，匹配`rte_flow`规则的流量走了`某个VF（感觉像是底层默认创建的）`下的队列，给DPDK应用程序；不匹配的流量则给了PF的队列，给内核协议栈；
 
 ## 流量分叉的理解
 
@@ -999,8 +999,10 @@ testpmd> flow isolate 0 true
 testpmd> flow create 0 ingress pattern eth / ipv4 / udp / vxlan vni is 42 / end actions rss queues 0 1 2 3 end / end
 ```
 
-Mellanox Cx系列网卡天然支持流量分叉，不需要在配置SR-IOV PF/VF 进行流量分叉。Mellanox Cx系列流量分叉的好处有：
+Mellanox Cx系列网卡**天然支持流量分叉**，不需要在配置SR-IOV PF/VF 进行流量分叉。
+> 注：感觉像是Mellanox Cx系列网卡，在DPDK使用该网卡时，自己在内部创建了VF，配置了FDIR规则，匹配的流量进入了该VF的队列，给了DPDK应用程序；不匹配的流量走了PF的队列，给了内核协议栈；
 
+Mellanox Cx系列流量分叉的好处有：
 - 更好的性能，DPDK应用直接处理数据面的流量。
 - 网卡依然可以被内核控制。
 - Linux kernel 的控制工具/命令依然可以使用。比如，ethtool
@@ -1024,7 +1026,6 @@ Mellanox PMD 可以理解为 使用 Mellnaox 网卡的 DPDK 应用程序；
 
 ![](attachments/Pasted%20image%2020240620163219.png)
 
-
 #### DPDK 使用 Mellanox 网卡的特殊之处
 
 DPDK通过 `-w/-a PCIe` 来使用  Mellanox 网卡，存在一些特殊的地方。
@@ -1038,9 +1039,9 @@ DPDK程序 通过 `-w/-a PCIe`来使用 Mellanox网卡之后，物理网卡依�
 
 
 **（2）流量分叉**
-可以在DPDK程序中通过 `rte_flow_isolate` + 下发指定的 RSS/FDIR 规则，将匹配到规则的流量导流到 DPDK程序，其他的控制流量还是PASS 给内核，进而做到了流量分叉，这样即使DPDK程序挂掉，也不会导致系统的不可用。
+可以在DPDK程序中通过 `rte_flow_isolate` + 下发指定的 `RSS/FDIR` 规则，将匹配到规则的流量导流到 DPDK程序，其他的控制流量还是PASS 给内核，进而做到了流量分叉，这样即使DPDK程序挂掉，也不会导致系统的不可用。
 
-注：在 DPDK中通过 `rte_flow` 创建的规则，通过 `ethtool -n ethx` 也是无法看到的。感觉 Mellanox 网卡实现流量分叉，驱动里可能也是封装了PF/VF，DPDK绑定Mellanox网卡，可能就是在内层新建了 VF，DPDK中设置的rte_flow 作用于这个VF，这个VF又不对外暴漏。DPDK程序退出时，这样的VF及其规则都自动销毁了。
+注：在 DPDK中通过 `rte_flow` 创建的规则，通过 `ethtool -n ethx` 也是无法看到的。==感觉 Mellanox 网卡实现流量分叉，驱动里可能也是封装了PF/VF，DPDK绑定Mellanox网卡，可能就是在内层新建了 VF，DPDK中设置的rte_flow 作用于这个VF，这个VF又不对外暴漏==。DPDK程序退出时，这样的VF及其规则都自动销毁了。
 
 **（3）抓包**
 DPDK 使用 Mellnaox 网卡，Mellanox 网卡使能 sniffer 特性，那么就可以在Linux中使用 tcpdump 抓到 DPDK程序收到的 数据包。
@@ -1048,7 +1049,7 @@ DPDK 使用 Mellnaox 网卡，Mellanox 网卡使能 sniffer 特性，那么就�
 ![](attachments/Pasted%20image%2020240912131700.png)
 
 > 注：低版本的 MLNX_OFED（5.1以下），要用ethtool --set-priv-flags ethxx sniffer on开启dump报文，之后就可以正常用tcpdump抓包了；
->  对于高版本的 MLNX_OFED，没有sniffer选项了。需要高版本的tcpdump才能抓包。使用方式是./tcpdump -i mlx5_xx -nnn需要将xx替换成自己要抓包的网卡序号。
+>  对于高版本的 MLNX_OFED，没有sniffer选项了。需要**高版本的tcpdump**才能抓包。使用方式是==./tcpdump -i mlx5_xx -nnn==需要将==`mlx5_xx`替换成`ibdev2netdev`看到的网卡的名称==。
 
 
 ### 博通系列网卡

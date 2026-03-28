@@ -242,6 +242,11 @@ struct rte_mempool * rte_mempool_create(const char *name, unsigned n, unsigned e
 	rte_mempool_ctor_t *mp_init, void *mp_init_arg,
 	rte_mempool_obj_cb_t *obj_init, void *obj_init_arg,
 	int socket_id, unsigned flags);
+
+n: 元素的个数
+elt_size：每个元素的大小
+cache_size：每个core的cache的大小；
+private_data_size：私有数据的大小；比如：对于rte_mbuf 作为某个结构体的第一个成员变量，可以私有数据的大小就是这个结构体的大小-sizeof(rte_mbuf);
 ```
 
 ### 存在cache时，mempool的总的元素的个数

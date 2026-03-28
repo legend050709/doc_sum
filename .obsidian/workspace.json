@@ -8,105 +8,77 @@
         "type": "tabs",
         "children": [
           {
-            "id": "693f0bcd7899019f",
+            "id": "11a6427f15b9efe3",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "操作系统/IO/网络IO线程模型：3-Reactor和Proactor模型.md",
-                "mode": "source",
+                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：4-流控之RC类型下IB传输层消息级别的端到端流控.md",
+                "mode": "preview",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "网络IO线程模型：3-Reactor和Proactor模型"
+              "title": "RDMA流控和拥塞控制：4-流控之RC类型下IB传输层消息级别的端到端流控"
             }
           },
           {
-            "id": "a679fc45b78b850d",
+            "id": "06bba0f04808d462",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "操作系统/系统调用/4-EINTR 错误和被中断的系统调用.md",
+                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：4-流控之RC类型下IB传输层消息级别的端到端流控.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "4-EINTR 错误和被中断的系统调用"
+              "title": "RDMA流控和拥塞控制：4-流控之RC类型下IB传输层消息级别的端到端流控"
             }
           },
           {
-            "id": "019b32ba7215ff1a",
+            "id": "a13093b6ee920d52",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "操作系统/系统调用/1-系统调用的理解.md",
+                "file": "网络之物理网络/grpc/为什么有了HTTP，还要用RPC.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "1-系统调用的理解"
+              "title": "为什么有了HTTP，还要用RPC"
             }
           },
           {
-            "id": "3e3f9a1021ed3130",
+            "id": "7ca8f9519c3a1662",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA性能优化：2-代码优化的建议和技巧.md",
+                "file": "操作系统/IO/网络IO模型：4-IO多路复用epoll的原理和使用介绍.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA性能优化：2-代码优化的建议和技巧"
+              "title": "网络IO模型：4-IO多路复用epoll的原理和使用介绍"
             }
           },
           {
-            "id": "acdb008acd1467b0",
+            "id": "ca1d172d5840365e",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA性能优化：2-代码优化的建议和技巧.md",
+                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA连接可扩展性：2-DCT和XRC以及RD.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA性能优化：2-代码优化的建议和技巧"
-            }
-          },
-          {
-            "id": "cea6177e8df552a0",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "操作系统/中断/中断&异常&系统调用.md",
-                "mode": "source",
-                "source": true
-              },
-              "icon": "lucide-file",
-              "title": "中断&异常&系统调用"
-            }
-          },
-          {
-            "id": "deafc81ba064a680",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "操作系统/系统调用/1-系统调用的理解.md",
-                "mode": "source",
-                "source": true
-              },
-              "icon": "lucide-file",
-              "title": "1-系统调用的理解"
+              "title": "RDMA连接可扩展性：2-DCT和XRC以及RD"
             }
           }
         ],
-        "currentTab": 6
+        "currentTab": 4
       }
     ],
     "direction": "vertical"
@@ -125,7 +97,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "系统调用",
+                "query": "GDA",
                 "matchingCase": true,
                 "explainSearch": false,
                 "collapseAll": true,
@@ -159,11 +131,12 @@
               "title": "文件列表"
             }
           }
-        ]
+        ],
+        "currentTab": 2
       }
     ],
     "direction": "horizontal",
-    "width": 460.5
+    "width": 580.5
   },
   "right": {
     "id": "a93c1244e0a44ed2",
@@ -253,54 +226,53 @@
       "command-palette:打开命令面板": false
     }
   },
-  "active": "deafc81ba064a680",
+  "active": "ca1d172d5840365e",
   "lastOpenFiles": [
-    "操作系统/中断/中断&异常&系统调用.md",
-    "操作系统/系统调用/1-系统调用的理解.md",
-    "操作系统/中断/attachments/Pasted image 20260307233953.png",
-    "操作系统/中断/attachments/Pasted image 20260307233940.png",
-    "操作系统/中断/attachments/Pasted image 20260307233732.png",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA性能优化：3-设计一个高性能的RDMA系统.md",
-    "操作系统/内存管理/Linux C中的内存模型：3-Page Fault.md",
-    "语言/预处理 & 编译 & 汇编 & 链接/动态库和静态库/动态库：1-linux动态库的理解.md",
-    "操作系统/内存管理/MMU & IOMMU & DMA & MMIO 理解.md",
-    "语言/C和C++/C函数：5-linux下获取时间的方式以及性能对比.md",
-    "操作系统/IO/异步IO-io_uring ：1-介绍与理解.md",
-    "操作系统/IO/attachments/Pasted image 20260307230920.png",
-    "操作系统/IO/异步IO-io_uring ：2-实现.md",
-    "操作系统/内存管理/attachments/Pasted image 20260307184929.png",
-    "操作系统/内存管理/attachments/Pasted image 20260307184909.png",
-    "操作系统/内存管理/attachments/Pasted image 20260307184345.png",
-    "操作系统/内存管理/attachments/Pasted image 20260307184018.png",
-    "操作系统/内存管理/attachments/Pasted image 20260307183855.png",
-    "操作系统/内存管理/attachments/Pasted image 20260307183707.png",
-    "操作系统/内存管理/malloc和free：1-malloc 是如何分配内存的.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：1-RDMA无损网络.md",
-    "网络之云网络和容器网络/虚拟化/vSwitch：vSwitch技术解析与未来十年趋势展望.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA入门之0：2-总体介绍.md",
+    "网络之高性能网络HPN/GPU相关技术栈/基本概念：2-GPUDirect RDMA 和 GPUDirect Async.md",
+    "网络之高性能网络HPN/AI应用",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA连接可扩展性：2-DCT和XRC以及RD.md",
+    "网络之高性能网络HPN/RDMA基础和理论/attachments/Pasted image 20260327203038.png",
     "网络之高性能网络HPN/RDMA基础和理论/RDMA性能优化：1-性能指标.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA入门之一：4-RDMA QP和CQ.md",
-    "网络之物理网络/数据中心 & 硬件 & 网卡/PCIe基本概念和框架图（一）.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA入门之二：2-libibverbs库以及API接口.md",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA连接可扩展性：1-可扩展的RNIC.md",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA工具：1-工具概述.md",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA工具：5-perftest工具集.md",
+    "操作系统/IO/网络IO模型：4-IO多路复用epoll的原理和使用介绍.md",
+    "网络之高性能网络HPN/GPU集合通讯库/性能：性能指标.md",
+    "网络之高性能网络HPN/GPU集合通讯库/并行计算：1-概述.md",
+    "网络之高性能网络HPN/GPU集合通讯库/DeepEP：1-整体介绍.md",
+    "网络之物理网络/grpc/为什么有了HTTP，还要用RPC.md",
+    "网络之物理网络/grpc/attachments/Pasted image 20260326173154.png",
+    "网络之物理网络/grpc/attachments/Pasted image 20260326172847.png",
+    "网络之物理网络/grpc/attachments/Pasted image 20260326172639.png",
+    "网络之物理网络/grpc/attachments/Pasted image 20260326172508.png",
+    "网络之物理网络/grpc/attachments/Pasted image 20260326171900.png",
+    "网络之物理网络/grpc/attachments/Pasted image 20260326171709.png",
+    "网络之物理网络/grpc/attachments/Pasted image 20260326171444.png",
+    "网络之物理网络/grpc/attachments/Pasted image 20260326170811.png",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：4-流控之RC类型下IB传输层消息级别的端到端流控.md",
+    "网络之物理网络/http & https/QUIC(HTTP3)协议/QUIC协议基础.md",
+    "项目/LB/现代网络负载均衡与代理导论（2017）.md",
+    "语言/go/golang实现GRPC/Golang中GRPC和Protobuf.md",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA通信库中间件：7-设计自定义的通讯库中间件.md",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA入门之一：5-QP之SRQ.md",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA负载均衡：8-字节自研RDMA传输协议veRoCE.md",
+    "网络之物理网络/http & https/HTTP性能极限优化.md",
+    "网络之物理网络/grpc/grpcurl的使用介绍.md",
+    "网络之物理网络/http & https/Http的问题之短连接&队头阻塞.md",
+    "网络之高性能网络HPN/RDMA基础和理论/attachments/deepseek_mermaid_20260325_5ba7fb.png",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA入门之一：3-RDMA内存.md",
     "网络之高性能网络HPN/RDMA基础和理论/RDMA入门之三：3-IB规范和RDMA报文讲解.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA性能优化：2-代码优化的建议和技巧.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA性能优化：4-API使用的优化建议.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA工具：3-统计工具.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA入门之一：8-有序性.md",
-    "项目/DPDK/DPDK特性：13-rte_mempool的理解和使用.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA工具：4-配置工具.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA工具：7-RoCE网络系统监控和诊断工具之R-Pingmesh.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA工具：6-主机内网络瓶颈诊断工具之hostping.md",
+    "网络之高性能网络HPN/GPU集合通讯库/nccl-tests：1-介绍.md",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA组网：3-单平面和多平面.md",
+    "网络之高性能网络HPN/GPU相关技术栈/attachments",
+    "网络之高性能网络HPN/RDMA应用/attachments",
+    "项目/工作总结",
     "网络之高性能网络HPN/GPU集合通讯库/attachments",
     "网络之高性能网络HPN/高性能互联技术与组网架构/attachments",
     "网络之高性能网络HPN/AI训练框架",
     "网络之高性能网络HPN/高性能互联技术与组网架构",
     "语言/预处理 & 编译 & 汇编 & 链接/elf/attachments",
     "网络之物理网络/grpc/attachments",
-    "网络之高性能网络HPN/网络模拟器",
-    "网络之物理网络/http & https/未命名",
-    "网络之物理网络/QUIC协议",
-    "网络之高性能网络HPN/UEC和UET/UEC和UET基础和理论/attachments",
     "未命名 3.canvas",
     "未命名 2.canvas",
     "未命名 1.canvas",
