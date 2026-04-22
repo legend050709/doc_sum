@@ -126,7 +126,13 @@ Flink: 真正的实时流处理系统
 
 ```
 
+## 为什么要自研通讯库，而不是使用类似于UCX这种？
 
+![](attachments/11(1).png)
+
+API风格：倾向于类socket接口，业务适配简单。
+传输支持：UCX不支持utcp，对于Lossy RDMA场景，使用UTCP（Lossy RDMA出现之前）可能更好。
+公司的战略：软件自主可控，硬件生态开放。
 
 # 内核相关的socket接口
 ## 参考
@@ -849,10 +855,15 @@ Ps: 收缓冲区/队列，和发送缓冲区/队列对后续的流控也是有�
 
 # 多路径(负载均衡)和容灾
 ## 单流的多路径(负载均衡)
+
 通过RDMA QP的多路径：
 即sip和dip中间创建多个QP，由于每个QP的udp的五元组应该是不一样的，那么在以太网中基于五元组进行`ECMP`的`Hash`时，就会选择不一样的路径。
 
+**（1）单连接多QP+通讯库层的缓存排序**
 即：同一个conn的流量，底层使用多个QP进行发送，多个QP对应多个五元组，即多路径传输，由于是多个QP会导致数据乱序，需要在kucl层进行数据的重组(保序)，保证上送给业务的数据依然是有序的。
+
+**（2）单连接多QP+消息拆分+。、bRDMA write**
+类似于DDP：每个QP，直到将数据写入到指定的位置，那么就可以不在软件层进行缓存。
 
 ### 默认路径
 
@@ -1087,7 +1098,16 @@ SQP类型，多个连接可能关联到一个`RC`类型的`QP`上。
 ## 优化
 ### QP资源池
 QP的创建，状态修改等比较耗时；如果新建较多，那么多个QP的创建就会耗时很久；
-尽量不要在数据面进行QP的创建，可以在控制现场创建QP资源池，减少QP创建的时间；
+尽量不要在数据面进行QP的创建，可以在控制线程创建QP资源池（需要提前创建，否则首轮突发新建会耗时很久），减少QP创建的时间；
+
+之前测试过：
+```bash
+（1）`ibv_create_qp`平均耗时在4-8ms；
+（2）平均每个QP协商建链完成，大概耗时9ms。
+注：这个是QP的异步创建以及协商下的耗时。当时是为了防止转发线程线程（worker）进行收发时的时延抖动，将耗时的QP的创建/销毁/状态更改，通过`rte_ring`传递消息的方式，放入到了控制线程(kpoll)。
+
+（3）影响：首轮「此时qp的池子为空，qp的池子可以理解为qp释放后的缓存池子」批量突发新建1000个左右的连接，会出现第1000个连接，大概需要10s+才可以建立连接成功。
+```
 
 ### 预注册内存池
 将大块内存提前完成注册(pinning), 较少了RDMAt通信过程中的耗时较长的MR的注册开销，为RDMA收发消息和应用层对象提供了零拷贝所需要的高速缓冲区。
@@ -1249,6 +1269,250 @@ QP的 max_recv_sge 不可以设置为1。因为对于发送message类型的消�
 应用层面，我们对服务进行了分级：延迟敏感的核心模型间使用RDMA连接，而海量的长尾业务则默认使用常规TCP连接，以此实现网络资源的按需分配。
 
 ## RPC支持
+### 目标
+KUCL通讯库对外提供两类接口：
+1》类socket的接口(通过libkucl.so)
+2》RPC接口（通过libkuclrpc.so）
+
+### 使用
+
+![](attachments/deepseek_mermaid_20260407_cbb1a2.png)
+
+KRPC相关：为了在KRPC时，基于RDMA来实现数据收发的零拷贝，改造如下：
+
+（1）pb中的message的序列化和反序列化，还是可以通过protocol-c 工具来生成 .cc和.h文件（自动生成的stub代码），来进行message的序列化和反序列化。
+    （pb文件中的 messag类似于普通的结构体；service类似于函数指针的结构体，每个成员都是函数）
+
+（2）pb中的service中的每个method都是自己实现的，这个没有问题。    
+   但是 method的 rpc调用，==依赖之前的传统的 一整套的网络框架(连接建立、method的注册、发请求、请求解析「收请求查找method并且调用」、发响应、异常处理「超时、部分发送等」、服务发现，服务异常感知、服务负载均衡等等)，现在就不能用了==；因为现在为了ZC，就需要自己实现这样的一套框架（目前可以仅仅只实现部分功能）。
+
+（3）新的框架：原有框架的实现现在要自己进行实现，包括错误处理，部分写处理、延迟发送、超时重传等等处理。
+
+kucl_writev：使用多个iov，每个iov的结构如下：
+
+```c
+ssize_t kucl_writev(int fd, struct kucl_iovec *iovs, int nr_iov, int flags);
+ssize_t kucl_readv(int fd, struct kucl_iovec *iovs, int nr_iov);
+
+typedef void (*event_notify_t)(void *base, void *user_data);
+
+struct kucl_iovec {
+    void *iov_base;
+    uint64_t reserved1;
+    uint32_t iov_len;
+    uint32_t reserved2;
+    void *iov_param;
+
+    union {
+        event_notify_t read_done;
+        event_notify_t write_done;
+    };
+};
+```
+发送者：发送的请求和接收的响应之间，使用 rpc_call_id 来进行关联。
+接受者：收到一个请求之后，提取rpc_call_id，回复的响应将 rpc_call_id 送回去。
+
+（4）发送者：writev
+![](attachments/deepseek_mermaid_20260407_7d4709.png)
+
+其中第一个iov，是传递metadata，包含2部分：
+    rpc头：包含 rpc_call_id, 要远程调用的 service_name + method_name, 头数据长度（变长：因为service_name + method_name长度不固定），message序列化后的数据长度（变长），传递的总数据长度（变长）；
+    请求的message序列化后的数据：
+
+后面的 N-1 个 iov：其实就是发送端真实的要传递的数据；
+
+（5）接收者：readv
+![](attachments/deepseek_mermaid_20260407_940398.png)
+（5.1）提前实现method方法并注册: 
+将各个service的method，提前自己实现，然后注册到map中，方便收到请求之后，查找到该方法后进行调用。
+
+（5.2）异步RPC回调：
+通过一个rpc_callback, 接收发送者发送过来的rpc头（包含 rpc_call_id, 要远程调用的 service_name + method_name, 头数据长度等） 以及 rpc消息体（包含序列化的messag，以及后续的数据「数据没有被序列化」）；
+
+（5.3）实现一个 buff 缓冲区（可以认为是多个接收buffer的链表）：
+因为对于RDMA而言，为了ZC，需要提前post_recv多个内存块(buffer block)，每收到一块每块内存块(buffer block)就会产生一个IN事件，但是什么时候将发送者发送的数据接收完，这个其实是不知道的。
+
+(5.4) 异步RPC回调+读取数据：
+
+(5.4.1)异步RPC回调:
+通过一个rpc_callback, 接收发送者发送过来的rpc头（包含 rpc_call_id, 要远程调用的 service_name + method_name, 头数据长度等） + 序列化的message + 零拷贝的消息体（数据没有被序列化）；
+
+(5.4.2)读取数据：
+收到IN事件之后，就开始读取数据，但是此时可能无法得到发送者发送的完整数据，完整的数据有多长，可以基于发送的 metadata（rpc头） 获取到。
+得到metadata 之后，基于 service_name + method_name 从 map中查找到方法，在完整接受到数据之后，就可以调用自己查找到的method方法。
+注：在method方法中，会有一些反序列化的操作，以及后面的零拷贝数据的处理。
+    
+(5.4.3)响应数据：和发送者发送数据一样；
+    第一个iov也是metadata：包含rpc头（rpc_call_id 原样返回）+ 响应message序列化后的数据
+    后面的 N-1 个 iov：其实就是真实要响应的数据；
+
+#### client RPC流程
+
+![](attachments/deepseek_mermaid_20260407_b553cd.png)
+```bash
+client:
+1. kucl_rpc_init （底层调用kucl_init 进行初始化: 指定传输协议，内存使用，资源申请，接收buff大小，worker数，ib设备，max_conns, qp/cq/srq depth, trace/日志配置）
+2. 通过kucl socket接口 kucl_epoll_create 创建一个epoll fd;
+3. 创建rpc channel(即一个连接)，传入参数server ip + port，以及kucl_rpc_chan_opts 配置；
+4. 通过kucl_rpc_call_create分配一个请求调用（rpc call：一个连接上可以有多个call）;
+    一个call上封装好了：rpc数据「call_header(call_id, 各部分长度) + message的序列化 + data部分」、call所属的channel 等等。
+
+5. 通过kucl_rpc_call_submit发送一个rpc call request：
+
+    指定call，对方的service+method，响应回调函数：kucl_rpc_callback；
+
+6. 通过 kucl_epoll_wait 驱动工作线程，且指定call的reponse返回时会自动回调 kucl_rpc_callback
+
+```
+#### server RPC流程
+
+![](attachments/deepseek_mermaid_20260407_2cea6f.png)
+
+```bash
+server:    
+1. kucl_rpc_init （底层调用kucl_init 进行初始化: 指定传输协议，内存使用，资源申请，接收buff大小，worker数，ib设备，max_conns, qp/cq/srq depth, trace/日志配置）
+2. 通过kucl 接口kucl_epoll_create 创建一个epoll fd;
+3. 创建rpc server，传入server ip + port，以及kucl_rpc_chan_opts 配置；
+    rpc_server中包含：listen_channel, method_map, worker_id等等；
+4. 通过 kucl_rpc_register_method 注册服务方法:
+    包含 rpc server， service_name, method_name, rpc请求的回调函数： kucl_rpc_callback
+
+5. 通过 kucl_epoll_wait 驱动工作线程，在 kucl_rpc_callback 回调函数里处理 rpc request
+6. 发送则同客户端使用方式，通过调用kucl_rpc_call_submit函数提交 rpc response
+
+```
+
+#### 完整 RPC 调用全过程
+![](attachments/deepseek_mermaid_20260407_92fa01.png)
+
+
+内部事件驱动流程图（基于 kucl_epoll_wait）:
+![](attachments/deepseek_mermaid_20260407_cc4e07.png)
+
+### 后续扩展
+#### 通用RPC设计
+##### 背景
+不同的业务，有不同的序列化需求。比如：
+	有的业务不需要序列化(Raw格式)；
+	有的业务通过pb进行序列化（PB格式）；
+	有的业务不使用pb，而是使用其他的方法进行序列化（其他格式）。
+
+##### 方案
+**（1）通用rpc层**：
+通用层不进行任何的序列化和反序列化；是否进行序列化，以及序列化的工作，交给业务来实现。
+
+对于通用层来讲，readv收取一个固定长度头（rpc_hdr）+ payload（头中指定）长度的数据。
+ 通用层也不感知 service 和 method，收到上面的信息之后；如果是异步的rpc处理，直接就会交给回调函数（rpc_cb）处理。这个`rpc_cb` 是在 `rpc`层实现的；
+ `rpc_cb` 调用业务传递的业务层实现的 `cb_handle` 函数，传递的参数是：业务层的头指针，头长度，业务层的payload指针，payload长度。
+
+**（2）业务侧中间层**：
+业务侧实现自己的 `cb_handle` 函数，在业务头(固定长度)中一般含有`service + method`，基于`service + method`可以找到自己实现的方法；
+
+**（3）业务侧处理逻辑**：
+在业务实现的`method`这个方法中，对于序列化的`message`以及真实的`payload`进行处理。这样业务就可以自己进行反序列化处理，以及各种处理。
+
+
+![](attachments/未命名绘图11.drawio%201.svg)
+
+如上所示：
+```bash
+A> 图中的（1） 就是 rpc 感知的信息，业务不感知这个 rpc_hdr;
+readv收到数据之后，就是一个固定的头 + payload; 是否序列化，以及如何序列化，通用rpc层不做任何决定。
+```
+
+#### 类protobuf-c工具：实现服务接口
+目前基于标准的 protobuf-c 工具将.pb文件中的message以及service生成的.h,.c文件，**其中message生成的结构以及序列化和反序列化函数可用。
+但是service中的method 以及底层框架其实是完全没法用的**，都是krpc自己实现底层的框架，比如rpc发送时，传递service+method，对方收到之后，需要实现查找method的逻辑。
+
+目前的KRPC接口需要在 rpc_callback 中申请一个`rpc_call`，然后填充`rpc_header`，`序列化message`，然后调用`submit` 来发送(指定call， service, method 等)。这个流程不是自动化生产的，如果可以使用一个类似于 protobuf-c 工具将这样的接口自动化生产就好了，用户就可以更简单的调用rpc接口，将注意力放在业务逻辑上。
+
+#### 同步RPC 和 异步RPC
+
+参考：[brpc 的client和server的同步/异步接口](https://github.com/apache/brpc/blob/master/docs/cn/client.md#%E5%90%8C%E6%AD%A5%E8%AE%BF%E9%97%AE)
+
+**（1） 异步RPC**
+![](attachments/Pasted%20image%2020260407182816.png)
+![](attachments/Pasted%20image%2020260407182928.png)
+
+**（2）同步RPC**
+![](attachments/Pasted%20image%2020260407183204.png)
+
+#### 线程模型
+RPC线程模型有两种：
+1> RTC模型（io和业务处理在一个线程）
+2> Reactor（pipeline）线程模型（io线程和业务的处理线程分离）
+
+![](attachments/175018.png)
+
+#### 序列化和反序列化
+message的序列化和反序列化的好处之一：增强可扩展性（比较方便的进行扩展字段）。但是**序列化和反序列化带来的一个很大的问题，就是CPU的消耗，性那的下降**。
+
+推荐的做法是：
+==控制消息（调用频率低，关注扩展性）进行序列化和反序列化。
+数据消息（调用频率高，关注性能，后续变化少）直接传递结构体，跳过序列化和反序列化==。
+
+# 可观测性 和 可运维性
+
+## 可观测性
+
+**日志**：不同级别的日志，日志切割；
+**Trace**：收发全链路的Trace，链路上的各个函数耗时以及关键参数，返回值等。
+**统计**：进程级别 /线程级别/连接基本的统计信息，meminfo， CPU使用信息；
+> 注：**单机级别**的统计，可以通过额外的监控发现；比如：机器的**网卡级别**的各个统计，RDMA各种报文和异常/错误：CNP报文，RNR报文，RDMA Seq_err 等等。
+
+**抓包**：通过高版本的tcpdump，抓取IB设备接口的流量，可以摘取RDMA和DPDK等kernel bypass的流量。
+
+**ebpf**： 对于DPDK/libverbs这种用户态的程序，通过ebpf Uprobe 或者 USDT探针 低侵入性的监控追踪（关键字段查询、关键路径耗时等）。
+```bash
+
+
+uprobe: 用户态动态探针「无侵入，任意位置」。
+        对于用户态的函数前插入指令断点，执行特定函数前，先到ebpf中执行执行的程序，获取信息，写入到map中；用户态程序从map中获取信息。
+        同时函数退出时，也可以执行指定的程序，这样就可以获取函数的执行时间。
+        比如：ibv_post_send / ibv_poll_cq 以及 kucl 自己的内部函数打 uprobe；
+
+USDT（Userland Statically Defined Tracing）:  
+        用户态静态探针「代码预埋，指定API」，对于源码少量侵入。
+        需要在代码中主动添加几行代码（探针）。USDT 探针未挂载时是 NOP 指令；
+        可以在 kucl 现有 Trace 体系的基础上，额外添加 USDT 探针。只需在关键路径加几行宏，未挂载时性能零损耗。
+
+
+uprobe 和 kprobe 相对：一个用户态，一个内核态，都是动态探针。
+USDT 和 内核的 tracepoint相对：一个用户态，一个内核态，都是静态探针。
+```
+
+**xdp**:   但是对于RDMA流量，没有信息到网卡驱动层，因为DMA已经将数据放入到指定的位置了，因此XDP也就不生效。
+
+
+|方案|技术路径|适用 RDMA？|适用 DPDK？|侵入性|热路径开销|最佳场景|
+|---|---|---|---|---|---|---|
+|Native XDP/TC eBPF|内核网络驱动层|❌ 完全不可达|❌ 已被接管|零|极低|**不适用 kucl**|
+|uprobe libibverbs|ibv_post_send/poll_cq|✅|不涉及|零|中 ~200ns|生产毛刺排查|
+|uprobe kucl 内部|kbuff_malloc/rdma_send|✅|✅|零|中|Thread Cache 监控|
+|USDT 探针|源码加宏 + eBPF 挂载|✅|✅|**极小（加宏）**|**近零（未挂载=NOP）**|生产长期埋点|
+|perf_event 采样|CPU 周期采样|✅|✅|零|极低|CPU 火焰图|
+|MLX5 sysfs 计数器|硬件端口计数器|✅|✅|零|零|带宽/错误趋势|
+|rdma stat 工具|内核 RDMA QP 统计|✅|不涉及|零|零|QP 级别统计|
+
+
+
+
+## 可运维性
+
+**动态更改配置**：比如动态更改debug基本，开启关闭trace；
+
+
+# 性能数据
+
+## 时延
+使用send/recv, kucl 测试程序在单个QP，100G同TOR下的两台设备，写4k，响应100B。
+时延是：7.1us；perftest 是 6.7us。
+注：perftest中的send/recv的测试，时延是单向的时延，即RTT/2；
+
+## 带宽
+写4K的情况下，限制并发度（比如最大并发度8，意味着一个线程最多同时发8个请求，收到相应了才允许发下一个），使用send/recv：差不多3个线程，就可以将100G的带宽打满。
+
+如果不限制并发度的情况下，按理一个线程，就可以给100G的带宽给打满。
 
 # 规划
 ![](attachments/image%20(12).png)

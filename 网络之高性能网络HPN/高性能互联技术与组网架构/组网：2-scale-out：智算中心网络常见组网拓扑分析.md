@@ -211,7 +211,7 @@ Fat-Tree 及其简化版（Spine-Leaf）是当前公有云 AI 平台的 “�
 
 ### 阿里云大模型训练网络
 
-阿里云大模型训练网络（HPN，High-Performance Networking）引入一种双平面两层架构，每台 GPU 服务器配置了 8个 GPU，对应 8 个 NIC，各 NIC 提供 2×200Gbps 带宽，并上行连接到不同 Leaf 设备，形成双平面设计，从而避免单 Leaf 故障对训练任务的影响。若交换机为 128 端口，每台 GPU 服务器分别上行连至 16台 Leaf，组成一个 Segment（包含 1024 个 GPU）。
+阿里云大模型训练网络（HPN，High-Performance Networking）引入一种双平面两层架构，每台 GPU 服务器配置了 8个 GPU，对应 8 个 NIC，各 NIC 提供 2×200Gbps（Mellanox Cx7） 带宽，并上行连接到不同 Leaf 设备，形成双平面设计，从而避免单 Leaf 故障对训练任务的影响。若交换机为 128 端口，每台 GPU 服务器分别上行连至 16台 Leaf，组成一个 Segment（包含 1024 个 GPU）。
 
 
 ![](attachments/d9d1cfb62b0a43f73c578bcdb4604291.png)

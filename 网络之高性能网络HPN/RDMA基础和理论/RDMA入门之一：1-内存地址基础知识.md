@@ -438,7 +438,7 @@ struct sg_table {
 ```
 其中`sgl`是一个指向`scatterlist`数组的指针，`nents`是`scatterlist`数组的实际长度，`orig_nents`是`scatterlist`的原始长度
 
-### SG的应用场景
+### SGL(scatter gather list)的应用场景
 #### 场景1：Scatter Transfer
 **场景1：将一片连续内存数据搬运到一片不连续的的内存空间（且间隔是相等的）**
 源内存：连续
@@ -607,6 +607,52 @@ esp-hw-offload: off [fixed]
 esp-tx-csum-hw-offload: off [fixed]
 rx-udp_tunnel-port-offload: off [fixed]
 ```
+
+## Stride send 和 Stride receive（跨步发送/接收）
+stride = 步长 / 间隔（每次前进跨多少）；
+**Stride** 在这里指 “步幅、跨步”，表示**按固定偏移量批量、离散地读写内存块**，而非连续一片。
+
+它们并不是两个独立的通信原语，而是一种模式，用于描述如何在非连续的内存区域（scatter-gather list, SGL）上高效地批量发送或接收数据。
+其核心思想是**将一次传输任务拆分为多个固定大小和固定间隔的数据块**，非常适合处理像**结构体数组**或**图像像素**这种在**内存中不连续**的数据结构。
+
+### 普通的RDMA send/recv
+普通 Send/Recv 使用 SGE（Scatter-Gather Entry）描述内存：
+```bash
+struct ibv_sge sge[] = {
+    {addr=A, len=L1, lkey=K},
+    {addr=B, len=L2, lkey=K},
+    // ...最多 max_sge 个条目
+};
+```
+
+当你有很多分散的小块（如 1000 个小 buffer）时，SGE 数量会撑爆 max_sge 限制（通常 ≤ 30）。
+
+### Stride send
+![](attachments/Pasted%20image%2020260401154339.png)
+
+有的时候我们需要做矩阵转置，把行转为列，或者把列转为行。对应到DMA，就是**把一段有规律的非连续数据**发送到**对端的一段连续的内存空间内**，==这跟SGL(scatter gather list）有点像==。
+
+**区别在于SGL一般只用于描述少于16块的非连续数据，这些SGL可以是任意的内存区**。而stride send所需发送的非连续内存块要多很多(多至K级别)。
+
+#### stride send的每一块的定义
+
+stride send的每一块：一般用`base address, block size, stride size, repeat count`四个参数描述。
+
+![](attachments/Pasted%20image%2020260401154305.png)
+
+```bash
+第 i 块起始地址 = base_addr + i × stride_size
+第 i 块数据范围 = [base_addr + i × stride_size,
+                   base_addr + i × stride_size + block_size)
+总覆盖内存范围 = base_addr 到 base_addr + (repeat_count-1)×stride_size + block_size
+总有效数据量   = block_size × repeat_count
+```
+
+### Stride receive
+
+![](attachments/Pasted%20image%2020260401154534.png)
+
+Stride receive是与stride send对称的操作，用于将本地一段连续的数据发送到对端，且在对端以有规律非连续的形式存放。同样在接收端也用base address, block size, stride size, repeat count四个参数描述存放位置。
 
 # 参考
 ```bash

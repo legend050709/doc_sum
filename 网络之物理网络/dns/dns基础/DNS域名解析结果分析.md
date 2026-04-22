@@ -78,7 +78,7 @@ It means one or more resource records exist for this domain but there isn’t a 
 ### NODATA 和 NXDOMAIN的区别
 ![](attachments/Pasted%20image%2020240416173306.png)
 
-`NODATA`意味着该域存在，但没有关于该域的信息与该域关联的指定类型（如A记录）。
+`NODATA`意味着该域(zone)存在，但没有关于该域的信息与该域关联的指定类型（如A记录）。
 如果域本身不存在，将会看到`NXDOMAIN`。
 `NXDOMAIN（代表Rcode=3）`是 `Rcode`响应码的一种；
 

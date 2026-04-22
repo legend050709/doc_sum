@@ -143,16 +143,443 @@ CAS有效地说明了“我认为位置V应该包含值A；如果包含该值，
 ![](attachments/Pasted%20image%2020240206163941.png)
 
 ### CAS的问题
-**1. ABA问题**  
-CAS需要在操作值的时候，检查值有没有发生变化，如果没有发生变化就更新。
-但是如果一个值原来是A，变成了B，又变成了A，那么使用CAS进行检查时会发现它的值没有发生变化，但是实际上却变化了 —> 这就是所谓的ABA问题。
+#### （1）ABA问题
+并发编程 中的 ABA 问题：  
+因为 CAS 需要在操作值的时候，检查某地址的内容有没有发生变化（和旧值进行比较），如果没有发生变化则更新为新的值。但是如果一个值原来是A，变成了 B，又变成了 A，那么使用 CAS 进行检查时会发现它的值没有发生变化，但是实际上却变化了。即：这个线程在操作的时候，其他线程也在进行操作。
 
+##### 原因
+
+CAS算法 实现一个重要前提需要取出内存中某时刻的数据，而在下时刻比较并替换，那么在这个==时间差==中出现数据的变化。
+
+##### ABA的影响
+
+Q: CAS的ABA问题，有什么影响，可以举个例子吗？ 
+```bash
+简单理解：
+	一个线程将某个值从A变为B之后，又变为A；另外一个线程将A变为C，即使这个A是老的A，好像也没有问题吧。什么场景下会有问题呢。
+```
+
+**分析**：
+你这个直觉只在**值本身就是全部语义**的情况下成立，但一旦**值背后代表的是某种状态、结构或时序**，ABA 就会埋雷，而且是那种**非常隐蔽、极难复现**的问题。
+如果 A 只是一个普通变量（比如 int 值 100），那确实通常没问题——因为你只关心“现在是不是 A”，而不关心中间发生过什么。
+
+**结论：**
+- 如果变量是**纯值（stateless）**
+- 不依赖“历史变化过程”
+那么 ABA 基本无害。
+
+##### 无锁链表栈（Lock-Free Stack）的ABA问题
+假设有一个无锁栈，用链表实现，栈顶指针 `top` 指向节点 A：
+```bash
+初始状态：top → A → B → C
+```
+
+**（1）线程 1（慢线程）想执行 pop：准备 pop A**
+```bash
+old_top = A
+next = B
+// 准备 CAS(top, A, B), 此时线程1被挂起，线程2开始执行
+```
+
+**（2）线程 2（快线程）连续执行多次操作**
+```bash
+pop A → top = B → C （A被弹出） 
+pop B → top = C （B被弹出，B的内存被释放或复用） 
+push A → top = A → C （A被重新压入，但 A.next 现在指向 C！）
+
+此时状态：top → A → C
+```
+
+**（3）线程 1 恢复执行：**
+```bash
+CAS(top, A, B) 
+// top 当前是 A，和期望值 A 相同，CAS 成功！ 
+// top 被设置为 B
+```
+
+**（4）问题：**
+
+```bash
+1》影响：
+top 现在指向 B 但 B 已经被释放了！→ 野指针 / 内存错误 
+节点 C 也从链表中凭空消失了！
+
+2》整个流程：
+
+初始:        T1读快照:       T2操作后:        T1 CAS成功后:
+top          top             top              top
+ ↓            ↓               ↓                ↓
+[A]→[B]→[C]  记住A           [A]→[C]          [B] ← 野指针！
+                              (B已释放)         [C] 丢失！
+```
+
+**（5）本质总结（为什么会出问题）**
+
+ABA 的问题不在“值”，而在：这个值是否代表一个“时间点的状态”。
+
+在无锁数据结构中：
+- 指针 A ≠ 同一个 A
+- A 可能已经：
+    - 被删除
+    - 被复用（malloc/free）
+    - 被重新插入
+
+```bash
+A == A（值相等）  
+但 != 同一个“历史状态”
+```
+
+##### lock-free 的 内存池的ABA问题
+
+比如 lock-free + 内存池：
+```bash
+1. 线程1读取指针 A
+2. 线程2：
+    - free(A)
+    - malloc 新对象，刚好复用地址 A
+3. 线程1 CAS 成功
+```
+
+结果：
+- 指针“没变”（还是 A）
+- 但对象已经是**完全不同的数据**
+
+##### 解决ABA问题
+
+**(1) 添加版本号**
 ABA问题的解决思路其实也很简单，就是使用版本号。在变量前面追加上版本号，每次变量更新的时候把版本号加1，那么A→B→A就会变成1A→2B→3A了。
 
-**2. 循环时间长开销大**  
+```bash
+struct {
+    pointer ptr;
+    int version;
+}
+
+CAS 比较：(ptr == old_ptr && version == old_version)
+
+每次修改 version++
+```
+
+**(2)Hazard Pointer（更高级）**
+
+核心思想：
+- 标记“哪些节点正在被使用”
+- 防止被提前 free
+
+**(3)Epoch-based reclamation（RCU 类似）**
+
+延迟回收：
+- 确保没有线程再访问旧数据
+
+
+##### 添加版本号实现ABA的范例
+核心思路其实很简单：**把“指针 + 版本号”当成一个整体，一次 CAS 同时比较它们**。
+
+在 Linux C 里实现带版本号的 CAS，核心思路是将**指针 + 版本号**打包进一个 128-bit 的结构中，然后借助 x86-64 的 `CMPXCHG16B` 指令一次性原子地比较和替换两者。在 x86_64 上可以用 **128-bit CAS（cmpxchg16b）**，GCC 提供了原子内建：
+```c
+__atomic_compare_exchange()
+```
+
+完整的范例：
+```c
+// gcc -O2 -mcx16 -pthread -o aba_demo aba_demo.c
+// -mcx16 启用 CMPXCHG16B 指令（x86-64 上 128-bit 原子操作）
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <pthread.h>
+
+/* ── 1. 核心数据结构 ── */
+
+typedef struct Node {
+    int value;
+    struct Node *next;
+} Node;
+
+// 指针 + 版本号打包成 16 字节，必须 16 字节对齐
+// 这样 __atomic_compare_exchange 才能映射到 CMPXCHG16B
+typedef struct {
+    Node     *ptr;
+    uintptr_t version;
+} __attribute__((aligned(16))) StampedPtr;
+
+/* ── 2. 128-bit CAS 封装 ── */
+
+static bool stamped_cas(volatile StampedPtr *target,
+                        StampedPtr expected,
+                        StampedPtr desired)
+{
+    // __atomic_compare_exchange 在 16 字节对齐结构上
+    // 会被编译器翻译成 CMPXCHG16B 一条原子指令
+    return __atomic_compare_exchange(
+        (StampedPtr *)target,
+        &expected,
+        &desired,
+        /*weak=*/false,
+        __ATOMIC_SEQ_CST,
+        __ATOMIC_SEQ_CST
+    );
+}
+
+// 原子读取整个 StampedPtr（两个 64-bit 字段不能分开读）
+static StampedPtr stamped_load(volatile StampedPtr *src)
+{
+    StampedPtr result;
+    __atomic_load((StampedPtr *)src, &result, __ATOMIC_SEQ_CST);
+    return result;
+}
+
+/* ── 3. 无锁栈实现 ── */
+
+volatile StampedPtr top = { .ptr = NULL, .version = 0 };
+
+void push(int value)
+{
+    Node *node = malloc(sizeof(Node));
+    node->value = value;
+
+    StampedPtr old_top, new_top;
+    do {
+        old_top = stamped_load(&top);
+        node->next = old_top.ptr;
+
+        new_top.ptr     = node;
+        new_top.version = old_top.version + 1; // 每次操作版本号 +1
+    } while (!stamped_cas(&top, old_top, new_top));
+    // CAS 失败说明 top 已被其他线程修改（ptr 或 version 变了），重试
+}
+
+Node *pop(void)
+{
+    StampedPtr old_top, new_top;
+    do {
+        old_top = stamped_load(&top);
+        if (old_top.ptr == NULL) return NULL; // 栈空
+
+        new_top.ptr     = old_top.ptr->next;
+        new_top.version = old_top.version + 1;
+    } while (!stamped_cas(&top, old_top, new_top));
+
+    return old_top.ptr; // 调用者负责 free
+}
+
+/* ── 4. 演示 ABA 场景被正确拦截 ── */
+
+void *thread_aba_trigger(void *arg)
+{
+    // 模拟"快线程"：pop A → pop B → push A
+    // 这会让地址 A 重新出现在栈顶，但 version 已经不同
+    Node *a = pop(); // version: 1→2
+    Node *b = pop(); // version: 2→3
+
+    // 重新压入 A（version 变为 4）
+    // 注意：a->next 现在可能指向旧的节点
+    a->next = top.ptr; // 手动设置以模拟 ABA
+    StampedPtr cur = stamped_load(&top);
+    StampedPtr new_top = { .ptr = a, .version = cur.version + 1 };
+    __atomic_store((StampedPtr *)&top, &new_top, __ATOMIC_SEQ_CST);
+
+    printf("[快线程] pop A(v=%lu) → pop B(v=%lu) → push A，version 现在 = %lu\n",
+           (unsigned long)1, (unsigned long)2, (unsigned long)new_top.version);
+
+    free(b);
+    return NULL;
+}
+
+int main(void)
+{
+    // 初始化栈: C → B → A（A 在栈顶）
+    push(3); // C, version=1
+    push(2); // B, version=2
+    push(1); // A, version=3 (top)
+
+    printf("初始栈顶: ptr=%p, version=%lu\n",
+           (void *)top.ptr, (unsigned long)top.version);
+
+    // 慢线程：记录此刻的 top（version=3, ptr=A）
+    StampedPtr slow_snapshot = stamped_load(&top);
+    printf("[慢线程] 快照: ptr=%p, version=%lu\n",
+           (void *)slow_snapshot.ptr, (unsigned long)slow_snapshot.version);
+
+    // 快线程运行：A 被 pop、B 被 pop、A 再 push → version 变为 4
+    pthread_t t;
+    pthread_create(&t, NULL, thread_aba_trigger, NULL);
+    pthread_join(t, NULL);
+
+    // 慢线程尝试 CAS：用旧快照（version=3）去替换
+    // ptr 虽然相同（都是 A），但 version 不同（3 vs 4）→ CAS 失败
+    StampedPtr desired = { .ptr = slow_snapshot.ptr->next, .version = slow_snapshot.version + 1 };
+    bool ok = stamped_cas(&top, slow_snapshot, desired);
+
+    printf("[慢线程] CAS 结果: %s（version %lu → %lu 不匹配，ABA 被拦截！）\n",
+           ok ? "成功（有问题）" : "失败（正确）",
+           (unsigned long)slow_snapshot.version,
+           (unsigned long)top.version);
+
+    // 清理
+    Node *n;
+    while ((n = pop()) != NULL) free(n);
+    return 0;
+}
+```
+
+**为什么必须 `-mcx16`？**
+`__atomic_compare_exchange` 作用在 16 字节结构上时，编译器会生成 `CMPXCHG16B` 指令。这条指令在 x86-64 上默认不启用（历史兼容原因），`-mcx16` 告诉编译器目标 CPU 支持它。
+
+
+**如果是用uint64_t可不可以，低48bit存储指针，高16位存储版本号？**
+完全可以，这就是经典的 指针标记（Tagged Pointer） 技术。x86-64 用户空间指针实际只用低 48 位，高 16 位天然为零，可以借来存版本号。
+
+||高16位标记（uint64）|StampedPtr（__int128）|
+|---|---|---|
+|CAS 指令|`LOCK CMPXCHG`（64-bit）|`CMPXCHG16B`（128-bit）|
+|编译参数|无需特殊|`-mcx16`|
+|版本号位数|**16 bit**（0–65535，会绕回）|64 bit（几乎不绕回）|
+|解引用前|必须 mask 掉高16位|直接用|
+|5级分页（LA57）风险|⚠️ 只剩 7 位可用|无影响|
+
+```c
+// gcc -O2 -pthread -o tagged_ptr tagged_ptr.c
+// 无需 -mcx16，标准 64-bit CAS 即可
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdatomic.h>
+#include <pthread.h>
+
+/* ── 1. 位域定义 ──────────────────────────────
+ *
+ *  63     48 47                              0
+ *  ┌────────┬────────────────────────────────┐
+ *  │version │         pointer (48 bit)       │
+ *  └────────┴────────────────────────────────┘
+ */
+#define PTR_MASK  0x0000FFFFFFFFFFFFULL   // 低 48 位
+#define VER_SHIFT 48
+#define VER_MASK  0xFFFFULL               // 高 16 位
+
+typedef struct Node {
+    int value;
+    struct Node *next;
+} Node;
+
+// _Atomic uint64_t：保证 lock cmpxchg 原子操作
+typedef _Atomic uint64_t TaggedPtr;
+
+/* ── 2. 打包 / 解包 ── */
+
+static inline uint64_t pack(Node *ptr, uint16_t version)
+{
+    // 确保指针真的只用了 48 位（debug 用）
+    // assert(((uint64_t)ptr & ~PTR_MASK) == 0);
+    return ((uint64_t)version << VER_SHIFT)
+         | ((uint64_t)(uintptr_t)ptr & PTR_MASK);
+}
+
+static inline Node *unpack_ptr(uint64_t tagged)
+{
+    // ⚠️ 解引用前必须 mask，否则高16位非零会导致段错误
+    return (Node *)(uintptr_t)(tagged & PTR_MASK);
+}
+
+static inline uint16_t unpack_ver(uint64_t tagged)
+{
+    return (uint16_t)(tagged >> VER_SHIFT);
+}
+
+/* ── 3. Tagged CAS ── */
+
+static bool tagged_cas(TaggedPtr *target, uint64_t expected, uint64_t desired)
+{
+    // 编译成：LOCK CMPXCHG qword ptr [target], desired
+    return atomic_compare_exchange_strong_explicit(
+        target, &expected, desired,
+        memory_order_seq_cst,
+        memory_order_seq_cst
+    );
+}
+
+/* ── 4. 无锁栈 ── */
+
+static TaggedPtr top = 0; // ptr=NULL, version=0
+
+void push(int value)
+{
+    Node *node = malloc(sizeof(Node));
+    node->value = value;
+
+    uint64_t old_val, new_val;
+    do {
+        old_val = atomic_load_explicit(&top, memory_order_acquire);
+        node->next = unpack_ptr(old_val);                  // 必须 mask
+        new_val = pack(node, unpack_ver(old_val) + 1);     // 版本 +1
+    } while (!tagged_cas(&top, old_val, new_val));
+}
+
+Node *pop(void)
+{
+    uint64_t old_val, new_val;
+    do {
+        old_val = atomic_load_explicit(&top, memory_order_acquire);
+        Node *cur = unpack_ptr(old_val);
+        if (!cur) return NULL;
+
+        new_val = pack(cur->next, unpack_ver(old_val) + 1);
+    } while (!tagged_cas(&top, old_val, new_val));
+
+    return unpack_ptr(old_val);
+}
+
+/* ── 5. 验证版本号绕回风险 ── */
+
+void check_wraparound(void)
+{
+    uint16_t ver = 0xFFFF;
+    printf("\n[版本号绕回演示]\n");
+    printf("  当前版本: 0x%04X (%u)\n", ver, ver);
+    printf("  +1 之后:  0x%04X (%u)  ← 绕回到 0！\n",
+           (uint16_t)(ver + 1), (uint16_t)(ver + 1));
+    printf("  高频场景下 65536 次操作即绕回一轮，需评估 ABA 窗口\n");
+}
+
+/* ── 6. 主程序演示 ── */
+
+int main(void)
+{
+    push(30); push(20); push(10);
+
+    printf("=== Tagged Pointer 无锁栈 ===\n");
+
+    // 显示初始状态的 64-bit 打包值
+    uint64_t raw = atomic_load(&top);
+    printf("raw uint64  = 0x%016lX\n", raw);
+    printf("  高16位 version = %u\n", unpack_ver(raw));
+    printf("  低48位 ptr     = %p\n\n", (void *)unpack_ptr(raw));
+
+    // 弹出全部元素
+    Node *n;
+    while ((n = pop()) != NULL) {
+        printf("pop → %d\n", n->value);
+        free(n);
+    }
+
+    check_wraparound();
+
+    return 0;
+}
+```
+
+
+
+#### （2）循环时间长开销大
 自旋CAS如果长时间不成功，会给CPU带来非常大的执行开销
 
-**3. 只能保证一个共享变量的原子操作**  
+#### （3）只能保证一个共享变量的原子操作
+
 当对一个共享变量执行操作时，我们可以使用循环CAS的方式来保证原子操作，但是对多个共享变量操作时，循环CAS就无法保证操作的原子性，这个时候就可以用锁。
 
 ## RCU
@@ -175,7 +602,11 @@ ABA问题的解决思路其实也很简单，就是使用版本号。在变量�
 乐观锁其实主要就是一种思想，因为乐观锁的操作过程中其实没有没有任何锁的参与。
 乐观锁只是和悲观锁相对，严格的说乐观锁不能称之为锁。
 
+独占锁：是一种悲观锁；独占锁，会导致其它所有需要锁的线程挂起，等待持有锁的线程释放锁。  
+乐观锁：每次不加锁，假设没有冲突去完成某项操作，如果因为冲突失败就重试，直到成功为止。
+
 ## 悲观锁
+
 前面提到的互斥锁、自旋锁、读写锁，都是属于悲观锁。
 悲观锁做事比较悲观，它认为**多线程同时修改共享资源的概率比较高，于是很容易出现冲突，所以访问共享资源前，先要上锁**。  
 

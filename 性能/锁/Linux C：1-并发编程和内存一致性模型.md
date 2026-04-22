@@ -207,25 +207,91 @@ public class Singleton {
 在介绍可见性、原子性、有序性的时候，特意提到**缓存**导致的可见性问题，**线程切换**带来的原子性问题，**编译优化**带来的有序性问题，其实缓存、线程、编译优化的目的和我们写并发程序的目的是相同的，都是提高程序性能。但是技术在解决一个问题的同时，必然会带来另外一个问题，所以**在采用一项技术的同时，一定要清楚它带来的问题是什么，以及如何规避**。
 
 
-## 并发编程的三大特征
+## 并发编程的三大问题
+
+|问题类型|描述|举例|
+|---|---|---|
+|原子性|操作是否被打断|i++|
+|可见性|一个核写，另一个核能否看到|flag|
+|顺序性|指令执行顺序是否符合代码|data/flag|
+
+
+
 ### 原子性
-#### atomic
+#### 原子变量(C11 atomic)
+```c
+#include <stdatomic.h>
+
+atomic_int flag = 0;
+int data = 0;
+
+// producer
+data = 100;
+atomic_store_explicit(&flag, 1, memory_order_release);
+
+// consumer
+if (atomic_load_explicit(&flag, memory_order_acquire)) {
+    printf("%d\n", data);
+}
+
+
+
+分析：
+atomic_store(..., memory_order_release); 约等于 store + 写屏障
+```
+
+
+|能力|atomic|
+|---|---|
+|原子性|✅|
+|可见性|✅|
+|顺序性|✅（取决 memory_order）|
+
+|类型|含义|
+|---|---|
+|relaxed|只有原子性|
+|acquire|读屏障|
+|release|写屏障|
+|seq_cst|全屏障（最强）|
+
+#### 读写锁/自旋锁/Mutex 等锁
+读写锁/自旋锁 保护了 临界区的操作，要么执行，要么不执行。
+
+```c
+pthread_mutex_lock(&m);
+// 临界区
+pthread_mutex_unlock(&m);
+
+等价于
+
+acquire barrier
+critical section
+release barrier
+```
+
+|能力|锁|
+|---|---|
+|原子性|✅|
+|可见性|✅|
+|顺序性|✅|
+|互斥|✅|
+
+
+
 ### 可见性
 #### volatile
-### 有序性 
+### 有序性 （顺序性）
 #### 内存屏障
+
+内存屏障：解决“顺序性 + 可见性”，但不解决“竞争（原子性）”。
+
+
 ```c
 #define rte_mb() _mm_mfence()
-
 #define rte_wmb() _mm_sfence()
-
 #define rte_rmb() _mm_lfence()
-
 #define rte_smp_wmb() rte_compiler_barrier()
-
 #define rte_smp_rmb() rte_compiler_barrier()
-
-
 /**
  * Compiler barrier.
  *
@@ -236,6 +302,34 @@ public class Singleton {
     asm volatile ("" : : : "memory");   \
 } while(0)
 ```
+
+
+### 原子变量/锁/Volatile关键字和 原子性/可见性/顺序性的关系
+
+`volatile`、`barrier()`、`smp_mb()`、`atomic_t`、`mutex/spinlock` 这五种机制经常被混用，但它们解决的问题完全不同：
+
+![](attachments/Pasted%20image%2020260421235010.png)
+
+
+![](attachments/Pasted%20image%2020260422001017.png)
+
+**原子变量 = 原子性 +（内置）内存屏障**  
+**锁 = 原子变量 + 更强语义（互斥 + 顺序 + 可见性）**  
+**内存屏障 = 只解决顺序性和可见性**  
+**volatile = 只约束编译器（几乎不能用于线程同步）**
+
+
+|特性|volatile|内存屏障|atomic|锁|
+|---|---|---|---|---|
+|防编译器重排|✅|✅|✅|✅|
+|防 CPU 乱序执行|❌|✅|✅（取决 memory_order）|✅|
+|可见性（多核）|❌|✅|✅|✅|
+|原子性|❌|❌|✅|✅|
+|互斥|❌|❌|❌|✅|
+|易用性|高|低|中|高|
+|性能|高|高|高|低|
+
+
 
 # 内存一致性(memory model/Memory consistency model)
 

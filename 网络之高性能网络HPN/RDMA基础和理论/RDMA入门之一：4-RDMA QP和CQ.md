@@ -109,6 +109,35 @@ RDMA的设计选择往往被视为技术决定，但背后蕴含着深刻的工�
 ## SQ(send queue)
 ## RQ(receive queue)
 
+### Streaming Recv RDMA
+#### 问题
+传统的QP receive WQE类似UDP，每个接收到的消息都会消耗一个receive buffer。
+这里有2个问题：如果进来的消息比receive buffer大则无法接收只能被丢弃，而如果它比receive buffer小又会造成接收缓冲区的浪费。由于我们无法预测进来的消息的大小，所以只能按最大尺寸分配接收缓冲区。传统的QP receive WQE会有如下2方面的问题：
+
+**（1）receive buffer的利用率很低**：
+即使大部分消息很小而只有个别大消息，我们也要按最大尺寸分配接收缓冲区，这就造成接收缓冲区的有效利用率很低。极端的说，如果我们按64KB分配接收缓冲区，而大部分消息是64B的，则内存利用率只有0.1%。这样的后果是小包突发时由于内存不足而导致丢包。
+
+**（2）频繁读取receive WQE会成为性能瓶颈**：
+每收到一个消息就需要从host memory取一个receive WQE, 一个WQE是64B，而如果消息也是64B，那么相当于有效内存读写只有50%，这在很多场景下是性能瓶颈。
+
+![](attachments/Pasted%20image%2020260401155449.png)
+
+#### Streaming receive
+`Streaming receive`：是 Mellanox/NVIDIA ConnectX-6 Dx 及以上网卡（mlx5）提供的一种接收模式，==NIC 把连续到来的消息当成“字节流”，直接顺序写入一个大 buffer，而不是按 message 分到多个 Recv Buffer槽中==，无需 CPU 为每条消息 post 一个 Recv WQE。
+
+==Streaming receive是说每个进来的消息只消费消息自身的大小而不是整个receive WQE，接收缓冲区剩下的部分可以接收下一个消息==。
+因此一个receive WQE可以接收多个消息只要它能容纳。这就解决了接收缓冲区利用率低和频繁读取receive WQE的问题。
+
+#### Streaming receive 和 CQE
+Streaming receive时**每个消息还是会上报一个CQE**，所以CQE中要指明消息放在WQE receive buffer的起始和终止位置。
+一个消息只能放在一个WQE receive buffer中而不能跨WQE。
+注意这样做了之后，CQE的数量将要大于RQ中WQE的数量，所以创建CQ时需要加大深度。
+另外的一个策略是使receive buffer size更大而让RQ深度变小。
+
+
+### SRQ
+
+
 ## WQE
 WQE是RDMA系统中表达操作意图的基本单位。它不仅仅是数据描述符，更是操作语义的完整表达。
 

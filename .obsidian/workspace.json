@@ -4,53 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "244417162bea8853",
+        "id": "c742e6dc13985c54",
         "type": "tabs",
         "children": [
           {
-            "id": "11a6427f15b9efe3",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：4-流控之RC类型下IB传输层消息级别的端到端流控.md",
-                "mode": "preview",
-                "source": true
-              },
-              "icon": "lucide-file",
-              "title": "RDMA流控和拥塞控制：4-流控之RC类型下IB传输层消息级别的端到端流控"
-            }
-          },
-          {
-            "id": "06bba0f04808d462",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：4-流控之RC类型下IB传输层消息级别的端到端流控.md",
-                "mode": "source",
-                "source": true
-              },
-              "icon": "lucide-file",
-              "title": "RDMA流控和拥塞控制：4-流控之RC类型下IB传输层消息级别的端到端流控"
-            }
-          },
-          {
-            "id": "a13093b6ee920d52",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "网络之物理网络/grpc/为什么有了HTTP，还要用RPC.md",
-                "mode": "source",
-                "source": true
-              },
-              "icon": "lucide-file",
-              "title": "为什么有了HTTP，还要用RPC"
-            }
-          },
-          {
-            "id": "7ca8f9519c3a1662",
+            "id": "eb7afe42fe574bc2",
             "type": "leaf",
             "state": {
               "type": "markdown",
@@ -64,21 +22,357 @@
             }
           },
           {
-            "id": "ca1d172d5840365e",
+            "id": "8fac9ae3bab4ef5e",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA连接可扩展性：2-DCT和XRC以及RD.md",
+                "file": "操作系统/IO/网络IO模型：5-IO多路复用epoll的问题.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA连接可扩展性：2-DCT和XRC以及RD"
+              "title": "网络IO模型：5-IO多路复用epoll的问题"
+            }
+          },
+          {
+            "id": "40ca3f40a28ef8b0",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "操作系统/IO/网络IO线程模型：2-模型演进.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "网络IO线程模型：2-模型演进"
+            }
+          },
+          {
+            "id": "c92b84045d06b43e",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "操作系统/IO/网络IO线程模型：3-Reactor和Proactor模型.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "网络IO线程模型：3-Reactor和Proactor模型"
+            }
+          },
+          {
+            "id": "6e96b02c3b1aabd7",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "网络之物理网络/socket/socket option：1-SO_REUSEADDR和SO_REUSEPORT.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "socket option：1-SO_REUSEADDR和SO_REUSEPORT"
+            }
+          },
+          {
+            "id": "f48997131b9e40be",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "项目/ebpf、bpf、XDP/网络编程之XDP、TC和IO_URING以及DPDK.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "网络编程之XDP、TC和IO_URING以及DPDK"
+            }
+          },
+          {
+            "id": "0837856b77ae8c66",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "操作系统/进程 & 线程/进程：fork和vfork以及clone.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "进程：fork和vfork以及clone"
+            }
+          },
+          {
+            "id": "162fbfffe84fe34b",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "操作系统/系统调用/4-EINTR 错误和被中断的系统调用.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "4-EINTR 错误和被中断的系统调用"
+            }
+          },
+          {
+            "id": "b14c86de4cdb70f5",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "项目/ebpf、bpf、XDP/XDP：1-基础.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "XDP：1-基础"
+            }
+          },
+          {
+            "id": "fb3d9a660bfdebcc",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "项目/工作总结/KS：4-IPSec网关总结.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "KS：4-IPSec网关总结"
+            }
+          },
+          {
+            "id": "6aa8759cf9cc82e0",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "操作系统/进程 & 线程/进程：进程类型之zombie僵尸进程和orphan孤儿进程.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "进程：进程类型之zombie僵尸进程和orphan孤儿进程"
+            }
+          },
+          {
+            "id": "f97ca99928f75004",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "操作系统/进程 & 线程/进程：进程状态之D状态.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "进程：进程状态之D状态"
+            }
+          },
+          {
+            "id": "1a224e5443f06100",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "操作系统/系统调用/1-系统调用的理解.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "1-系统调用的理解"
+            }
+          },
+          {
+            "id": "9eca0ccc949c7411",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "操作系统/中断/硬中断 & 软中断.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "硬中断 & 软中断"
+            }
+          },
+          {
+            "id": "94c2597bf1b45247",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "操作系统/中断/中断&异常&系统调用.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "中断&异常&系统调用"
+            }
+          },
+          {
+            "id": "538ad458ee2605ba",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "网络之物理网络/四层协议/TCP/TCP 攻击：2-SYN cookies的问题.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "TCP 攻击：2-SYN cookies的问题"
+            }
+          },
+          {
+            "id": "e083d23b8d0e45dd",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "网络之物理网络/四层协议/TCP/TCP 攻击：1-syn-flood攻击以及SYN-Cookies机制.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "TCP 攻击：1-syn-flood攻击以及SYN-Cookies机制"
+            }
+          },
+          {
+            "id": "ab503bebb0e48fc0",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "项目/LB/UOA模块的理解.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "UOA模块的理解"
+            }
+          },
+          {
+            "id": "0cfe8b91b2920c16",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "项目/LB/LB：防Syn攻击之SynProxy.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "LB：防Syn攻击之SynProxy"
+            }
+          },
+          {
+            "id": "9533c04bfbb4cefc",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "项目/DPDK/DPDK内存：1-内存管理概述.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "DPDK内存：1-内存管理概述"
+            }
+          },
+          {
+            "id": "010ff5b01c18a5e5",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "网络之物理网络/四层协议/TCP/TCP面试：2-图解TCP重传 & 滑动窗口 & 流控 & 拥塞控制.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "TCP面试：2-图解TCP重传 & 滑动窗口 & 流控 & 拥塞控制"
+            }
+          },
+          {
+            "id": "7f1982382b4277c9",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "网络之物理网络/四层协议/TCP/TCP 攻击：2-SYN cookies的问题.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "TCP 攻击：2-SYN cookies的问题"
+            }
+          },
+          {
+            "id": "e51af70befaa0940",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "性能/锁/Linux C：3-内存屏障（Memory Barrier or Memory Fence）.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "Linux C：3-内存屏障（Memory Barrier or Memory Fence）"
+            }
+          },
+          {
+            "id": "9e990491d89ea1b6",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "性能/锁/Linux C：3-内存屏障（Memory Barrier or Memory Fence）.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "Linux C：3-内存屏障（Memory Barrier or Memory Fence）"
+            }
+          },
+          {
+            "id": "242065f498562686",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "性能/锁/Linux C：2-volatile可见性.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "Linux C：2-volatile可见性"
+            }
+          },
+          {
+            "id": "2a2d0b340a970a71",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Linux工具/代码管理工具/git的配置以及使用.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "git的配置以及使用"
             }
           }
         ],
-        "currentTab": 4
+        "currentTab": 25
       }
     ],
     "direction": "vertical"
@@ -97,8 +391,8 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "GDA",
-                "matchingCase": true,
+                "query": "git",
+                "matchingCase": false,
                 "explainSearch": false,
                 "collapseAll": true,
                 "extraContext": false,
@@ -136,7 +430,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 580.5
+    "width": 475.5
   },
   "right": {
     "id": "a93c1244e0a44ed2",
@@ -226,53 +520,53 @@
       "command-palette:打开命令面板": false
     }
   },
-  "active": "ca1d172d5840365e",
+  "active": "2a2d0b340a970a71",
   "lastOpenFiles": [
-    "网络之高性能网络HPN/GPU相关技术栈/基本概念：2-GPUDirect RDMA 和 GPUDirect Async.md",
+    "性能/锁/Linux C：1-并发编程和内存一致性模型.md",
+    "性能/锁/Linux C：2-volatile可见性.md",
+    "性能/锁/attachments/volatile_visibility_gap.svg",
+    "性能/锁/attachments/volatile_combination_guide.svg",
+    "性能/锁/attachments/volatile_compiler_opt.svg",
+    "性能/锁/Linux C：3-内存屏障（Memory Barrier or Memory Fence）.md",
+    "性能/锁/attachments/cas_arch_barrier_diff.svg",
+    "性能/锁/attachments/Pasted image 20260422001017.png",
+    "性能/锁/attachments/Pasted image 20260421235010.png",
+    "性能/锁/attachments/cpu_store_buffer_problem.svg",
+    "性能/锁/attachments/producer_consumer_barrier.svg",
+    "性能/锁/attachments/memory_barrier_types.svg",
+    "性能/锁/attachments/memory_barrier_reorder.svg",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA入门之一：4-RDMA QP和CQ.md",
+    "网络之物理网络/四层协议/TCP/TCP 攻击：2-SYN cookies的问题.md",
+    "项目/DPDK/DPDK内存：1-内存管理概述.md",
+    "网络之物理网络/四层协议/TCP/TCP面试：2-图解TCP重传 & 滑动窗口 & 流控 & 拥塞控制.md",
+    "网络之物理网络/四层协议/TCP/TCP面试：1-图解三次握手和四次挥手.md",
+    "网络之物理网络/四层协议/TCP/TCP特性：TCP MD5选项.md",
+    "性能/锁/Linux锁：1-锁的基本概念.md",
+    "项目/LB/UOA模块的理解.md",
+    "项目/LB/LB：防Syn攻击之SynProxy.md",
+    "网络之物理网络/四层协议/TCP/TCP拥塞控制：5-性能优化.md",
+    "网络之物理网络/dns/dns拓展/DNS架构设计与竞品对比.md",
+    "操作系统/进程 & 线程/进程：进程类型之zombie僵尸进程和orphan孤儿进程.md",
+    "操作系统/进程 & 线程/进程：进程限制之Linux上单机的进程和线程个数限制.md",
+    "操作系统/进程 & 线程/进程：进程状态之D状态.md",
+    "操作系统/系统调用/1-系统调用的理解.md",
+    "操作系统/中断/中断&异常&系统调用.md",
+    "网络之物理网络/四层协议/TCP/TCP 攻击：1-syn-flood攻击以及SYN-Cookies机制.md",
+    "操作系统/中断/硬中断 & 软中断.md",
+    "项目/LB/七层Nginx的后端服务如何正确获取客户端IP.md",
+    "项目/项目开发管理流程/项目管理流程（SOP）总结.md",
+    "项目/LB/集群中ECMP流量下的单机调试.md",
+    "项目/LB/健康检查.md",
+    "项目/工作总结/attachments",
     "网络之高性能网络HPN/AI应用",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA连接可扩展性：2-DCT和XRC以及RD.md",
-    "网络之高性能网络HPN/RDMA基础和理论/attachments/Pasted image 20260327203038.png",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA性能优化：1-性能指标.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA连接可扩展性：1-可扩展的RNIC.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA工具：1-工具概述.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA工具：5-perftest工具集.md",
-    "操作系统/IO/网络IO模型：4-IO多路复用epoll的原理和使用介绍.md",
-    "网络之高性能网络HPN/GPU集合通讯库/性能：性能指标.md",
-    "网络之高性能网络HPN/GPU集合通讯库/并行计算：1-概述.md",
-    "网络之高性能网络HPN/GPU集合通讯库/DeepEP：1-整体介绍.md",
-    "网络之物理网络/grpc/为什么有了HTTP，还要用RPC.md",
-    "网络之物理网络/grpc/attachments/Pasted image 20260326173154.png",
-    "网络之物理网络/grpc/attachments/Pasted image 20260326172847.png",
-    "网络之物理网络/grpc/attachments/Pasted image 20260326172639.png",
-    "网络之物理网络/grpc/attachments/Pasted image 20260326172508.png",
-    "网络之物理网络/grpc/attachments/Pasted image 20260326171900.png",
-    "网络之物理网络/grpc/attachments/Pasted image 20260326171709.png",
-    "网络之物理网络/grpc/attachments/Pasted image 20260326171444.png",
-    "网络之物理网络/grpc/attachments/Pasted image 20260326170811.png",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：4-流控之RC类型下IB传输层消息级别的端到端流控.md",
-    "网络之物理网络/http & https/QUIC(HTTP3)协议/QUIC协议基础.md",
-    "项目/LB/现代网络负载均衡与代理导论（2017）.md",
-    "语言/go/golang实现GRPC/Golang中GRPC和Protobuf.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA通信库中间件：7-设计自定义的通讯库中间件.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA入门之一：5-QP之SRQ.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA负载均衡：8-字节自研RDMA传输协议veRoCE.md",
-    "网络之物理网络/http & https/HTTP性能极限优化.md",
-    "网络之物理网络/grpc/grpcurl的使用介绍.md",
-    "网络之物理网络/http & https/Http的问题之短连接&队头阻塞.md",
-    "网络之高性能网络HPN/RDMA基础和理论/attachments/deepseek_mermaid_20260325_5ba7fb.png",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA入门之一：3-RDMA内存.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA入门之三：3-IB规范和RDMA报文讲解.md",
-    "网络之高性能网络HPN/GPU集合通讯库/nccl-tests：1-介绍.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA组网：3-单平面和多平面.md",
     "网络之高性能网络HPN/GPU相关技术栈/attachments",
     "网络之高性能网络HPN/RDMA应用/attachments",
     "项目/工作总结",
-    "网络之高性能网络HPN/GPU集合通讯库/attachments",
+    "网络之高性能网络HPN/GPU集合通讯库NCCL/attachments",
     "网络之高性能网络HPN/高性能互联技术与组网架构/attachments",
     "网络之高性能网络HPN/AI训练框架",
     "网络之高性能网络HPN/高性能互联技术与组网架构",
     "语言/预处理 & 编译 & 汇编 & 链接/elf/attachments",
-    "网络之物理网络/grpc/attachments",
     "未命名 3.canvas",
     "未命名 2.canvas",
     "未命名 1.canvas",

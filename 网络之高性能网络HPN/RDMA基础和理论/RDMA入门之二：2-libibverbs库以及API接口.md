@@ -1744,6 +1744,73 @@ NOTES :
 ## ibv_query_qp
 ## ibv_destroy_qp
 
+
+# mlx5dv
+## 介绍
+**mlx5dv = Mellanox Direct Verbs（mlx5 Direct Verbs）**：mlx5dv 允许你绕过通用 verbs 抽象层，直接操作Mellanox / NVIDIA ConnectX 系列网卡硬件细节。头文件 `<infiniband/mlx5dv.h>`，由 `libmlx5.so` 提供。
+
+mlx5dv 是  NVIDIA/Mellanox 在标准 `libibverbs` 之上提供的一套硬件直接访问 API。它不是替换 ibverbs，而是"绕过抽象层的旁路通道"——让你在需要时直接操作 ConnectX 网卡的内部数据结构（WQE、CQE、UAR 寄存器），而不通过驱动层的通用封装。
+
+![](attachments/rdma_stack_structure.svg)
+
+## 为什么会有 mlx5dv
+
+ibibverbs 的设计目标是：
+```bash
+跨厂商统一接口  
+屏蔽硬件差异
+```
+
+但问题是： **抽象 = 性能和能力损失**
+
+很多 Mellanox 网卡的高级能力，libibverbs 根本表达不了，比如：
+```bash
+- UMR
+- WQE layout 控制
+- Doorbell batching
+- BlueFlame（BF）
+- DevX（直接控制 NIC 对象）
+- CQE 压缩 / 格式控制
+- Flow steering 硬件编程
+```
+
+所以 Mellanox 提供：**mlx5dv = “解锁 Mellanox NIC 全部能力的后门接口”**
+
+
+## libibverbs 和 mlx5dv
+
+`mlx5dv` 和 `libibverbs` 不是互斥关系——同一个 QP 可以先用 `ibv_create_qp` 创建，再用 `mlx5dv_init_obj` 拿到它内部的原始指针，然后直接往 WQ 里写 WQE，绕过 `ibv_post_send` 的层层检查。
+
+### 两者对比
+
+|维度|libibverbs|mlx5dv|
+|---|---|---|
+|抽象层级|高（通用）|低（硬件级）|
+|可移植性|✅ 跨厂商|❌ Mellanox only|
+|易用性|✅ 简单|❌ 复杂|
+|性能|中|⭐ 极致|
+|控制能力|有限|完全控制|
+|API 稳定性|稳定|可能变|
+|使用门槛|低|很高|
+
+
+![](attachments/ibverbs_vs_mlx5dv.svg)
+
+### 真实工程中的使用：混合使用
+
+`libibverbs` 是**可移植的通用接口**，面向"正确运行"。API 稳定，文档完善，有合法性检查，跨 Mellanox / Intel / Broadcom 网卡都能用。99% 的 RDMA 应用（NCCL、OpenMPI、Ceph、NVMe-oF 客户端）用它就够了。
+
+`mlx5dv` 是**Mellanox 硬件的直接操控层**，面向"极致性能"和"硬件特有功能"。它暴露的是 ConnectX 固件规范（PRM）里定义的原始数据结构，调用者必须手动处理字节序、对齐、fence 指令——没有任何保护网。代价是延迟降低 3–5 倍，以及解锁 DevX、Direct Rules、Crypto offload 这些 ibverbs 层完全封闭的能力。
+
+两者最常见的生产用法是**混合模式**。
+
+```c
+qp = ibv_create_qp(...);
+
+// 然后增强
+mlx5_qp = mlx5dv_qp_ex_from_ibv_qp(qp);
+```
+
 # rdma-core库
 
 

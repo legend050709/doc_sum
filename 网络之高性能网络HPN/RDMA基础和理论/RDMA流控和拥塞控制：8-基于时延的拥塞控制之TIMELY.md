@@ -21,6 +21,11 @@ TIMELY是业界首个在数据中心内完全基于延迟测量(RTT)的拥塞控
 
 **特点**：不依赖交换机ECN功能，但要求网卡硬件支持**高精度（微秒级）的RTT测量**。
 
+# 架构
+## RTT测量引擎(RTT Measurement Engine)
+## 速率计算引擎(Rate Computation Engine)
+## 速率整形引擎 (Pacing Engine)
+
 # 参考
 ```bash
 # Timely SIGCOMM 2015

@@ -169,7 +169,7 @@ MMU（Memory Management Unit）是处理器与内存之间的VA和PA的地址转
 - 使用更大的连续DMA内存
     
     1. 可以将非连续的物理内存映射到连续的DMA内存空间中
-    2. 避免使用scatter-gather list
+    2. 避免使用scatter-gather list（SGL）
 - 避免使用Bounce buffer
 - 提供了访问内存保护机制
     
@@ -622,6 +622,38 @@ MMIO （ Memory-Mapped I/O）：是一种CPU用于与硬件设备交互的技�
 **1. 硬件地址映射**：设备的寄存器和缓冲区在系统启动时会被映射到特定的内存地址区域。这个过程通常由硬件初始化程序或操作系统内核的启动代码完成。
 
 **2. 设备寄存器访问**：操作系统可以直接通过读写相应的内存地址来操作硬件。
+
+## Doorbell
+
+### Doorbell 的用途
+拿RDMA的 QP的`send queue`举例：Doorbell的目的是为了让软件告诉硬件queue里有新的WQE需要处理。硬件收到doorbell并不是立即处理，而是将doorbell转换为一个doorbell message暂存下来，等到调度时机到来再处理。硬件处理WQE是以batch方式进行的，一般会一次DMA读取8个WQEBB(每个64字节)。
+
+![](attachments/Pasted%20image%2020260401152034.png)
+
+```bash
+MLX5_SEND_WQE_BB = 64,
+```
+
+### 硬件Doorbell 和软件 Doorbell
+
+![](attachments/Pasted%20image%2020260401152600.png)
+
+#### Push: hardware doorbell
+
+软件往SQ里添加了新的WQE，硬件并不知道，所以需要一个机制让软件通知硬件queue里有新的WQE需要处理，这就是hardware doorbell。Hardware doorbell本身是设备的一个MMIO寄存器，一旦写这个地址硬件就能感知。写入的值包含QPN和producer index(PI)。
+
+Doorbell是以page为单位分配的，每个page内可以包含多个doorbell。需要注意，由于doorbell page以页为单位分配，硬件并不关心doorbell地址的低12位，因此这里的低12位可以用于携带额外的信息，比如queue type(SQ/EQ/CQ等)。
+
+在verbs编程中，doorbell 是随着context的创建而分配的，context内在创建QP/CQ时都会在这个doorbell page内分配具体的doorbell并关联至这个QP。当一个context关联的QP太多时可以再分配一个doorbell page。一个context支持多个doorbell可以有效地支持多个线程使用不同的QP并敲不同的doorbell，以避免并发性问题。
+
+由于ring doorbell是一个异步过程，软件可能在返回后继续写入WQE继续敲doorbell，而此时硬件可能还没有开始处理WQE，所以会产生针对同一个doorbell的多次写入。所以硬件拿到一个doorbell message时并不表示它是最新的PI。另外，用户敲doorbell太频繁时也会导致doorbell message丢失。
+
+#### Pull: software doorbell
+
+Hardware doorbell只能告诉硬件有WQE要处理，但却不能告诉硬件最新的PI，因为软件会多次敲同一个doorbell而硬件并不会立即处理这些doorbell message，另外硬件以batch的方式读取WQE，可能会读到owner还不是硬件的WQE。
+
+所以硬件需要一个方式知道最新的PI值，这就是software doorbell的作用。Software doorbell是一个8字节的内存缓冲区，它的物理地址会被写入QPC以告诉硬件。软件每次更新完WQE都需要将最新的PI值写入software doorbell，由于是override所以硬件读这块内存总能得到最新的PI值，从而判断DMA读取到的WQE哪些是有效的。
+
 
 ## MMIO应用
 ### MMU、IOMMU、MMIO的配合

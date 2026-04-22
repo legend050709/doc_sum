@@ -6,12 +6,19 @@
 # 最大进程个数
 如何查看linux系统默认的最大进程数，这里以centos7(x64)作为例子:
 ```c
+(1) 系统级别
 [root@es1 ~]# cat /proc/sys/kernel/pid_max
 131072
 
+类似的还有 /proc/sys/fs/file-max
+
+（2）用户级别
 [root@es1 ~]# ulimit -a | grep processes
 max user processes              (-u) 15012
 
+类似的还有： ulimit -a | grep "open files"
+
+（3）进程级别
 [root@es1 ~]# cat /proc/1/limits |grep processes
 Max processes             15012                15012                processes 
 
@@ -26,6 +33,7 @@ cat  /proc/sys/kernel/pid_max
 ## 当前用户允许打开的最大进程数
 查看 max user processes  ：即系统限制某用户下最多可以运行多少进程或线程。如下图所示：
 ![](attachments/Pasted%20image%2020231120153212.png)
+
 # 最大线程个数
 其实最大线程数量也可以配置无限大，在资源充足的情况下，但一般都有会默认限制，主要影响线程的参数如下：
 
@@ -43,9 +51,9 @@ ulimit -u  最大的线程/进程数
 cat /proc/sys/kernel/threads-max
 ```
 ## 单个进程允许的最大线程数
-Linux无法直接控制单个进程可拥有的线程数，但有参考公式max = VM/stack_size，默认
+Linux无法直接控制单个进程可拥有的线程数，但有参考公式`max = VM/stack_size`，默认
 stack为8k。用 ulimit -s 可以查看默认的线程栈大小，一般情况下，这个值是8M=8192KB。
-在32位系统中，可以最多创建381个线程，这个值和理论完全相符，因为 32 位 linux 下的进程用户空间是 3G 的大小，也就是 3072M，用3072M/8M（stack大小）=3843072M/8M=384，但是实际上代码段和数据段等还要占用一些空间，这个值应该向下取整到 383，再减去主线程，得到 382。
+在32位系统中，可以最多创建381个线程，这个值和理论完全相符，因为 **32 位 linux 下的进程用户空间是 3G 的大小(32位一共是4G，其中内核空间1G，用户空间3G)**，也就是 3072M，用3072M/8M（stack大小）=3843072M/8M=384，但是实际上代码段和数据段等还要占用一些空间，这个值应该向下取整到 383，再减去主线程，得到 382。
 
 - **提升单个进程的线程个数**
 可通过降低stack大小或增加虚拟内存来调大每个进程可拥有的最大线程数；
@@ -97,6 +105,11 @@ sysctl -w net.ipv4.ip_local_port_range='1024 64000'
 
 ### 系统最大打开文件描述符数
 `/proc/sys/fs/file-max`中指定了系统范围内所有进程可打开的文件句柄的数量限制(系统级别, kernel-level)。
+
+### 用户级别最大打开文件描述符数
+```bash
+ulimit -a | grep "open files"
+```
 
 ### 单个进程可分配的最大文件数
 `/proc/sys/fs/nr_open`  即一个进程最多使用的file handle数

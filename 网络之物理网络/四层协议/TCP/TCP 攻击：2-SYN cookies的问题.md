@@ -119,9 +119,11 @@ static __u32 check_tcp_syn_cookie(__u32 cookie, __be32 saddr, __be32 daddr,
 注：三次握手之后，即可四次挥手的探测，就属于上诉中的特定流量模型。包括连接建立到关闭期间，收发的字节数一样，也是这种特定流量模型。
 
 ## 用户的请求时延变高问题
-`LB`中的 `syn-proxy`是使用 `syn-cookie` 实现的;
+外网`LB`中的 `syn-proxy`是使用 `syn-cookie` 实现的;
 `VS` 开启了 `syn-proxy`后，正常情况下，用户的`HTTP`请求的耗时会增加一个`RTT`。
 ![](attachments/image%20(4).png)
+
+注：一般只有外网的LB才会开始`syn-proxy`。
 
 
 # 总结

@@ -8,7 +8,7 @@ IPsec协议帮助IP层建立安全可信的数据包传输通道。当前已经�
 
 # 基本概念
 ## XFRM 实例
- IPsec中有两个重要概念：**安全关联(Security Association)** 和 **安全策略(Security Policy)**，  这两类信息都需要存放在内核XFRM。
+ IPsec中有两个重要概念：**安全关联(SA: Security Association)** 和 **安全策略(SP: Security Policy)**，  这两类信息都需要存放在内核XFRM。
  
  内核XFRM使用**netns_xfrm**这个结构来组织这些信息，它也被称为`xfrm instance`(实例)。从它的名字也可以看出来，这个实例是与`network namespace`相关的，每个命名空间都有这样的一个实例，实例间彼此独立。所以同一台主机上的不同容器可以互不干扰地使用XFRM。
 ```c
@@ -43,14 +43,14 @@ static int __net_init xfrm_user_net_init(struct net *net)
 
 这样，当用户下发IPsec配置时，内核便可以调用 `xfrm_netlink_rcv()` 来接收。
 
-## XFRM State
+## XFRM State（SA）
 
-XFRM使用`xfrm_state`表示`IPsec`协议栈中的`Security Association`，它表示了一条==单方向==的`IPsec`流量所需的一切信息，包括模式(`Transport`或`Tunnel`)、密钥、`replay`参数等信息。
+==XFRM使用`xfrm_state`表示`IPsec`协议栈中的`Security Association`==，它表示了一条==单方向==的`IPsec`流量所需的一切信息，包括模式(`Transport`或`Tunnel`)、密钥、`replay`参数等信息。
 用户态`IPsec`进程通过发送一个`XFRM_MSG_NEWSA`请求，可以让XFRM创建一个`xfrm_state`结构.
 
 `xfrm_state`包含的字段很多，这里就不贴了，仅仅列出其中最重要的字段：
-- id: 它是一个`xfrm_id`结构，包含该SA的目的地址、SPI、和协议(AH/ESP);
-- props：表示该SA的其他属性，包括IPsec Mode(Transport/Tunnel)、源地址等信息;
+- id: 它是一个`xfrm_id`结构，包含该**SA的目的地址、SPI、和协议(AH/ESP)**;
+- props：表示**该SA的其他属性，包括IPsec Mode(Transport/Tunnel)、源地址**等信息;
 
 每个xfrm_state在内核中会加入多个哈希表，因此，内核可以从多个特征查找到同一个SA：
 ```bash
@@ -61,7 +61,7 @@ xfrm_state_find(): 通过目的地址查找SA
 
 ### 查看
 
-用户可以通过`ip xfrm state ls`命令列出当前主机上的`xfrm_state`
+用户可以通过`ip xfrm state ls`命令列出当前主机上的`xfrm_state`（内核xfrm中的state 其实就是SA）
 ```bash
 src 192.168.0.1 dst 192.168.0.2
     proto esp spi 0xc420a5ed(3290473965) reqid 1(0x00000001) mode tunnel
@@ -79,11 +79,18 @@ src 192.168.0.1 dst 192.168.0.2
       add 2019-09-02 10:25:39 use 2019-09-02 10:25:39
     stats:
       replay-window 0 replay 0 failed 0
+
+如上：sip/dip, 封装协议esp，封装模式：tunnel; spi: 0xc420a5ed(3290473965)
+
+认证算法：auth-trunc hmac(sha256)
+加密算法：enc cbc(aes)
+防重放：anti-replay context:
+生命周期：lifetime
 ```
 
-## XFRM Policy
+## XFRM Policy（SP）
 
-`XFRM`使用 **`xfrm_policy`表示IPsec协议栈中的Security Policy**，用户通过下发这样的规则，可以让`XFRM`允许或者禁止某些特征的流的发送和接收。用户态IPsec进程通过发送一个XFRM_MSG_POLICY请求，可以让`XFRM`创建一个`xfrm_state`结构。
+`XFRM`使用 **`xfrm_policy`表示IPsec协议栈中的Security Policy（SP）**，用户通过下发这样的规则，可以让`XFRM`允许或者禁止某些特征的流的发送和接收。用户态IPsec进程通过发送一个XFRM_MSG_POLICY请求，可以让`XFRM`创建一个`xfrm_state`结构。
 
 ```c
 struct xfrm_policy {
@@ -149,6 +156,14 @@ src 10.1.0.0/16 dst 10.2.0.0/16 uid 0
         proto esp spi 0xc420a5ed(3290473965) reqid 1(0x00000001) mode tunnel
         level required share any 
         enc-mask ffffffff auth-mask ffffffff comp-mask ffffffff
+
+
+如上所示：
+	匹配规则（匹配到的流量执行SA）： src 10.1.0.0/16 dst 10.2.0.0/16 uid 0
+	方向：out or in
+	动作：allow or drop
+	生命周期：lifetime
+	关联的SA(state)： tmpl src 192.168.0.1 dst 192.168.0.2, proto esp spi 0xc420a5ed(3290473965) reqid 1(0x00000001) mode tunnel
 ```
 
 # 接收发送IPSec报文
@@ -211,6 +226,7 @@ IPv4 以及 ipv6相关的ipsec子系统目录。
 
 如上所示，发包而言，`taps`是`tcpdump`的发包位置。
 `tcpdump`在封装之后，即`tcpdump`看到的是`ESP`封装之后的包。看不到原始包。
+注： esp4_offload 对于 ESP 的加密没有任何作用。
 
 
 # offload
@@ -222,9 +238,15 @@ IPv4 以及 ipv6相关的ipsec子系统目录。
 
 
 ### 注意
-esp_offload 是一个普通的内核模块，不是驱动中。
+**esp_offload 是一个普通的内核模块，不是驱动中**。
 收包而言 ，在tcpdump之前。
-为了达到最大带宽，需要开启网卡的`gro`、`gso`，`esp_offload` 可能是挂在`gro`上面，所以开启后收到的包是解封后的。`GRO`不开启，可能`esp_offload` 无法生效。
+为了达到最大带宽，需要开启网卡的`gro`、`gso`；==`esp_offload` 可能是挂在`gro`上面，所以开启后收到的包是解封后的。`GRO`不开启，可能`esp_offload` 无法生效==。
+
+### esp4_offload的作用
+esp4_offload 是一个内核模块：那么和内核自己进行ESP的解密（如果是隧道模式，解密就涉及到解封装）相比，都是CPU进行解封装。好像没有任何的优势。
+esp4_offload 的作用：**就是和GRO结合，在收包的时候，可以对于大块数据进行解密**。
+
+注：因此 esp4_offload 对于 ESP 的加密没有任何作用。
 
 ### 安装
 ```bash
@@ -564,7 +586,7 @@ iptables -t mangle -I FORWARD -s 193.8.0.1 -j LOG
 内核5.4版本修复了该问题。
 [xfrm: support output_mark for offload ESP packets](https://lore.kernel.org/stable/20200128135828.650597485@linuxfoundation.org/)
 
-# ipsec应用strngswan理解
+# ipsec应用strongswan理解
 
 ![](attachments/Pasted%20image%2020240928212625.png)
 

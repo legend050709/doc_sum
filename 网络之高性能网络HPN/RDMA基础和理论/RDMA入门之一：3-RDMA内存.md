@@ -49,8 +49,14 @@ Step 3：RNIC发出DMA请求读取主机DRAM中的数据，然后将数据处理
 
 # RDMA内存管理概述
 ## MR
+
+
 远端想要访问本地内存，首先需要本地的“同意”，即本地仅仅暴露想要暴露的内存，其他内存远端则不可访问。
-该“同意”操作，我们一般称为 Memory Region （简称 MR） 注册，操作系统在收到该请求时会锁住该段申请内存，防止内存被 swap 到硬盘上，同时将这个注册信息告知 RDMA 专用网卡，RDMA 网卡会保存虚拟地址到物理地址的映射。
+该“同意”操作，我们一般称为 Memory Region （简称 MR） 注册，操作系统在收到该请求时会**锁住（pin）** 该段申请内存，防止内存被 swap 到硬盘上，同时将这个注册信息告知 RDMA 专用网卡，RDMA 网卡会保存虚拟地址到物理地址的映射。
+
+![](attachments/Pasted%20image%2020260401102708.png)
+
+
 经过此番操作，由 MR 代表的内存暴露出来了，远端可以对其进行访问。
 出于安全的考虑，只有被允许的远端才可以访问，这些远端持有远端访问密钥，即Remote Key（简称 RKey），只有带有正确 RKey 的请求才能够访问成功。
 
@@ -142,6 +148,15 @@ MR 包括以下属性：
 （4）lkey：MR 的 local key，唯一标识，在本端执行 RDMA API 操作中用来验证访问权限。
 （5）rkey：MR 的 remote key，唯一标识，在远端执行 RDMA API 操作中用来验证访问权限。
 
+#### 内存秘钥Keys
+
+在RDMA通信中，内存区域（Memory Region，MR）的访问是通过两种密钥来控制的：本地访问密钥（local access key，L_Key）和远程访问密钥（remote access key，R_Key）。这两个密钥作为MR的标识符，并在MR注册过程中生成。
+
+L_Key 总是在注册MR时生成，并用于控制本地用户对MR的读写访问。本地用户在这里指的是在同一台主机上运行的进程或者应用程序，它们可以使用L_Key来直接访问内存。  
+
+R_Key 用于控制远程用户对MR的读写访问，这个密钥在注册MR时必须明确请求。远程用户指的是通过网络进行通信的其他主机上的进程或应用程序。R_Key对于RDMA通信至关重要，因为没有它，远程用户将无法执行RDMA操作，即无法直接从远程主机读取或写入内存区域。
+
+
 ### 限制
 MR注册，会创建两个key (local和remote)指向需要操作的内存区域，注册的keys是数据传输请求的一部分。
 
@@ -155,11 +170,22 @@ RDMA要求应用程序在使用内存前显式注册内存区域（Memory Region
  a. Pin内存：锁定物理内存，阻止操作系统换出（swap)。
  b. 构建地址映射表（如MTT）：将虚拟地址映射到物理地址，供网卡直接访问。
 
-### 什么是pin内存？
+### 什么是swap out?
 
-pin内存也叫锁页，就是固定虚拟地址和物理地址的映射，**防止物理页面被swap**。
+因为**物理内存是有限的**，所以操作系统通过换页机制来暂时把某个进程不用的内存内容保存到硬盘中。当该进程需要使用时，再通过**缺页中断**把硬盘中的内容搬移回内存，这个就是swap out。
+
+影响：`swap out`几乎必然导致`VA-PA`的映射关系发生改变。
+
+### 什么是pin内存(锁定VA-PA的映射关系)？
+
+pin内存也叫**锁页**，就是固定虚拟地址和物理地址的映射，**防止物理页面被swap**。
 
 注：==只要涉及IO地址翻译，无论是IOMMU还是MTT都需要pin内存==。
+
+
+由于HCA经常会绕过CPU对用户提供的VA所指向的物理内存区域进行读写，如果前后的`VA-PA`映射关系发生改变，那么我们在前文提到的`VA->PA`映射表将失去意义，HCA将无法找到正确的物理地址。
+
+为了防止换页所导致的`VA-PA`映射关系发生改变，注册MR时会"Pin"住这块内存（亦称“锁页”），即锁定`VA-PA`的映射关系。也就是说，MR这块内存区域会长期存在于物理内存中不被换页，直到完成通信之后，用户主动注销这片MR。
 
 ### 使用RDMA的时候为什么需要pin内存？
 使用RDMA的时候为什么要pin内存？
@@ -167,7 +193,6 @@ pin内存也叫锁页，就是固定虚拟地址和物理地址的映射，**防
 准确的说是虚拟地址（VA）到物理地址的翻译（PA），而**==pin内存是为了不让这个物理地址被其他的程序使用==**；
 
 否则RDMA要访问虚拟地址A，本来对应的是物理地址a；如果不pin内存，这个时候操作系统把物理地址a进行swap，然后物理地址a又被另外一个进程拿去用了，这个时候RDMA再去访问虚拟地址A，经过MTT转换还是往a这个物理地址写，那就写了其他进程的内存了。
-
 
 ### 非RDMA场景应用也有DMA操作，为什么不用pin内存？
 #### 内核协议栈
@@ -191,12 +216,23 @@ pin内存也叫锁页，就是固定虚拟地址和物理地址的映射，**防
 
 不过也有一些新硬件设备支持触发的缺页机制（如ARM SMMUv3的STALL模型），允许IOMMU暂停DMA操作并通知操作系统重新映射内存，或者一些intel新CPU支持再IOMMU缺页时产生MMU-notifier提供内核处理，然而，当然这些是依赖硬件支持的。
 
-## 小结
+### 小结
 
 **Memory Region (MR)：**
-用户通过`ibv_reg_mr`向对端暴露一块内存(iova+va+len+key)，iova是对端来访问所用地址，va是本地访问所用地址，它们都需在硬件里翻译为PA，所以注册MR涉及建立MTT地址翻译表。同时也需为MR指定访问权限如可读可写，这涉及建立MPT表。MR所涵盖的物理内存需要在注册时PIN住以避免DMA访问`swapped out`的页。
-注册MR可以指定MR的访问权限(`local/remote read/write`)。MR注册好之后会返回LKEY和RKEY，LKEY用于自己访问自己，RKEY用于别人访问自己。
-一片内存区可以多次注册MR，每次可以设置不同的访问权限，每次都会返回不同的LKEY和RKEY。
+用户通过`ibv_reg_mr`向对端暴露一块内存(`iova+va+len+key`)：
+```bash
+iova是对端来访问所用地址，
+va是本地访问所用地址
+```
+**iova 和 va** 都需在硬件里翻译为**PA**，所以注册MR涉及建立**MTT**地址翻译表。
+同时也需为MR指定访问权限如可读可写，这涉及建立**MPT表**。
+
+MR所涵盖的物理内存需要在注册时**PIN住**，以避免DMA访问`swapped out`的页。
+注册MR可以指定**MR的访问权限**(`local/remote read/write`)。
+
+MR注册好之后会返回**LKEY和RKEY**，LKEY用于自己访问自己，RKEY用于别人访问自己。
+
+**一片内存区可以多次注册MR**，每次可以设置不同的访问权限，每次都会返回不同的LKEY和RKEY。
 
 ## FMR
 ### 介绍
@@ -230,38 +266,6 @@ PA-MR在注册内存时，直接使用**物理地址（Physical Address, PA）**
 **安全性风险**：直接暴露物理地址可能被恶意利用（需结合PD保护域和密钥隔离）。
 **平台依赖**：部分RNIC硬件或操作系统可能不支持PA-MR模式。
 
-## ODP 、 iODP 和 MR
-ODP（On-Demand Paging）和  iODP（Implicit On-Demand Paging）
-
-### 按需分页（ODP）
-参考：[# Understanding On Demand Paging (ODP)](https://enterprise-support.nvidia.com/s/article/understanding-on-demand-paging--odp-x)
-ODP（On-Demand Paging）
-
-#### 背景
-借助ODP技术，应用程序无需确定用户注册的虚拟地址位于物理页的实际位置。
-在RDMA杂谈[对MR的介绍](https://zhuanlan.zhihu.com/p/156975042)中我们知道，传统情况下本地的HCA是需要维护VA->PA的映射表的，如下图所示，且注册MR时需要通过锁页保证VA->PA的映射不会更改。而使用ODP后HCA不再需要维护映射表，而是当页面不存在时向操作系统请求新的VA->PA的转化。
-
-#### 分类
-ODP（On-Demand Paging）分为 隐式ODP 「 iODP：Implicit ODP」和 显式ODP  「Explicit ODP」。
-显示方式是针对对特定缓冲区，而隐式方式则是注册程序的整个虚地址空间：
-```bash
-access_flags |= IBV_ACCESS_ON_DEMAND;  
-  
-// 隐式  
-ctx->mr = ibv_reg_mr(ctx->pd, NULL, SIZE_MAX, access_flags);  
-  
-// 显示  
-ibv_reg_mr(ctx->pd, ctx->buf, size, access_flags);
-```
-
-
-
-## DM作为MR
-DM(device memory): register the allocated device memory as a memory region.
-
-设备内存作为MR，省去了RNIC通过DMA从主机内存中读写数据。
-但是涉及到，应用程序从设备内存中拿数据的问题。
-
 ### API接口
 参考: [# ibv_alloc_dm](https://man7.org/linux/man-pages/man3/ibv_alloc_dm.3.html)
 ```C
@@ -290,6 +294,12 @@ MW允许用户更灵活的控制远端对本地内存的访问：动态的授予
 
 ## PD
 
+由于用户可能需要与许多不同的目的地通信，但并不希望所有这些目的地都能够同等地访问其注册的内存，因此IBA提供了PD机制。
+PD确保Memory Region和QP在相同的PD内才能被相互访问。PD实际上提供了一个更细粒度的访问控制。
+例如，可以控制哪些内存区域可以被远程节点读取或写入，以及哪些QP可以处理这些请求。同时，PD简化了资源管理。在一个PD内部，可以轻松地管理和配置多个内存区域和QP，而不需要为每个资源单独设置访问权限。
+
+在用户分配QP或注册内存之前，可以创建一个或多个PD。将之后的QP和Memory Region关联到特定PD。内存区域的`L_Keys`和`R_Keys`只有在相同PD中的QP上才有效。
+
 ## MR、MW和PD以及QP的关系
 
 ![](attachments/deepseek_mermaid_20260319_e9d21a%202.png)
@@ -305,6 +315,7 @@ MW允许用户更灵活的控制远端对本地内存的访问：动态的授予
 ### RNIC的片上内存
 RNIC存在片上内存：可以理解为主要是作为缓存，类似于CPU上也是存在缓存。
 大小大概是几M。
+
 #### 存储内容
 主要存储的是 QP的元数据(metadata), QPC、MTT缓存、CCS(拥塞控制状态), MPT缓存，WQE、CQE、统计和计数等。
 
@@ -481,30 +492,199 @@ RDMA的核心目标是**绕过CPU和操作系统**，直接通过网卡访问远
 - **预取策略**： 在预期访问前，通过软件提示网卡预加载相关MTT/MPT条目到SRAM。
 - **减少细粒度访问**： 合并多个小数据操作成批量操作，减少MTT/MPT查询次数。
 
+
+# None-Pin RDMA
+## PINNED RDMA的问题
+1，注册MR时PIN住物理内存这使得可注册的内存空间受限于物理内存大小。
+2，应用程序必须有锁住内存的权限。
+3，注册本身需要在HCA建立地址映射表，而get_user_pages以及填写页表都是耗时操作，这导致**注册MR很慢**。
+4，持续的在软硬件之间同步地址翻译表是一个很耗时的操作。这是因为malloc/mmap/stack都会导致页表变化。
+
+## 计算内存区和通信内存区
+
+![](attachments/Pasted%20image%2020260401150250.png)
+
+很多程序并不知道未来的数据会放在哪个VA范围，也不知道未来需要使用的内存会有多大，这就导致它不能提前注册MR，只能在快要用RDMA发送数据时才注册MR，而注册MR很慢又会阻塞计算。
+应用也不能将整个进程的虚拟地址空间注册为MR，因为没有这么多的物理内存可以PIN住。
+
+这种矛盾就产生了计算内存区和通信内存区的区分：计算内存区是程序运行时动态扩张的，其大小和范围无法提前预测，而通信内存区是提前注册好的MR，其物理内存是PIN住的。
+
+应用使用RDMA发送数据时要先将数据从计算内存区copy至通信内存区。这是一个很大的开销。
+
+## 方案一：ODP MR（按需分页MR）
+
+参考：[# Understanding On Demand Paging (ODP)](https://enterprise-support.nvidia.com/s/article/understanding-on-demand-paging--odp-x)
+ODP（On-Demand Paging）：注册MR时指定`IBV_ACCESS_ON_DEMAND`标识则创建`ODP MR`，其初始地址翻译表里VA对应的物理页并不存在，因此设备首次访问`MR VA`时会产生`IO page fault(IOPF)`，HCA驱动处理此`IOPF`并换入所需物理页，更新HCA里的地址翻译表，则下次设备DMA时不再发生IOPF。
+若操作系统决定`swap out` VA对应的物理页，也会由HCA驱动更新地址翻译表将VA对应entry置为`page none-present`。
+
+### 背景
+借助ODP技术，应用程序无需确定用户注册的虚拟地址位于物理页的实际位置。
+在RDMA杂谈[对MR的介绍](https://zhuanlan.zhihu.com/p/156975042)中我们知道，**传统情况下本地的HCA是需要维护`VA->PA`的映射表的**，如下图所示，且**注册MR时需要通过锁页保证`VA->PA`的映射不会更改**。
+
+而**使用ODP后HCA不再需要维护映射表**，而是**当页面不存在时向操作系统请求新的`VA->PA`的转化**。
+
+### 分类：隐式ODP和显式ODP
+ODP（On-Demand Paging）分为 隐式ODP 「 iODP：Implicit ODP」和 显式ODP  「Explicit ODP」。
+显示方式是针对对特定缓冲区，而隐式方式则是注册程序的整个虚地址空间：
+```bash
+access_flags |= IBV_ACCESS_ON_DEMAND;  
+  
+// 隐式  
+ctx->mr = ibv_reg_mr(ctx->pd, NULL, SIZE_MAX, access_flags);  
+  
+// 显示  
+ibv_reg_mr(ctx->pd, ctx->buf, size, access_flags);
+```
+
+
+## DM作为MR
+DM(device memory): register the allocated device memory as a memory region.
+
+设备内存作为MR，省去了RNIC通过DMA从主机内存中读写数据。
+但是涉及到，应用程序从设备内存中拿数据的问题。
+
 # UMR
 
 
-## 背景
 ## 介绍
-**User-mode memory registration (UMR)**
+**User-mode memory registration (UMR)**： 是 Mellanox/NVIDIA RDMA 网卡（ConnectX-4 及以上）提供的一种高级内存注册机制，允许在**不重新注册物理内存**的前提下，**动态地重新定义一个 MR 的内存布局**。
 
+
+
+## 核心数据结构
+
+```bash
+┌─────────────────────────────────────────────┐
+│            UMR (klm_mkey / indirect MR)      │
+│  lkey/rkey: 0xABCD                           │
+│  virtual_addr: 0x1000_0000 (虚拟起始地址)    │
+│  length: len(Body1) + len(Body2) + len(Body3) │
+│                                               │
+│  KLM List (Key-Len-Mkey entries):            │
+│  ┌──────────────────────────────────────┐    │
+│  │ entry[0]: mkey=MR1, offset=header1_sz, len=body1_sz │
+│  │ entry[1]: mkey=MR2, offset=header2_sz, len=body2_sz │
+│  │ entry[2]: mkey=MR3, offset=header3_sz, len=body3_sz │
+│  └──────────────────────────────────────┘    │
+└─────────────────────────────────────────────┘
+
+
+```
+
+UMR 通过 KLM（Key-Length-Mkey） 或 MTT（Memory Translation Table） 条目描述底层物理内存的映射，每个条目指向已有 MR 的某个偏移区域。
+
+## 特性
 ### 将多块非连续的MR拼接成一个VA连续的MR
 
 ![](attachments/Pasted%20image%2020251230154011.png)
 
-如上图所示，我们之前创建了3个常规得MR：MR1(green), MR2(purple), MR3(red)，现在我们想从这三个MR中各抽取一部分拼接起来形成一个新的逻辑上连续的MR：第一块是MR1(v0-v1)部分，第二块是MR2(v2-v3)部分，第三块是MR3(v4-v5)部分。这个新的MR有一个新的base VA地址，长度是3个小块的长度之和。这样虽然内部是不连续的，但在外部访问者看来这个MR是连续的。
+如上图所示，我们之前创建了3个常规得MR：MR1(green), MR2(purple), MR3(red)。
+现在我们想**从这三个MR中各抽取一部分拼接起来形成一个新的逻辑上连续的MR**：
+第一块是MR1(v0-v1)部分，第二块是MR2(v2-v3)部分，第三块是MR3(v4-v5)部分。
+
+这个新的MR有一个新的base VA地址，长度是3个小块的长度之和。这样虽然内部是不连续的，但在外部访问者（基于CPU的应用程序）看来这个MR是连续的。
+
 
 ### 将一个MR内有规律非连续的块拼接成一个VA连续的MR
 
 ![](attachments/Pasted%20image%2020251230154220.png)
 
-如上图所示，当我们做一个矩阵的转置时需要把一列的元素拼成新的行，这个行就成了新的连续的MR。老矩阵的列元素一般可以用<基地址(base address), 元素间距(stride)，元素长度(block size)，元素数量(repeat count)>来描述。
+即：**将一个矩阵的列（VA地址不连续，物理地址不连续）给提出来，组成一个VA地址连续的MR**。
+
+如上图所示，当我们做一个矩阵的转置时需要把一列的元素拼成新的行，这个行就成了新的连续的MR。
+老矩阵的列元素一般可以用`<基地址(base address), 元素间距(stride)，元素长度(block size)，元素数量(repeat count)>`来描述。
 
 ### 将多个MR拼接成新的相互交织的VA连续MR
 
 ![](attachments/Pasted%20image%2020251230154339.png)
 如上图所示，2个老矩阵的列相互交织形成新的列，这是一个新的VA连续的MR，有它自己的新的base address和length。
 
+
+## 应用场景
+### 场景一：减少MR的数量（进程中多个MR时，减少lkey以及rkey的查找）
+如果每 NUMA 一个巨型 MR，未来若支持用户自定义内存（kucl_extmem_register，比如为每个GPU显存存在一个MR，单机存在多个GPU），那么进程中就存在多个MR，每个RDMA 读写需要设置地址的 lkey 或者 rkey ，都需要查找 lkey 和 rkey。
+通过 UMR（Indirect MR ）将多个物理不连续的 MR 聚合成一个虚拟连续的 MR，这样就只有一个 lkey 和 rkey。
+
+注：为了防止跨NUMA通信等，实际上需要设置线程/CPU/内存的亲和性。
+
+### 场景二：gather多个MR的部分内存为一块逻辑地址连续的内存
+#### 具体场景
+**场景**：
+底层基于libibverbs rdma，client的多个连接，分别和不同的server端进行RPC通信（RPC请求和响应）。
+最终希望将多个server的RPC响应的数据体，聚合到一块逻辑地址连续的内存上，整个过程零拷贝。 
+但是有一个问题，每个server响应的数据的格式：rpc响应头+响应消息体；
+最终期望的是多个响应消息体放在一大块逻辑地址连续的内存空间中（业务就可以操作这个逻辑地址连续的内存空间，比如数据压缩等，避免拷贝）。 
+如何实现呢？
+
+
+**问题建模**
+
+![](attachments/problem_model.svg)
+
+```bash
+Server A 响应:  [RPC Header A (32B)] [Message Body A (N bytes)]
+Server B 响应:  [RPC Header B (32B)] [Message Body B (M bytes)]
+Server C 响应:  [RPC Header C (32B)] [Message Body C (K bytes)]
+
+目标内存:       [Body A][Body B][Body C]  ← 逻辑连续，零拷贝
+```
+
+
+
+#### 解决一：RDMA Write with Immediate + 分段两次写（RPC协议改造，无 UMR 要求）
+修改 RPC 协议，让 Server 做两次 RDMA Write：
+```bash
+Write 1: 写rpc Header → Client 的 header_recv_buf（per-connection 小缓冲区）
+Write 2 with IMM: 写 rpc Body → Client 的聚合 Buffer + offset
+```
+
+**缺点**：
+但这增加了 RTT（需要两个 Write）且需要修改 Server 侧逻辑，不推荐。
+
+**优点**：
+这个不仅可以做到多个消息体的逻辑地址连续，也可以做到多个消息体的物理地址连续。
+
+#### 解决二：UMR（Indirect MR）
+**UMR（User-Mode Memory Registration / Indirect MKey）** 是 mlx5 硬件的一项能力，允许你在用户态创建一个"虚拟 MKey"，这个 MKey 的虚拟地址空间映射到若干段不连续的物理内存区域。对远端 server 来说 以及本地的应用程序来说，它看到的是一块连续的目标地址。
+
+##### 方案一：RPC header 长度固定：
+
+![](attachments/umr_concept.svg)
+
+server 看到的是一块连续的 RDMA 目标地址（由 UMR rkey 描述），server 自己不需要做任何特殊处理；硬件在 DMA 时根据 UMR 散列表，自动把 header 字节投放到 scratch 区，把 body 字节投放到聚合 buf 的正确 slot。
+
+![](attachments/umr_full_flow.svg)
+
+从多个server获取数据的流程：
+![](attachments/scheme1_memory_layout.svg)
+
+##### 方案二：PRC header长度不固定：
+
+方案二有一个关键细节：动态重配的 UMR 不是用来"再次接收"数据，而是用来把已经落在 staging buf 里的 body 部分**重新映射成一个虚拟连续的视图**，供消费者通过 rkey 访问，全程无 CPU 拷贝。
+
+流程：
+server 先写入 staging，client 读 header 拿到偏移，再动态重配 UMR 暴露虚拟连续的 body 视图。
+
+![](attachments/scheme2_flow.svg)
+
+
+##### 对比
+
+![](attachments/two_scheme_overview.svg)
+
+实际工程中，方案二有一个更实用的变体：**header 有上界但不固定**。此时用方案一的架构，但把 `hdr_size` 改为 `max_hdr_size`（对齐到 cache line，如 256 字节），server 填充不足的部分用 0 补齐，UMR 散列点固定在 `max_hdr_size` 偏移处。
+
+
+#### 解决三：RDMA Send/Recv 操作 + Scatter Receive（分散接收）
+当接收方 post 一个带有多个 SGE 的 recv WQE 时，硬件会按顺序将入站数据分散填充到各个 SGE 所指向的内存：
+但是，这个**只适用于 RDMA Send/Recv ，RDMA Write 由于绕过 RQ，直接写入到指定地址，是不可行的**。
+
+```bash
+Server 发送:  [  RPC Header (32B)  |    Message Body (N bytes)   ]
+                    ↓ 硬件自动分散
+Client WQE:   SGE[0] → header_buf      (32B)
+              SGE[1] → agg_buf+offset  (N bytes)
+```
 
 
 
@@ -516,5 +696,9 @@ https://mp.weixin.qq.com/s/bQy9BQyeLYj12kjZqIeObg
 # 在Rust中管理RDMA内存
 https://mp.weixin.qq.com/s/xYAHl3eN-vdez5hojiSuLw
 
+# RDMA 高级
+https://zhuanlan.zhihu.com/p/567720023
 
+# Notes about RDMA UMR(User-Mode Memory Registration)
+https://liujunming.top/2024/10/13/Notes-about-RDMA-User-Mode-Memory-Registration-UMR/
 ```

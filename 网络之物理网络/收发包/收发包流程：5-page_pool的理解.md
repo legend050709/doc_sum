@@ -30,7 +30,6 @@ page pool是网络模块的一个页面池缓存机制，主要用于分配以�
 
 ## Buddy System 内存分配介绍
 
-
 **Buddy System 不是全局的，而是按 NUMA 节点 + 内存域（zone）划分的 “分区管理”，无全局单一池**。
 
 ![](attachments/Pasted%20image%2020260312201118.png)
@@ -50,6 +49,38 @@ page pool是网络模块的一个页面池缓存机制，主要用于分配以�
 
 - **页阶数（order）维度**：
     每个 zone 内，按连续页的数量（2^order 个）维护 11 条独立的空闲链表（order0~10），比如 order3 对应 8 个连续 4K 页（32K）
+
+### 详解
+
+Buddy 系统是 Linux 最底层的内存管理机制，它使用 Page 粒度来管理内存。通常情况下一个 Page 的大小为 4K，在 Buddy 系统中分配、释放、回收的最小单位都是 Page。
+
+![](attachments/Pasted%20image%2020260331174140.png)
+
+
+#### 层次化划分
+
+一个系统的内存总大小动辄几G几十G，不同的内存区域也有不同的特性。Buddy 使用层次化的结构把这些特性给组织起来：
+
+- **1、Node**。在 NUMA 架构下存在多个 Memory 和 CPU 节点，不同 CPU 访问不同 Memory 节点的速度是不一样的，使用 Node 的形式把各个 Memory 节点的内存管理起来。
+
+- **2、Zone**。某些外设只能访问低 16M 的物理地址，某些外设只能访问低 4G 的物理地址，32bit 的内核空间只能直接映射低 896M 物理地址。根据这些地址空间的限制，把同一个 node 内的内存再划分成多个 zone 。
+
+- **3、Order Freelist**。按照空闲内存块的长度，把内存挂载到不同长度的 freelist 链表中。freelist 的长度是以 (2^order x Page) 来递增的，即 1 page、2 page、4 page … 2^n，通常情况下最大 order 为10 对应的空闲内存大小为 4M bytes。在分配时，如果一个空闲块的大小不能被任一长度整除，它就从大到小逐个分解成多个 (2^order x Page) 块来挂载；在释放时，首先把内存释放到对应长度的链表中，随后看看和该内存大小相同、地址相邻的兄弟块(Buddy)是不是free的，如果可以和 buddy 块合并成一个大块挂载到更高一阶的链表，在挂载的时候继续尝试合并。这就是 Buddy 的核心思想，已2的幂个 page 的长度来管理内存方便分配和释放，最核心的目的就是减少内存的碎片化。
+
+- **4、Migrate Type**。为了进一步减少碎片化，系统对内存按照迁移类型进行了分类，最基本的迁移类型有：不可移动(unmovable)、可移动(movable)、可回收(reclaimable)。初始的最大块空闲内存都是 unmovable 的，如果其中一小块分配给了 reclaimable ，那么剩下的内存都变成了 reclaimable。这样坏的类型和坏的类型集中到了一起，避免坏情况的扩散从而造成多个 Free 区域无法合并的情况。
+
+- **5、PerCPU 1 Page Cache**。大于 1 Page 的内存分配大多发生在内核态，而用户态的内存分配使用的是缺页机制所以分配的大小一般是 1 Page。针对大小为 1 Page 的内存分配，系统设计了一个免锁的 PerCPU cache 来支撑。1 Page (Order = 0) 的空闲内存优先释放到 PCP 中，超过了一定 batch 才会释放到 Order Freelist当中；同样 1 Page 的内存也优先在 PCP 中分配。
+
+
+|ayer|item|category|descript|
+|---|---|---|---|
+|0|node|0-n|NUMA 结构含有多个 Memory 节点  <br>UMA 结构只有一个 Memory 节点|
+|1|zone|ZONE_DMA  <br>ZONE_DMA32  <br>ZONE_NORMAL  <br>ZONE_HIGHMEM  <br>ZONE_MOVABLE  <br>ZONE_DEVICE|(<16M)x86架构下某些ISA外设的DMA寻址能力为16M  <br>(<4G)历史32bit下的外设DMA寻址能力为4G  <br>-  <br>在x86 32bit下，超过896M的内存无法在内核态线性映射，称为高端内存。x86_64因为虚拟空间很大，没有这块内存。  <br>这些区域的物理内存支持动态的热插拔  <br>为某些设备预留的内存区域|
+|2.1|order freelist|2^0 Page  <br>…  <br>2^max_order Page|按照2的幂个 Page 的大小来分类空闲内存|
+|2.1.1|migrate type|MIGRATE_UNMOVABLE  <br>MIGRATE_MOVABLE  <br>MIGRATE_RECLAIMABLE  <br>MIGRATE_HIGHATOMIC  <br>MIGRATE_CMA  <br>MIGRATE_ISOLATE|把每级 order freelist 按照迁移类型分成多个链表|
+|2.2|PCP|PerCPU:  <br>MIGRATE_UNMOVABLE  <br>MIGRATE_MOVABLE  <br>MIGRATE_RECLAIMABLE|针对 1 Page 创建的 PerCPU的cache，其中只包含3种基本的 migrate type|
+
+
 
 ### 为什么不设计成全局？
 

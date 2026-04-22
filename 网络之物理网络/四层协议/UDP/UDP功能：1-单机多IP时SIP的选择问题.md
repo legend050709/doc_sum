@@ -110,7 +110,7 @@ UDP 在很多方面都没有 TCP 复杂，但源地址选择是个例外。UDP �
 
 HOST 2 作为 UDP Server, 当 HOST 1 发送一个源地址 为 10.0.0.1 且目的地址为 192.168.2.1 的 UDP 报文后，HOST 2 查询路由发现回复的报文应该走 eth1，因此回复的报文源地址为 192.168.3.1。
 
-有什么办法可以避免 UDP 每个报文都去进行路由查找然后源地址选择呢？答案是 bind() 或者 connect()。
+**有什么办法可以避免 UDP 每个报文都去进行路由查找然后源地址选择呢？答案是 bind() 或者 connect()**。
 ```c
 #include <sys/types.h>          /* See NOTES */
 #include <sys/socket.h>

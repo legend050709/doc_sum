@@ -6,6 +6,16 @@
 ## git clone
 ## git branch
 ## git log
+
+### 查看某个函数的所有修改
+```bash
+git log -L :函数名:文件名
+
+比如：
+git log -L :kbuff_malloc:src/eal/kbuff.c
+```
+
+
 ## git tag
 
 ## git status

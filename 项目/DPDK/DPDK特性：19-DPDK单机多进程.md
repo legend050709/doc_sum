@@ -3,7 +3,7 @@
 
 # 多个 DPDK 进程绑定同一个 PCIe 网卡，会不会冲突？
 ## 结论
-在未开启多进程共享 PMD（multi-process / Primary + Secondary）模式的情况下，多个独立 DPDK 程序不能同时绑定同一块网卡的同一个 PCIe 设备。绝大多数驱动中会直接冲突，初始化失败。
+在未开启多进程共享 PMD（multi-process / Primary + Secondary）模式的情况下，多个独立 DPDK 程序不能同时绑定同一块网卡的同一个 PCIe 设备。绝大多数驱动中会直接冲突，初始化失败「Mellanox 网卡是例外」。
 
 多个独立 DPDK 程序如果尝试绑定同一 NIC：
 - **第一个进程成功初始化驱动**
@@ -15,9 +15,7 @@ ethdev: device already probed
 ```
 
 ## DPDK 中会自动分配不同队列给不同进程吗？
-**不会。**
-
-DPDK PMD 没办法做到“队列级别独占绑定”，因为：
+**不会。DPDK PMD 没办法做到“队列级别独占绑定”**，因为：
 - 驱动 probe PCIe 设备是设备级，不是队列级
 - **一个进程初始化 NIC 必然初始化整个 device**
 - 队列数是在 device init 时统一配置的（`rte_eth_dev_configure`）
@@ -50,7 +48,7 @@ DPDK 的 PMD 默认是 **进程私有** 驱动：
 
 - **方法关键点**：
     1. **内存隔离**：使用不同的 `--file-prefix`。这样每个进程会创建自己独立的大页内存映射文件。
-    2. **核心隔离**：使用 `--lcores` 或 `-c` 确保不同进程运行在不同的物理核上，避免上下文切换抖动。
+    2. **CPU隔离**：使用 `--lcores` 或 `-c` 确保不同进程运行在不同的物理核上，避免上下文切换抖动。
     3. **设备隔离**：使用 `-a` (allow) 或 `-b` (block) 参数。例如进程 A 只接管 `0000:01:00.0`，进程 B 只接管 `0000:01:00.1`。
 
 比如：
@@ -58,18 +56,18 @@ DPDK 的 PMD 默认是 **进程私有** 驱动：
 进程 A: ./app1 --file-prefix=p1 -a 01:00.0 -l 1-2
 进程 B: ./app2 --file-prefix=p2 -a 01:00.1 -l 3-4
 ```
+### CPU隔离
+使用 `--lcores` 或 `-c` 确保不同进程运行在不同的物理核上，避免上下文切换抖动。
 
 ### 内存隔离
 使用不同的 `--file-prefix`。
 
-大页内存是通过mmap将某个大页文件映射到程序内存中；
-如果每个进程存在不同的`--file-prefix`，意味着mmap映射不同的文件，这样就可以做到了内存的隔离。
+大页内存是通过`mmap`将某个大页文件映射到程序内存中；
+如果每个进程存在不同的`--file-prefix`，意味着`mmap`映射不同的文件，这样就可以做到了内存的隔离。
 
 ### 设备隔离
 设备隔离 其实本质上还是 **Doorbell 寄存器**独占。
-
-不同的应用程序绑定不同的网卡，就可以做到 `Doorbell 寄存器`独占。确保了两个进程的 DMA 操作互不干扰。
-
+不同的应用程序绑定不同的网卡(VF/PF)，就可以做到 `Doorbell 寄存器`独占。确保了两个进程的 DMA 操作互不干扰。
 
 ## 多个应用共享同一张 DPDK 网卡时
 ### 方案 1：DPDK Multi-process（Primary + Secondary）
@@ -152,40 +150,79 @@ PF → 创建 8 个 VF → 8 个 DPDK 程序独立使用
 
 ### 范例
 基于`libtpa`用户态协议栈的的`DPDK`应用程序，在存在`Mellanox`网卡的单个机器上跑`Client`和`Server`是没有问题的。
-首先`client`和`server`都会下发不同的`Port`的`Flow director`规则给网卡, 由于`client`和`server`的`port`的使用不会交叉和重叠， 收到流量时网卡进行`Flow director`规则匹配知道将流量送给哪个队列，进而给哪个进程的哪个线程。不会造成流量错乱。
+首先`client`和`server`都会下发不同的`Port`的`Flow director`规则给网卡, 由于`client`和`server`的`port`的使用不会交叉和重叠， 收到流量时网卡进行`Flow director`规则匹配知道将流量送给哪个队列，进而给某个进程的某个线程。不会造成流量错乱。
 
 `client`和`server`的`port`的使用不会交叉和重叠的保证：用户态每次占用一个`port`的时候，都会通过系统调用`bind`来占住该端口；如果bind失败，就会换其他的端口。
 
 ### 分析
-
-传统的 Intel 网卡（使用 `igb_uio` 或 `vfio-pci`）在 DPDK 接管后，网卡会完全从内核态“断开”，由 DPDK 独占。这种模式下，如果不分 VF，第二个进程就无法再访问该硬件。
-而 Mellanox 使用的是 **`mlx5_core`** 驱动，它基于 Linux 标准的 **RDMA 子系统（ibverbs）**：
-- **硬件共用**：内核驱动 `mlx5_core` 始终控制硬件资源。
-- **用户态映射**：DPDK 通过 `libibverbs` 和 `libmlx5` 将硬件队列直接映射到用户态。
-- **多上下文支持**：内核驱动允许创建多个独立的 `ibv_context`。每个 DPDK 进程都可以创建一个属于自己的上下文，直接向网卡申请独立的硬件队列对（Queue Pairs）。
-
+Mellanox mlx5 PMD 的根本不同：建立在 **Verbs** 之上
 ```bash
-NIC FW
- ├── Protection Domain (PD)
- ├── Memory Region (MR)
- ├── Completion Queue (CQ)
- ├── Queue Pair (QP)
- ├── Flow Table
+其他厂商 DPDK PMD：               Mellanox mlx5 DPDK PMD：
 
-这些对象全部是 per-process / per-context 的
+  DPDK App                          DPDK App
+     │                                 │
+  [ PMD Layer ]                    [ mlx5 PMD ]
+     │                                 │
+  VFIO/UIO (独占)                  libibverbs / rdma-core
+     │                                 │
+  直接裸访问 PCIe BAR              mlx5_core (内核驱动保持加载！)
+     │                                 │
+    NIC                              NIC 硬件队列资源池
+  (已脱离内核管控)                  (由固件/驱动统一管理)
 ```
 
-当你启动一个 DPDK 程序，每个进程：
-- 打开自己的 `ibv_context`
-- 分配自己的 PD
-- 注册自己的 MR
-- 创建自己的 QP / CQ / flow
-    
-**完全没有全局寄存器锁的概念**
+mlx5 PMD 底层调用的是 `libibverbs`，走的是 **内核 RDMA 子系统（rdma-core）** 的资源分配路径，而不是 VFIO 独占模型。
+
+传统的 Intel 网卡（使用 `igb_uio` 或 `vfio-pci`）在 DPDK 接管后，网卡会完全从内核态“断开”，由 DPDK 独占。这种模式下，如果不分 VF，第二个进程就无法再访问该硬件。
+
+而 ==Mellanox 使用的是 **`mlx5_core`** 驱动，它基于 Linux 标准的 **RDMA 子系统（ibverbs）**==：
+- **硬件共用**：内核驱动 `mlx5_core` 始终控制硬件资源。
+- **用户态映射**：DPDK 通过 `libibverbs` 和 `libmlx5` 将硬件队列直接映射到用户态。
+- **多上下文支持**：==内核驱动允许为同一个Mellanox网卡（RNIC）创建多个独立的 `ibv_context`==。每个 DPDK 进程都可以创建一个属于自己的上下文，直接向网卡申请独立的硬件队列对（QP：Queue Pairs）。
+
+**（1）控制路径：资源申请和创建**
+Mellanox ConnectX ASIC 内部维护一个**硬件资源池**，由固件统一管理：
+```bash
+┌─────────────────────────────────────────────────────────┐
+│              ConnectX ASIC 内部资源管理                   │
+│                                                         │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐             │
+│  │  Context │  │  Context │  │  Context │  ...        │
+│  │  (ProcA) │  │  (ProcB) │  │  (ProcC) │             │
+│  │  QP 0~7  │  │  QP 8~15 │  │ QP 16~23 │             │
+│  │  CQ 0~3  │  │  CQ 4~7  │  │  CQ 8~11 │             │
+│  │  MR/PD   │  │  MR/PD   │  │  MR/PD   │             │
+│  └──────────┘  └──────────┘  └──────────┘             │
+│                                                         │
+│         固件统一仲裁，互相隔离，互不干扰                   │
+└─────────────────────────────────────────────────────────┘
+```
+每个进程通过 `ibv_open_device()` 获得独立的`ibv_context`：
+![](attachments/Pasted%20image%2020260403230629.png)
+
+完全没有全局寄存器锁的概念。可以理解为：一个QP，一个寄存器吗???
 
 
+**（2）收发包：数据路径仍然是 Kernel Bypass**
+虽然用了内核 RDMA 栈来**分配资源**，但数据发送/接收走的仍是 **用户态直接 Doorbell（敲门铃）**：
+
+```bash
+发包流程：
+
+  DPDK App (用户态)
+       │
+       │ 1. 把 mbuf 写入 WQE（Work Queue Element，用户态内存）
+       │
+       │ 2. 写 Doorbell Register（mmap 映射的 NIC BAR 寄存器）
+       ▼
+  NIC 硬件直接 DMA 读取 WQE，发包
+  （全程不经过内核，0 syscall）
+```
+
+**资源分配**走内核（一次性），**数据收发**完全绕过内核，两者互不冲突。
 
 ### 注意事项
+
 - **流量冲突**：如果两个进程都配置了 `promiscuous`（混杂模式），网卡可能无法确定包该给谁（通常会根据规则匹配优先级）。
 在单机上同时启动两个进程，并使用 `rte_flow` 给它们设置不同的目的地（例如根据不同的 `dst_port`），你会发现 Mellanox 可以在不开启 `SR-IOV` 的情况下，在硬件层面完美实现流量分流。
 
@@ -196,22 +233,13 @@ NIC FW
 在 Mellanox 网卡上，你可以启动两个完全独立的进程（使用不同的 `--file-prefix`），它们都 `-a` 绑定同一个 PCI 地址：
 
 1. **资源分配**：当进程 A 启动时，它向内核申请了一组 Rx/Tx 队列；当进程 B 启动时，它同样向内核申请了另一组独立的 Rx/Tx 队列。
-    
+> 注： ==一个线程，对应一个接收队列，一个发送队列，其实就是一个QP（send queue + recv queue）==。
+
 2. **隔离性**：虽然物理 PCI 地址相同，但硬件内部通过不同的 **Doorbell 寄存器页面** 和 **内存保护域（Protection Domain）** 确保了两个进程的 DMA 操作互不干扰。
-    
+
 3. **流量分发（关键）**：
-    
     - **默认行为**：如果不做特殊处理，流量通常只会去往其中一个进程，或者根据网卡的默认流控规则分发。
-        
     - **流量分流**：由于 Mellanox 支持 **Flow Isolation** 和特殊的流量引导规则，你可以让进程 A 接收 VLAN 10 的流量，进程 B 接收 VLAN 20 的流量，即使它们使用的是同一个物理网口。
-
-
-
-### 小结
-在 Mellanox 网卡上，你“看似”在跑多个 DPDK 程序控制同一 PF，实际上是 `mlx5/FW` 在替你做硬件对象级隔离，而不是 DPDK 在管理多进程。
-
-在 Mellanox 网卡（mlx5 PMD）上：**多个 DPDK 进程之所以能同时跑，并不是 DPDK 多进程模型在起作用，而是 mlx5 把“硬件独占”问题下沉到了内核 / 固件 / RDMA verbs 层。**
-换句话说：**你跑的不是“多个 DPDK 控制同一网卡”，而是“多个进程通过 verbs 各自创建硬件对象”。**
 
 ## Mellanox网卡单机启动多个RDMA程序
 
@@ -220,18 +248,37 @@ RDMA NIC（如 Mellanox ConnectX）本身就是：
 - 设计目标就是支撑 **多个应用同时使用**;
 
 每个进程都可以：
-- 创建自己的 `Protection Domain（PD）`
-- 创建自己的 `Queue Pair（QP）`
-- 创建自己的 `Completion Queue（CQ）`
-- 注册自己的 `Memory Region（MR）`
+- 创建自己的 `ib context`
+- 在`ib context`内，创建自己的 `Protection Domain（PD）`
+- 在`ib context`内，创建自己的 `Queue Pair（QP）`
+- 在`ib context`内，创建自己的 `Completion Queue（CQ）`
+- 在`ib context`内，注册自己的 `Memory Region（MR）`
 
 这些资源在NIC 中是天然隔离的。
 
+
+## 单卡双口的Mellanox卡的bond
+### DPDK
+对于DPDK而言，**单卡双口进行bond，`rte_eth_dev_count_avail` 只会返回一个口，即在DPDK中表项为一个口，即bond口**。
+`-a Pcie`只需要指定一个成员口的PCIe即可，如果指定了2个成员口的PCIe，那么第二个绑定会报错，但是不影响。
+
+#### 发包时成员口的选择
+Linux内核中，基于流的五元组进行选择成员口。但是在此中，不是这样的。
+
+简单理解：可以理解为 基于线程（队列）去进行hash选择成员口，因此，**如果只启动了一个线程，那么发包的时候，无论该线程中有多少条流，都会从一个成员口发出去**，表现为好像流量不均，其实是正常的。
+
+==我的理解：一个线程对应一个发送队列和接收队列，底层其实是一个QP，而一个QP，在发送的时候，只能落在一个成员口上==。
+所以，只有一个线程时，即使多个连接，也是从一个成员口发出去，因为QP只会落在一个成员口。多个线程，就是多个QP，会均衡的落在多个成员口，发包的时候流量是均衡的。
+
+### RDMA
+同上。
+**因为Mellanox网卡本质上是一块 RDMA 网卡，DPDK 只是复用了 RDMA 的资源管理体系，用 Verbs 做控制面，用 Doorbell 做数据面。**
+
 ## Mellanox网卡和其他网卡的对比
 
-### Intel NIC vs Mellanox NIC 架构对比
+![](attachments/Pasted%20image%2020260403231956.png)
 
-#### Intel NIC：寄存器独占
+### Intel NIC：寄存器独占
 ```bash
 User App
  └── DPDK PMD (i40e/ixgbe)
@@ -243,9 +290,9 @@ User App
 
 ```
 
-##### 关键特征
+#### 关键特征
 
-- RX/TX queue 是 **端口级全局资源**
+- RX/TX queue 是 **端口级（PF/VF级）全局资源**
     
 - Queue enable / disable 会写寄存器
     
@@ -254,92 +301,66 @@ User App
 - PMD 假设：**我就是唯一控制者**
     
 
-**多进程必须靠 DPDK 自己做协调**
+#### 多进程必须靠 DPDK 自己做协调
 - primary / secondary
 - PF / VF
 
-#### Mellanox NIC 
-```bash
-User App
- └── DPDK mlx5 PMD
-      └── libibverbs
-           └── mlx5 kernel driver
-                └── NIC FW
-                     ├── PD (Protection Domain)
-                     ├── MR (Memory Region)
-                     ├── CQ
-                     ├── QP
-                     ├── Flow Table
 
-```
+## 小结
 
+为什么 Mellanox 上跑多个 DPDK 程序如此自然？
+**`dpdk mlx5 PMD`:  mlx5 PMD 更像是“verbs 适配器”，而不是“传统 DPDK PMD”，Mellanox 卡本质上是一块 RDMA 网卡，DPDK 只是复用了 RDMA 的资源管理体系，用 Verbs 做控制面，用 Doorbell 做数据面。**
 
-##### 关键特征
+在 Mellanox 网卡上，你“看似”在跑多个 DPDK 程序控制同一 PF，实际上是 ==`mlx5的 verbs` 在替你做硬件对象级隔离==，而不是 DPDK 在管理多进程。
 
-- **没有“启用队列寄存器”**
-- QP / CQ 是“硬件对象”
-- 对象绑定到 PD
-- PD 绑定到 process context
+即：==每个进程绑定一个网卡，就会通过mlx5的verbs创建属于自己的 ib_context （多个进程绑定相同的网卡创建的 ib_context相互隔离），然后在ib_context 内创建资源（比如：PD/MR/QP/CQ/等），每个线程的一个发送队列和一个接收队列，其实就是一个QP==。
 
+在 Mellanox 网卡（mlx5 PMD）上：多个 DPDK 进程之所以能同时跑，并不是 DPDK 多进程模型在起作用，**而是 mlx5 把“硬件独占”问题下沉到了内核 / 固件 / RDMA verbs 层。**
+换句话说：**你跑的不是“多个 DPDK 控制同一网卡”，而是“多个进程通过 verbs 各自创建硬件对象”。**
 
-### 小结
-`dpdk mlx5 PMD`:  mlx5 PMD 更像是“verbs 适配器”，而不是“传统 DPDK PMD”
-这也是为什么：
-- 它行为像 RDMA
-- 多进程“看起来能跑”
+# Mellanox网卡和PF/VF虚拟化
+## PF/VF 在 Intel NIC 里的作用
 
-## Mellanox网卡和PF/VF虚拟化
-### PF/VF 在 Intel NIC 里的作用
+通过PF/VF 进行 **硬件级的队列/寄存器隔离**，防止多个进程互相踩寄存器。
 
-- PF/VF = **硬件级队列/寄存器隔离**
-
-- 防止多个进程互相踩寄存器
-
-### mlx5 本身就“天然虚拟化”
-ConnectX 网卡：
+## mlx5 本身就“天然虚拟化”
+Mellanox ConnectX 网卡：
 - 每个 QP / CQ 都是硬件对象
 - 每个对象都属于某个 PD
-- PD 绑定到某个进程上下文
+- PD 绑定到某个ib_context
+> 每个进程可以创建一个属于自身的相互隔离的 ib_context。==即使多个进程对应同一块卡， ib_context也是相互隔离的==；
 
+![](attachments/Pasted%20image%2020260403233936.png)
 
-本质上： **你已经在用“隐式 VF”**
-
-这也是为什么：
-- RDMA 本身就支持多进程
-- DPDK mlx5 只是“借用”了这套机制
-
-#### 共享的资源信息
+### 共享的资源信息
 
 下面这些是**共享的、会互相影响的**：
 
-##### 1️、端口级资源（全局）
+#### 1️、端口级资源（全局）
 
 - Link up/down
 - MTU
 - Port speed
 - PFC / ECN
 - RoCE 参数
-    
 
 任何一个进程修改：`rte_eth_dev_set_mtu()`，其他进程全部受影响
 
-##### 2、Flow steering 资源（rte_flow规则）
+#### 2、Flow steering 资源（rte_flow规则）
+
 - TCAM / flow table 是全局的
 - 多进程下容易：
     - flow 插入失败        
     - 优先级冲突
     - 性能下降
 
-
-##### 3、Reset / error recovery
+#### 3、Reset / error recovery
 
 某个进程触发：
 - device reset
-- FW fatal  
+- FW fatal （固件错误）
 
 所有进程一起死；
-
-
 
 # 参考
 ```bash

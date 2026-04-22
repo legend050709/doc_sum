@@ -18,31 +18,17 @@ mbuf主要由元信息和数据两部分组成。
 为了保持包处理的效率，DPDK采用第一种方式。
 网络帧元数据的一部分内容由DPDK网卡驱动写入。这些内容包括VLAN标签、RSS哈希值、网络入口端口号以及巨型帧所占的Mbuf个数等。
 
+# Linux内核里面使用 sk_buff
+
+Linux内核里面使用sk_buff作为数据包管理的基本单元。sk_buff本身不存放网络数据包，真正储存数据的是sk_buff结构体中几个指针指向的数据区，如图所示。
+
+用一张图来表示sk_buff和数据区的关系：
+![](attachments/Pasted%20image%2020231024141113.png)
+![](attachments/Pasted%20image%2020231024140838.png)
+
 # rte_mbuf 详解
-## pktmbuf pool
-Mbuf由缓冲池rte_mempool（元素大小固定的内存池rte_mempool）管理，rte_mempool在初始化时一次申请多个mbuf，申请的mbuf个数和长度都由用户指定。
-申请pktmbuf pool对外开放的API如下：
-```c
-struct rte_mempool * rte_pktmbuf_pool_create_by_ops(const char *name, unsigned int n,
-    unsigned int cache_size, uint16_t priv_size, uint16_t data_room_size,
-    int socket_id, const char *ops_name);
 
-struct rte_mempool * rte_pktmbuf_pool_create(const char *name, unsigned int n,
-    unsigned int cache_size, uint16_t priv_size, uint16_t data_room_size,
-    int socket_id);
 
-struct rte_mempool * rte_pktmbuf_pool_create_extbuf(const char *name, unsigned int n,
-  unsigned int cache_size, uint16_t priv_size,
-  uint16_t data_room_size, int socket_id,
-  const struct rte_pktmbuf_extmem *ext_mem,
-  unsigned int ext_num);
-```
-rte_pktmbuf_pool_create_by_ops()和rte_pktmbuf_pool_create()的差异在于前者指定了rte_mempool_ops的名字。
-如果上层应用自己没有实现 rte_mempool_ops，或者在eal层初始化时没有指定，则用rte_pktmbuf_pool_create()创建时，默认会使用 ring_mp_mc(支持多生产者多消费者)。
-
-从这两个接口，可以看出，创建pktmbuf pool时，需要指定：mempool的name，mbuf个数，核的local cache大小，mbuf中私有数据的大小，mbuf中data_room的大小以及从哪个socket_id上申请。
-
-![](attachments/Pasted%20image%2020231025113346.png)
 ## rte_mbuf的内存结构
 从rte_pktmbuf_pool_create_by_ops()的接口中的如下代码，可以看出rte_mbuf的内存结构主要由三部分构成：rte_mbuf结构体，私有数据和data room。
 ```c
@@ -110,11 +96,61 @@ void rte_pktmbuf_init(struct rte_mempool *mp,
 rte_mbuf的内存结构如下图：
 ![](attachments/Pasted%20image%2020231025111714.png)
 
+```bash
+（1）rte_mbuf:
+	存储的是元数据的信息。
+	mbuf元信息是需要被频繁访问的部分, 它位于mbuf头部, 且被设计地足够小, 目前占用两个cache lines, 其中访问最频繁的信息位于第一个cache line. mbuf元信息由数据结构rte_mbuf表示. 
+
+（2）priv_data:
+	一般是用户自己对于rte_mbuf的一层封装结构（第一个成员为 rte_mbuf）的剩余部分；
+	如果用户还需要存储业务相关的其他数据, 可以放在mbuf的 priv_data 或者 headroom中, 它是 rte_mbuf与数据之间的一块内存区域.
+	
+（3）headroom:
+	headroom默认大小为128byte，可以通过RTE_PKTMBUF_HEADROOM调整。
+
+（4）data:
+	data 里面存放的是真正的网络数据包，包括ether/ip/tcp首部，以及payload。
+
+（5）tailroom:
+	tailroom 是一块空闲区域，data 越大，tailroom就越小，data 越小，tailroom就越大
+```
+
 如果没有priv_size, 则内存结构如下所示：
 ![](attachments/Pasted%20image%2020231025112307.png)
 
-mbuf元信息是需要被频繁访问的部分, 它位于mbuf头部, 且被设计地足够小, 目前占用两个cache lines, 其中访问最频繁的信息位于第一个cache line. mbuf元信息由数据结构rte_mbuf表示. 
-如果用户还需要存储业务相关的其他数据, 可以放在mbuf的 priv_data 或者 headroom中, 它是 rte_mbuf与数据之间的一块内存区域.
+
+## pktmbuf pool
+Mbuf由缓冲池rte_mempool（元素大小固定的内存池rte_mempool）管理，rte_mempool在初始化时一次申请多个mbuf，申请的mbuf个数和长度都由用户指定。
+申请pktmbuf pool对外开放的API如下：
+```c
+struct rte_mempool * rte_pktmbuf_pool_create_by_ops(const char *name, unsigned int n,
+    unsigned int cache_size, uint16_t priv_size, uint16_t data_room_size,
+    int socket_id, const char *ops_name);
+
+struct rte_mempool * rte_pktmbuf_pool_create(const char *name, unsigned int n,
+    unsigned int cache_size, uint16_t priv_size, uint16_t data_room_size,
+    int socket_id);
+
+struct rte_mempool * rte_pktmbuf_pool_create_extbuf(const char *name, unsigned int n,
+  unsigned int cache_size, uint16_t priv_size,
+  uint16_t data_room_size, int socket_id,
+  const struct rte_pktmbuf_extmem *ext_mem,
+  unsigned int ext_num);
+```
+rte_pktmbuf_pool_create_by_ops()和rte_pktmbuf_pool_create()的差异在于前者指定了rte_mempool_ops的名字。
+如果上层应用自己没有实现 rte_mempool_ops，或者在eal层初始化时没有指定，则用rte_pktmbuf_pool_create()创建时，默认会使用 ring_mp_mc(支持多生产者多消费者)。
+
+从这两个接口，可以看出，创建pktmbuf pool时，需要指定：mempool的name，mbuf个数，核的local cache大小，mbuf中私有数据的大小，mbuf中data_room的大小以及从哪个socket_id上申请。
+
+### pktmbuf pool 和 mbuf的关系
+
+![](attachments/Pasted%20image%2020231025113346.png)
+
+![](attachments/Pasted%20image%2020260409224623.png)
+
+需要注意的是，**一个mempool占用的物理内存不一定连续**，且可能会跨多个大页，但是**一个rte_mbuf占用的肯定是连续物理内存**。
+
+创建mempool并不是直接从大页上分配内存，而是通过memzone间接申请。
 
 ## 结构体成员
 Mbuf结构报头经过精心设计，原先仅占1个Cache Line。随着Mbuf头部携带的信息越来越多，现在Mbuf头部已经调整成两个Cache Line，原则上讲基础性、频繁访问的数据放在一个Cache Line字节，而将功能性扩展的数据放在第二个Cache Line字节。
@@ -603,6 +639,51 @@ static inline void rte_pktmbuf_reset(struct rte_mbuf *m)
     __rte_mbuf_sanity_check(m, 1);
 }
 ```
+
+# mbuf 和 收发包
+
+## 单端口
+
+即：一个DPDK程序中，绑定了一个接口，`-a xxx`只绑定一个 PCIe号。
+
+### 收包
+一个线程，绑定一个CPU core，对应接口的一个发送队列，一个接受队列。
+对于收包而言：可以设置一个多个线程共享的，per-numa的mbufpool, 每个元素大小为：2K+（包含：rte_mbuf + headroom + data + 对齐等）；
+由于该mempool中存在local-cache，正常情况下，每个线程从local-cache中分配mbuf。
+>注：其实每个rx队列，对应一个单生产者单消费的mempool，也是可以的。这样浪费一些内存，但是性能会更高一些。
+> 因为如果是多个线程对应的多个rx队列共享一个mempool，即使是存在local-cache，但是如果收包上送给应用后，**应用占用**时间长不释放，local-cache用完了，那么就会存在多个线程下从mempool的共享池子中取mbuf，会存在竞争。
+
+**什么时候向rx ring中填充desc？**
+```
+1> 初始化接收队列：rte_eth_rx_queue_setup
+对于rx queue的深度，从mempool中取N个mbuf，填充desc；
+
+2> 从接收队列取包：rte_eth_rx_burst
+从指定网卡的指定队列中取N个mbuf时，需要从mempool中取n个mbuf，填充rx ring desc。
+```
+
+**rx ring desc的生产者和消费者**：
+未填充完数据的desc：生产者是CPU软件，消费者是DMA。
+填充完数据的desc：生产者是DMA，消费者是CPU软件。
+
+### 发包
+DPDK中的数据，都需要将`rte_mbuf`作为元数据来进行组织；如果需要，可以在`rte_mbuf`的基础上再封装一层元数据（`rte_mbuf`作为结构体的第一个成员，后面是其他的元数据）。
+
+对于发包而言，此时发包的MBUF，就不需要带有data部分，data部分是业务自己申请的，因为mbufpool的元素较小（一般2-300B就够了，包含：rte_mbuf + headroom  + 对齐等「不包含data」）；
+最后将 `rte_mbuf`的 addr ，以及 len，phy_addr(iova) 设置为用户data的 addr，以及 len，以及转换得到的 phy_addr(iova) 即可。
+
+### 注意
+**如果是单卡双口的bond口，其实对于DPDK而言，也是一个端口**。
+只需要使用`-a xxx`绑定其中一个成员口的Pcie号即可，如果使用`-a xxx`绑定其中2个成员口的Pcie号时，第二个应该会报错，绑定不成功，但是不影响。
+
+
+### 多端口
+对于单端口，就是一个线程，对应一个端口的接口队列和发送队列。
+对于多端口，就是一个线程，对应每个端口的一个接口队列和一个发送队列；有N个接口，就对应N个接收队列（分别属于N个接口），以及N个发送队列（分别属于N个接口）。
+
+其他类似。
+
+## 发包
 
 # 其他
 ## Direct与Indirect mbuf

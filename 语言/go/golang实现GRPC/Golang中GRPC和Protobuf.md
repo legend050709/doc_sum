@@ -159,12 +159,104 @@ B 利用编译器，提前根据`proto`数据文件自动生成结构体定义�
 
 
 ## Protobuf 缺点
-### 可读性较差
-为了提高性能，Protobuf采用了二进制格式进行编码。二进制格式编码对于开发者来说，是没办法阅读的。在进行程序调试时，比较困难。
 
 ### 缺乏自描述
+二进制数据本身不携带字段名信息，离开 `.proto` 文件数据就失去了语义，不利于长期存档或跨系统数据流转。
+
 诸如`XML`语言是一种自描述的标记语言，即字段标记的同时就表达了内容对应的含义。而`Protobuf`协议不是自描述的，`Protobuf`是通过二进制格式进行数据传输，开发者面对二进制格式的`Protobuf`，没有办法知道所对应的真实的数据结构。
 因此在使用`Protobuf`协议传输时，必须配备对应的`proto`配置文件。
+
+### 可读性与调试性差
+为了提高性能，Protobuf采用了二进制格式进行编码。
+Protobuf 序列化后是二进制格式，人眼无法直接阅读，无法直接用文本编辑器、抓包工具阅读，调试时需要借助额外工具，排查问题成本高。
+
+
+### 强依赖 Schema（.proto 文件）
+- 双方必须共享同一份 `.proto` 文件才能通信；
+- Schema 变更需要重新编译生成代码，跨团队协作摩擦大
+
+### 不适合动态结构（如不确定字段的业务数据）
+Protobuf 的强项是**「字段固定、结构稳定」的内部服务通信；一旦业务要求「字段由运行时数据决定」**，它的强 Schema 就从优点变成了枷锁。
+
+#### 范例
+场景：电商平台的「商品属性」系统
+不同类型的商品，属性字段完全不同：
+
+- 手机：CPU、内存、屏幕尺寸、电池容量
+- 衣服：颜色、尺码、材质
+- 食品：保质期、配料、净重
+
+用 Protobuf 来表达，会很痛苦。
+
+**方案一：穷举所有字段（字段爆炸）**
+```protobuf
+message Product {
+  string name = 1;
+
+  // 手机属性
+  string cpu = 2;
+  int32  ram_gb = 3;
+  float  screen_inch = 4;
+  int32  battery_mah = 5;
+
+  // 衣服属性
+  string color = 6;
+  string size = 7;
+  string material = 8;
+
+  // 食品属性
+  string ingredients = 9;
+  int32  shelf_days = 10;
+  float  weight_g = 11;
+
+  // 明天产品经理又加了新品类，继续加字段...
+  // 每次新增都要改 proto、重新编译、重新部署所有服务
+}
+
+问题：
+一件衬衫的数据里，cpu / battery_mah 全是空的，大量字段永远是零值
+每新增品类，所有服务都要跟着改 .proto 并重新部署，牵一发动全身
+```
+
+
+**方案二：用 `map<string, string>` 凑合**
+```protobuf
+message Product {
+  string name = 1;
+  map<string, string> attributes = 2; // 把所有属性塞进 map
+}
+
+问题：
+
+类型全丢失，battery_mah 本来是 int，现在存成字符串 "4000"，消费方要自己猜类型、手动转换
+没有任何 Schema 约束，拼写错 "baterry_mah" 编译期完全不报错
+Protobuf 的 map 底层是 repeated message，性能比原生 map 差
+```
+
+**方案三：用 Any / oneof**
+```protobuf
+message PhoneAttrs  { string cpu = 1; int32 ram = 2; }
+message ClothAttrs  { string color = 1; string size = 2; }
+
+message Product {
+  string name = 1;
+  oneof attrs {
+    PhoneAttrs  phone = 2;
+    ClothAttrs  cloth = 3;
+    // 每新增品类还是要改 proto...
+  }
+}
+
+问题：
+本质上还是要穷举，动态扩展性没有解决
+Any 类型需要手动 pack/unpack，代码繁琐且容易出错
+```
+
+
+### 小数据场景优势不明显，反而更重
+- 序列化 / 反序列化有固定开销
+- 字段极少时，体积和性能不如简单文本格式
+
 
 ## 安装`protobuf`包
 使用protobuf需要先安装对应的包。
