@@ -2,7 +2,7 @@
 ```
 # XDP 介绍
 ## ebpf 简介
-在讨论xdp之前我想先简单介绍一下（e）bpf，**bpf是一个通用的RISC指令集（因此需要配在虚拟机中执行，虚拟机中可以识别该指令集）**，最初设计用于在C的子集中编写程序，可以通过编译器后端（例如LLVM）将其编译为BPF指令，然后通过内核中的JIT编译器将其映射到本机操作码中，以在内核中实现最佳执行性能。
+在讨论xdp之前我想先简单介绍一下（e）bpf，**bpf是一个通用的RISC指令集（因此需要配在虚拟机中执行，虚拟机中可以识别该指令集）**，最初设计用于在C的子集中编写程序，可以通过编译器后端（例如LLVM： Low Level Virtual Machine）将其编译为BPF指令，然后通过内核中的JIT编译器将其映射到本机操作码中，以在内核中实现最佳执行性能。
 
 ## ebpf 优点
 ### 快速
@@ -34,6 +34,9 @@ XDP：eXpress Data Path，快速数据路径。其实它就是一个快速处理
 
 XDP hook 位于网络驱动的快速路径上，XDP 程序直接从接收缓冲区（receive ring）中将 包拿下来，无需执行任何耗时的操作，例如分配 `skb` 然后将包推送到网络协议栈，或者 将包推送给 GRO 引擎等等。因此，只要有 CPU 资源，XDP BPF 程序就能够在最早的位置执 行处理。
 
+# ebpf 和 XDP的关系
+
+
 # 依赖
 
 ![](attachments/Pasted%20image%2020240719110156.png)
@@ -60,7 +63,9 @@ XDP驱动钩子：网卡驱动中XDP程序的一个hook，XDP程序可以对数�
 ### Native XDP
 Native XDP（原生模式/本地模式） 支持Linux内核中的高性能可编程数据包处理。它在软件中尽可能早地运行BPF程序，即在网络驱动程序接收数据包时，需要**驱动支持**。大部分广泛使用的 10G 及更高速的网卡都已经支持这种模式 。
 
-xdp 使用ebpf 做包过滤，相对于dpdk将数据包直接送到用户态，用户态当做快速数据处理平面；xdp是在驱动层创建了一个数据快速平面。**在数据被网卡硬件dma到内存，分配skb之前，对数据包进行处理**。由于完全不存在锁操作。且bypass了协议栈，非常适合用修改数据包并转发，数据探针，执行丢包。
+xdp 使用ebpf 做包过滤，相对于dpdk将数据包直接送到用户态，用户态当做快速数据处理平面；xdp是在驱动层创建了一个数据快速平面。
+**==在数据被网卡硬件dma到内存，分配skb之前，对数据包进行处理==**。
+由于完全不存在锁操作。且bypass了协议栈，非常适合用修改数据包并转发，数据探针，执行丢包。
 
 ![](attachments/Pasted%20image%2020240709195735.png)
 
@@ -96,15 +101,12 @@ xdp 使用ebpf 做包过滤，相对于dpdk将数据包直接送到用户态，�
     - sfc （XDP for sfc available via out of tree driver as of kernel 4.17, but will be upstreamed soon）
 
 
-###  Generic XDP 
-
-将部分逻辑下放（offload）到网卡执行，通过硬件处理提高效率。 但是不是所有网卡都支持这个功能，所以内核引入了 Generic XDP 这样一个环境，如果网卡不支持 XDP， 那 XDP 程序就会推迟到这里来执行。它并不能提升效率，所以主要用来测试功能。
 
 ### Offloaded XDP
 
 Offloaded XDP （卸载模式）是XDP程序直接运行到网卡上，相较于Native，具有更高的性能，需要**网卡硬件支持**。
 
-这种 offload 通常由智能网卡实现，这些网卡有多 线程、多核流处理器（flow processors），一个位于内核中的 JIT 编译器（ in-kernel JIT compiler）将 BPF 翻译成网卡的原生指令。支持 offloaded XDP 模式的驱动通常也支持 native XDP 模式，因为 BPF 辅助函数可 能目前还只支持后者。
+这种 offload 通常由智能网卡实现，这些网卡有多 线程、多核流处理器（flow processors），一个位于内核中的 JIT 编译器（ in-kernel JIT compiler）将 BPF 翻译成网卡的原生指令。**支持 offloaded XDP 模式的驱动通常也支持 native XDP 模式**，因为 BPF 辅助函数可能目前还只支持后者。
 
 #### 支持 offloaded XDP 的驱动
 
@@ -112,29 +114,34 @@ Offloaded XDP （卸载模式）是XDP程序直接运行到网卡上，相较于
     
     - nfp （Some BPF helper functions such as retrieving the current CPU number will not be available in an offloaded setting）
 
+###  Generic XDP 
+
+将部分逻辑下放（offload）到网卡执行，通过硬件处理提高效率。 但是不是所有网卡都支持这个功能，所以内核引入了 Generic XDP 这样一个环境，如果网卡不支持 XDP， 那 XDP 程序就会推迟到这里来执行。它并不能提升效率，所以主要用来测试功能。
+
 ## bpf部分
 
-开发者用**C语言的一个子集（内核运行，不可用标准C库）** 开发程序，然后用LLVM/clang编译器将其编译成eBPF指令（Bytecode），在eBPF验证器（Verifier）检验通过后被内核中的即时编译器（JIT Compiler）将eBPF指令映射成处理器的原生指令（opcode）再加载到内核各个模块预设的钩子（Hooks）处。其中XDP框架是内核在网卡驱动开辟的一个网络数据快速路径的钩子（Hooks）。
+开发者用**C语言的一个子集（内核运行，不可用标准C库）** 开发程序，然后用LLVM/clang编译器将其编译成eBPF指令（Bytecode），在eBPF验证器（Verifier）检验通过后被内核中的即时编译器（JIT Compiler）将eBPF指令映射成处理器的原生指令（opcode）再加载到内核各个模块预设的钩子（Hooks）处。
+
+其中XDP框架是内核在网卡驱动开辟的一个网络数据快速路径的钩子（Hooks）。
 内核其他典型钩子（Hooks）分别为内核函数 (kprobes)、用户空间函数 (uprobes)、系统调用、fentry/fexit、跟踪点、网络路由、TC、TCP拥塞算法、套接字等模块。
 
 ### eBPF虚拟机
+
 XDP 程序在 Extended BPF (eBPF) 虚拟机中执行。
 虚拟机中执行 XDP 程序的字节码，以及对字节码执行 JIT 以提升性能。
 XDP程序通过Clang编译成BPF字节码，而BPF字节码加载到内核中是运行在eBPF虚拟机上，eBPF VM支持XDP程序的动态加载和卸载。
 
-
-
 ### eBPF maps
 
-eBPF程序的内核态与用户态数据交换通过BPF maps来实现，其类似进程间通信的共享内存访问。其支持的数据类型有Hash表、数组、LRU缓存(Least Recently Used)、 环形队列、堆栈轨迹、LPM路由表(Longest Prefix match)。
+**eBPF程序的内核态与用户态数据交换通过BPF maps来实现，其类似进程间通信的共享内存访问**。
+
+其支持的数据类型有Hash表、数组、LRU缓存(Least Recently Used)、 环形队列、堆栈轨迹、LPM路由表(Longest Prefix match)。
 
 用户态程序可以在BPF Maps中预定义规则，XDP程序可以匹配Maps中的规则对数据包进行过滤等；XDP程序也可以将数据包统计信息等存入Maps，用户态程序可访问Maps获取数据包统计信息。
-
 
 eBPF 程序在触发内核事件时执行（例如，触发 XDP 程序执行的，是收包事件）。 程序每次执行时，初始状态都是相同的（即程序是无状态的），它们**==无法直接访问==** 内核中的持久存储（BPF map）。为此，内核提供了访问 BPF map 的 helper 函数。
 
 BPF map 是 key/value 存储，**==在加载 eBPF 程序时定义==**（defined upon loading an eBPF program）。
-
 
 
 #### Map 类型
@@ -152,8 +159,6 @@ BPF map 是 key/value 存储，**==在加载 eBPF 程序时定义==**（defined 
 1. 持久存储。例如一个 eBPF 程序每次执行时，都会从里面获取上一次的状态。
 2. 用于协调两个或多个 eBPF 程序。例如一个往里面写数据，一个从里面读数据。
 3. 用于用户态程序和内核 eBPF 程序之间的通信。
-
-
 
 
 ### eBPF verifier
@@ -272,13 +277,13 @@ Requires several XDP TX queues allocated that is larger or equal to the largest 
 
 ![](attachments/Pasted%20image%2020240716140435.png)
 
-NAPI poll 机制不断调用驱动实现的 poll 方法，后者处理 RX 队列内的包，并最终将包送到正确的程序，也就是我们所说的 XDP 程序。所以很明显这需要网卡驱动的支持，如果驱动支持 XDP ，那 XDP 程序将在 poll 机制内执行。如果不支持，那 XDP 程序将只能在更后面的位置被执行，即上图中的receive_skb中。
+NAPI poll 机制不断调用驱动实现的 poll 方法，后者处理 RX 队列内的包，并最终将包送到正确的程序，也就是我们所说的 XDP 程序。所以很明显这需要网卡驱动的支持，如果驱动支持 Native XDP ，那 XDP 程序将在 poll 机制内执行。如果不支持，那 XDP 程序将只能在更后面的位置被执行（GXDP），即上图中的receive_skb中。
 
-**gxdp之前的流程**
+#### gxdp之前的流程
 （1）创建skb
-如果不支持XDP，poll机制会将报文送给 clean_rx()，该函数会创建一个skb，并skb进行一些硬件校验何检查，然后较给 gro_receive() 函数；
+如果不支持Native XDP，poll机制会将报文送给 clean_rx()，该函数会创建一个skb，并skb进行一些硬件校验何检查，然后较给 gro_receive() 函数；
 
-（2）分片重组
+（2）GRO
 GRO可以理解为LRO的软件实现，相比LRO只针对TCP报文，GRO可以处理更多其他类型的报文，总之在 gro_receive() 函数中，如果是分片报文则进行分片重组然后交给 receive_skb() 函数；如果不是分片报文，则直接交给 receive_skn() 函数进行处理；
 
 ### XDP流程
@@ -318,12 +323,12 @@ XDP 程序在网络设备驱动中执行，网络设备每收到一个包，程�
 ### eBPF 程序的限制
 
 前面提到，加载到 eBPF 虚拟机的程序必须保证其安全性（不会破坏内核），因此对 eBPF 程序作了一下限制，归结为两方面：
-1. 确保程序会终止：在实现上是通过禁止循环和限制程序的最大指令数（max size of the program）；
-2. 确保内存访问的安全：通过 寄存器状态跟踪（register state tracking）来实现。
+1. **确保程序会终止**：在实现上是通过==禁止循环和限制程序的最大指令数==（max size of the program）；
+2. **确保内存访问的安全**：通过寄存器状态跟踪（register state tracking）来实现。
 
 #### 校验逻辑偏保守
 
-由于*校验器的首要职责是保证内核的安全，因此其校验逻辑比较保守， 凡是它不能证明为安全的，一律都拒绝。有时这会导致假阴性（**==false negatives==**）， 即某些实际上是安全的程序被拒绝加载；
+由于校验器的首要职责是保证内核的安全，因此其校验逻辑比较保守， 凡是它不能证明为安全的，一律都拒绝。有时这会导致假阴性（**false negatives**）， 即某些实际上是安全的程序被拒绝加载；
 
 这方面在持续改进。
 - 校验器的错误提示也已经更加友好，以帮助开发者更快定位问题。
@@ -334,8 +339,8 @@ XDP 程序在网络设备驱动中执行，网络设备每收到一个包，程�
 #### 缺少标准库
 相比于用户空间 C 程序，eBPF 程序的另一个限制是缺少标准库，包括 **内存分配、线程、锁**等等库。
 
-1. 内核的生命周期和执行上下文管理（life cycle and execution context management ）部分地弥补了这一不足，（例如，加载的 XDP 程序会为每个收到的包执行），
-2. 内核提供的 helper 函数也部分地弥补了一不足。
+3. 内核的生命周期和执行上下文管理（life cycle and execution context management ）部分地弥补了这一不足，（例如，加载的 XDP 程序会为每个收到的包执行），
+4. 内核提供的 helper 函数也部分地弥补了一不足。
 
 #### 一个网卡的接收队列只能 attach 一个 XDP 程序
 确切的说，应该是网卡的一个接收队列只能attach 到一个 XDP程序。
@@ -350,7 +355,7 @@ XDP 程序在网络设备驱动中执行，网络设备每收到一个包，程�
 # XDP 范例
 
 ## 丢弃所有icmp包
-
+### 编写C语言的bpf程序
 ```c
 // ping_drop.c
  
@@ -396,7 +401,8 @@ char __license[] SEC("license") = "GPL";
 
 XDP hook 点在网络驱动中，基于eBPF 的事件驱动机制，当XDP 收到网络数据包时，我们的处理程序就会被执行。
 
-传入eBPF 处理程序的ctx 其实就是XDP 元数据(xdp metadata: xpd_md)，没有sk_buff结构，只有一个 struct xdp_md 指针。
+**传入eBPF 处理程序的ctx 其实就是XDP 元数据(xdp metadata: xpd_md)，没有sk_buff结构，只有一个 struct xdp_md 指针**。
+
 ```c
 /* user accessible metadata for XDP packet hook
  * new fields must be added to the end of this structure
@@ -415,12 +421,14 @@ struct xdp_md {
 };
 ```
 
-Clang 编译生成对象文件，并加载
+### Clang 编译生成对象文件
+Clang 编译生成对象文件（.o文件），并加载
 ```bash
 clang -Wall -target bpf -c ping_drop.c -o ping_drop.o
 ```
 
-然后用iproute2 里面的 ip link 命令加载到某个NIC 上，如ens192
+### ip link加载对象文件到网卡
+然后用iproute2 里面的 ip link 命令设置某个NIC的xdp对象文件，如ens192
 ```bash
 ip link set dev ens192 xdp object ping_drop.o
 ```
@@ -437,7 +445,9 @@ cd iproute2/
 make -j8 && make install
 ```
 
-BPF map 和 bpf 程序作为内核资源只能通过文件描述符访问，其背后是内核中的匿名 inode。所以内核实现了一个最小内核空间 BPF 文件系统，BPF map 和 BPF 程序 都可以钉到（pin）这个文件系统内，这个过程称为 object pinning（钉住对象）。
+### 挂载BPF FS：object pinning 以及 访问 bpf map
+BPF map 和 bpf 程序作为内核资源只能**通过文件描述符访问**，其背后是内核中的**匿名 inode**。
+所以内核实现了一个最小内核空间 **BPF 文件系统**，BPF map 和 BPF 程序 都可以钉到（pin）这个文件系统内，这个过程称为 **object pinning（钉住对象）**。
 
 ![](attachments/Pasted%20image%2020240716151234.png)
 
@@ -461,7 +471,15 @@ ebpf_map ，可用于 在内核和用户态之间传递数据，例如通过�
 
 ![](attachments/Pasted%20image%2020240709195334.png)
 
+xdp首先是作用于收包方向：
+
 ==如上所示，无论是哪种模式的 XDP，都是在TC之前的。即：native XDP--->申请skb--->gro --> gxdp----> tcpdump--->TC--->netfilter==
+
+```bash
+驱动层：native XDP--->申请skb--->gro
+协议栈的设备层：gxdp-->tcpdump-->TC
+协议栈的网络层：netfilter
+```
 
 ## native xdp 和  bonding
 
@@ -469,24 +487,24 @@ ebpf_map ，可用于 在内核和用户态之间传递数据，例如通过�
 
 在数据包接收过程中，Bond 接口和 Native XDP 的先后关系如下：
 
-1. **数据包到达物理接口**：数据包首先到达与 Bond 接口相关联的物理网络接口。
+5. **数据包到达物理接口**：数据包首先到达与 Bond 接口相关联的物理网络接口。
     
-2. **XDP 处理**：如果物理接口支持 XDP，并且已经配置了 XDP 程序，那么数据包会在进入 Bond 接口之前被 XDP 处理。此时，可以对数据包进行快速处理（例如，丢弃或修改）。
+6. **XDP 处理**：如果物理接口(slave口)支持 XDP，并且已经配置了 XDP 程序，那么数据包会在进入 Bond 接口之前被 XDP 处理。此时，可以对数据包进行快速处理（例如，丢弃或修改）。
     
-3. **Bond 接口处理**：
-    
+7. **Bond 接口处理**：
     - 如果数据包在 XDP 中被丢弃，则不会被 Bond 接口接收。
     - 如果数据包通过了 XDP 处理，它将被传递到 Bond 接口，Bond 驱动程序会对其进行负载均衡和转发。
-4. **上层协议栈**：最后，Bond 接口将经过处理的数据包传递到上层协议栈，进行进一步的处理。
+8. **上层协议栈**：最后，Bond 接口将经过处理的数据包传递到上层协议栈，进行进一步的处理。
     
 ### bonding支持xdp的实现
 
 ![](attachments/Pasted%20image%2020240904121417.png)
 
-XDP 在绑定驱动中通过透明地将 XDP 程序的加载、移除和发送操作委托给绑定从设备来实现。这项工作的总体目标是使 XDP 程序能够附加到绑定设备上，而无需对程序本身进行任何进一步的更改（或意识），这意味着相同的 XDP 程序可以附加到原生设备，也可以附加到绑定设备。
+XDP 在绑定驱动中通过透明地将 XDP 程序的加载、移除和发送操作委托给绑定**从设备**来实现。这项工作的总体目标是使 XDP 程序能够附加到绑定设备上，而无需对程序本身进行任何进一步的更改（或意识），这意味着相同的 XDP 程序可以附加到原生设备，也可以附加到绑定设备。
 这样的话，bond口上绑定xdp，那么收包时，其实是先是slave 成员口上执行 xdp程序，xdp程序继续上送包时，才会经过bonding模块的处理。
 
-如果xdp程序是 XDP_TX动作，如果不处理，就是原进原出，即哪个slave进入，那个slave出去，那么这就和 bond模块选择出口相违背。
+**如果xdp程序是 XDP_TX动作，如果不处理，就是原进原出，即哪个slave进入，那个slave出去，那么这就和 bond模块选择出口相违背**。
+
 即对于xdp的 XDP_TX动作，需求是 根据bond的配置来选择出口，而不是原进原出。XDP_TX 的处理通过在 `bpf_prog_run_xdp` 中重写 BPF 程序的返回值来实现，以使用bond的 配置来进行发包，这种方法是为了避免对实现 XDP 的驱动程序进行更改。
 
 ### 总结
@@ -513,10 +531,9 @@ XDP 的另一个主要使用场景是包转发和负载均衡，这是通过 `X
 
 XDP 层运行的 BPF 程序能够任意修改（mangle）数据包，即使是 BPF 辅助函数都能增 加或减少包的 headroom，这样就可以在将包再次发送出去之前，对包进行任何的封装/解封装。
 
-利用 `XDP_TX` 能够实现 hairpinned（发卡）模式的负载均衡器，这种均衡器能够 在接收到包的网卡再次将包发送出去，而 `XDP_REDIRECT` 动作能够将包转发到另一个 网卡然后发送出去。
+利用 `XDP_TX` 能够实现 `hairpinned（发卡）` 模式的负载均衡器，这种均衡器能够 在接收到包的网卡再次将包发送出去，而 `XDP_REDIRECT` 动作能够将包转发到另一个 网卡然后发送出去。
 
 `XDP_REDIRECT` 返回码还可以和 BPF cpumap 一起使用，对那些目标是本机协议栈、 将由 non-XDP 的远端（remote）CPU 处理的包进行负载均衡。
-
 
 负载均衡的Tunnel转发模式中，通过对包头进行哈希，以此选择目标应用服务器，然后将数据包进行封装，发送给应用服务器，应用解封，处理请求，会包给客户端。在次过程中，XDP服务哈希，封包发送。通过bpf map进行配置，其性能比Linux内核IPVS高4倍左右。
 

@@ -134,6 +134,35 @@ API风格：倾向于类socket接口，业务适配简单。
 传输支持：UCX不支持utcp，对于Lossy RDMA场景，使用UTCP（Lossy RDMA出现之前）可能更好。
 公司的战略：软件自主可控，硬件生态开放。
 
+## KUCL和阿里的X-RDMA对比
+### 对比
+
+### KUCL可以从X-RDMA借鉴的地方
+#### 边界动态调节优化
+##### 混合消息策略（MixMsg）：大消息和小消息自动优化
+大消息：两段式接收（汇合协议：  rendezvous protocol）
+小消息：一段式接收（渴望协议： eager  protocol）
+
+大小消息的边界是：64k；
+
+##### NAPI
+Hybrid Polling: epoll → busy-poll 切换
+
+##### SRQ默认禁用
+使用共享接收队列（SRQ），多个QP可以将其RQ绑定到同一个。SRQ可以有效地减少内存使用。然而，它违反了我们的`RNR-free`设计原则，这意味着SRQ可能导致网络抖动。
+在X-RDMA中，虽然默认情况下禁用了SRQ，但仍支持SRQ。我们建议在每个节点的QP数量低于10K时不要启用SRQ。
+
+#### 故障注入
+**模拟故障/Emulate Fault**：为了模拟故障情况，X-RDMA实现了一个名为Filter的简单错误注入模块，用于诸如丢弃消息、慢速消息等故障情况。开发人员可以通过调优系统在线启用或禁用筛选器。
+
+#### 流控
+分段流控（Fragmentation + Queuing）：大消息自动分段 + outstanding WRs 限制排队，与 DCQCN 协调；
+
+#### MemCache 动态扩展
+按需注册/回收 MR，适配连接数波动大的场景
+
+
+
 # 内核相关的socket接口
 ## 参考
 ### rsocket 接口
@@ -285,8 +314,8 @@ struct iovec {
 
 那我们来个生活中的例子：
 想象你去火锅店吃饭，但发现需要排队。有两种方式等位：
-1. **傻等法**：站在门口一直盯着前台，不停问"到我了吗？到我了吗？"
-2. **回调法**：拿个小 buzzer（呼叫器），该干嘛干嘛去，等轮到你时，buzzer 会自动震动提醒你。
+2. **傻等法**：站在门口一直盯着前台，不停问"到我了吗？到我了吗？"
+3. **回调法**：拿个小 buzzer（呼叫器），该干嘛干嘛去，等轮到你时，buzzer 会自动震动提醒你。
 
 **回调函数的核心思想是："控制反转"（IoC）**—— 把"何时执行"的控制权交给了别人，而不是自己一直轮询检查。
 
@@ -294,12 +323,12 @@ struct iovec {
 
 在深入代码前，我们先搞清楚为啥需要这玩意儿？回调函数解决了哪些问题？
 
-1. **解耦**：调用者不需要知道被调用者的具体实现
-2. **异步处理**：可以在事件发生时才执行相应代码，不需要一直等待
-3. **提高扩展性**：同一个函数可以接受不同的回调函数，实现不同的功能
-4. **实现事件驱动**：GUI编程、网络编程等领域的基础；
-5. **延迟执行** - 在特定条件满足时才执行代码
-6. **控制反转（IoC）** - 把"何时执行"的控制权交给调用者
+4. **解耦**：调用者不需要知道被调用者的具体实现
+5. **异步处理**：可以在事件发生时才执行相应代码，不需要一直等待
+6. **提高扩展性**：同一个函数可以接受不同的回调函数，实现不同的功能
+7. **实现事件驱动**：GUI编程、网络编程等领域的基础；
+8. **延迟执行** - 在特定条件满足时才执行代码
+9. **控制反转（IoC）** - 把"何时执行"的控制权交给调用者
 
 
 最后用一句话总结回调函数：**把"怎么做(什么时候做)"的权力交给别人，自己只负责"做什么"的一种编程技巧。**
@@ -335,10 +364,10 @@ int main() {
 
 上面的代码中：
 
-7. `CallbackFunc` 是一个函数指针类型，它定义了回调函数的签名
-8. `onTaskCompleted` 是实际的回调函数，它会在任务完成时被调用
-9. `doSomethingAsync` 是接收回调函数的函数，它在完成任务后会调用传入的回调函数
-10. 在 `main` 函数中，我们将 `onTaskCompleted` 作为参数传给了 `doSomethingAsync`
+10. `CallbackFunc` 是一个函数指针类型，它定义了回调函数的签名
+11. `onTaskCompleted` 是实际的回调函数，它会在任务完成时被调用
+12. `doSomethingAsync` 是接收回调函数的函数，它在完成任务后会调用传入的回调函数
+13. 在 `main` 函数中，我们将 `onTaskCompleted` 作为参数传给了 `doSomethingAsync`
 
 这就是回调函数的基本结构！**核心就是把函数的地址当作参数传递，然后在合适的时机调用它；当然也可以定义一个结构体，其中含有函数指针成员，在函数之间传递该结构体**。
 
@@ -788,8 +817,8 @@ kucl_poll：是暴露给业务（Client端）获取sever端大块数据的接口
 
 好处：
 ```bash
-1. 允许用户在相同的网络端口上运行DPDK应用程序时使用传统的linux工具，如ethtool或ifconfig。
-2. 更加健壮，即使DPDK程序挂掉，依然不影响基于内核协议栈的流量。
+14. 允许用户在相同的网络端口上运行DPDK应用程序时使用传统的linux工具，如ethtool或ifconfig。
+15. 更加健壮，即使DPDK程序挂掉，依然不影响基于内核协议栈的流量。
 ```
 
 **举例**：
@@ -1038,27 +1067,97 @@ local_ip → 映射到 GID
 
 # 资源管理
 ## 内存管理
-### 读写零拷贝
+
+### 内存组织与管理
+对于内存管理，分为两种：
+
+![](attachments/mermaid-1776957964797.png)
+
+
+（1）业务自己申请的大块内存（每个numa一个大块）交给KUCL层管理（申请大块内存是防止频繁的进行MR的注册与取消注册的耗时）；
+其中一半是发送数据用，一半是接收数据用（具体收发的比例可调节）。
+1.1> 对于发送数据：将一整块发送数据 作为外部内存，注册到dpdk中，通过memheap来进行管理，每次按需取不固定大小时，则从这个heap中按需取对应大小即可（dpdk的memheap可以帮忙进行管理数据块的切割、合并、空闲管理等等）。
+
+1.2> 对于接收数据：为了零拷贝，则需要将一大块接受内存划分为多个小块，预申请好（如果是UTCP，就是rx queue关联的mbufpool，每个大小是2K+ > 1500; 如果是RDMA，则是预申请一定大小，比如4k，post 到 recv queue中），等到数据的到来。
+
+
+（2）如果业务不申请内存，而是告知KUCL一个大小，KUCL自己要申请多大的内存，然后进行管理。
+KUCL也需要申请一个大块的大页内存，然后注册MR，然后拆分为收发内存块。其他的流程和上面的类似。
+
+### 写内存
+上面写了，对于要发送的内存，通过 从heap中取任意大小的内存块（底层调用 rte_malloc_socket (size, heap_id)）。
+
+**在数据面中，调用 rte_malloc_socket 会有性能损耗**，因此，期望存在缓存。
+
+![](attachments/Pasted%20image%2020260423233702.png)
+
+（1）线程级别的cache；
+	 类似于memheap的实现，多个pool，每个pool管理一定范围大小的多个内存块，使用链表组织，「注：每个pool的链表有最长长度限制，防止一直缓存在线程cache中」
+
+（2）NUMA级别的cache；
+	 每个NUMA下的每个范围大小的内存块存在一个pool，该pool下用rte_ring 来组织内存块「ring有大小限制，防止numa级别cache缓存过多」。
+
+（3）rte_malloc_socket：从指定的heap申请，如果该heap申请失败，则运行兜底从其他的heap进行申请。
+
+（4）整体流程：
+
+![](attachments/Pasted%20image%2020260423233747.png)
+
+(4.1) 申请逻辑：
+先根据要申请的内存的size，得到对应的pool_id（每个pool对应一个内存块的大小范围）。
+先在线程级别的cache中指定的pool下申请；如果申请失败，则到 NUMA级别的cache中指定的pool下申请；如果还是申请失败，则通过 第三步的
+ rte_malloc_socket 来申请（此时申请的是该pool_id对应的内存块的最大值，而不是实际需求的size）。
+
+(4.2) 释放逻辑：
+![](attachments/Pasted%20image%2020260423233844.png)
+
+每次实际申请的时候，会额外申请，即在实际申请的大小前面加一个64B的头，记录这块内存所属的pool_id，numa_id，flag（比如： flag可以防止double free），magic（比如：防止内存写穿了）等等信息。
+
+![](attachments/Pasted%20image%2020260423233945.png)
+
+释放的时候，内存地址左移就可以得到头信息，继而得到所属的pool_id。
+首先，释放到线程级别的cache，如果线程级别的cache满了，则考虑释放到NUMA级别的cache，如果NUMA级别的cache也满了，则考虑通过rte_free 进行释放。
+
+
+### 读内存
+
+![](attachments/Pasted%20image%2020260423234044.png)
+
+对于读取的内存，无论是UTCP还是RDMA，都是通过mempool进行管理，一个是mbufpool（关联到网卡的rx queue），一个是普通的mempool（每次从pool中申请，然后post recv 到 SRQ/RQ中）；
+
+mbufpool 和 普通的 mempool 都是 从起始的大的接收内存块中申请的。具体流程：
+大的接收内存块作为外部内存注册为heap，然后通过dpdk 的memzone从heap中申请，最后mempool从这个memzone中进行申请创建。
+
+
+### 零拷贝
+
+基于Linux内核的收发数据，存在数据拷贝。
+
 读写零拷贝，就涉及到什么时候进行内存的释放的问题？
 那么，就需要通过异步的方式来进行释放内存。
 **对于读来说**：
+存储收到数据的内存是KUCL内提前预申请好的，业务处理完毕之后，通过 `read_done` 进行释放。
+
 
 **对于写来说**：
+![](attachments/Pasted%20image%2020260423235832.png)
 
-#### 问题
+要发送的数据，是业务通过 kucl_malloc 从指定的受到heap管理的大块发送内存中申请，writev的时候，业务提前设置回调函数（write_done），
+kucl中在完成数据的发送（对于UTCP而言，就是收到指定的ack；对于RDMA而言，就是收到send的CQE），则考虑自动调用 write_done 进行释放。
 
-#### 解决方法
-##### 回调函数
-传递读和写完成的释放回调函数。
 
-（1）发送完成，会在`send cq`中产生`cqe`， 则此时可以调用回调函数进行释放。
-（2）接收完成，会在`recv cq`中产生`cqe`，自己定义一个类`skb`的结构，其中包含`addr, len, wr_id 等等信息`；基于`cqe 的 wr_id` 查找对应的类`skb`的结构，然后应用程序完成读取之后，调用读完成的回调函数进行释放。
 
 
 ## 连接管理
 
 ### 控制连接
-#### 状态机
+#### 连接协商
+对于RDMA而言，通过新建TCP连接，来协商MTU，QPN （没有rkey，rkey是RDMA write才需要） ，接收的block_size, qp_mode(比如RC还是VQP)、
+本端conn_id和对端conn_id 等等。
+
+#### 控制连接的状态机
+QP因为存在状态，INIT/RTR/RTS等状态，因此需要对应的控制消息来保证，进而控制连接就需要状态机，涉及到失败回退等。
+
 ### 数据连接
 
 ### 连接的释放
@@ -1078,6 +1177,7 @@ RC服务类型的`QP`「RNIC上需要维护带状态的QP」的数量存在过�
 拿SQP(共享QP）举例， 多个连接共享一个QP，那么关闭连接，是否进行QP的释放，需要注意。
 
 #### 解决：延迟释放+引用计数
+
 **(1) RC服务类型**：
  `close 连接`的时候：
 《1.1》如果这个`conn`对应的QP，还存在没有完成（outstanding）的`send wr, recv wr`「每个`conn`中保存 `send_uncompleted`, `recv_uncompleted`, 表示这个conn上未完成的`SR`, `RR`数量」;
@@ -1268,6 +1368,11 @@ QP的 max_recv_sge 不可以设置为1。因为对于发送message类型的消�
 
 应用层面，我们对服务进行了分级：延迟敏感的核心模型间使用RDMA连接，而海量的长尾业务则默认使用常规TCP连接，以此实现网络资源的按需分配。
 
+## GDR支持
+
+
+
+
 ## RPC支持
 ### 目标
 KUCL通讯库对外提供两类接口：
@@ -1351,17 +1456,17 @@ struct kucl_iovec {
 ![](attachments/deepseek_mermaid_20260407_b553cd.png)
 ```bash
 client:
-1. kucl_rpc_init （底层调用kucl_init 进行初始化: 指定传输协议，内存使用，资源申请，接收buff大小，worker数，ib设备，max_conns, qp/cq/srq depth, trace/日志配置）
-2. 通过kucl socket接口 kucl_epoll_create 创建一个epoll fd;
-3. 创建rpc channel(即一个连接)，传入参数server ip + port，以及kucl_rpc_chan_opts 配置；
-4. 通过kucl_rpc_call_create分配一个请求调用（rpc call：一个连接上可以有多个call）;
+16. kucl_rpc_init （底层调用kucl_init 进行初始化: 指定传输协议，内存使用，资源申请，接收buff大小，worker数，ib设备，max_conns, qp/cq/srq depth, trace/日志配置）
+17. 通过kucl socket接口 kucl_epoll_create 创建一个epoll fd;
+18. 创建rpc channel(即一个连接)，传入参数server ip + port，以及kucl_rpc_chan_opts 配置；
+19. 通过kucl_rpc_call_create分配一个请求调用（rpc call：一个连接上可以有多个call）;
     一个call上封装好了：rpc数据「call_header(call_id, 各部分长度) + message的序列化 + data部分」、call所属的channel 等等。
 
-5. 通过kucl_rpc_call_submit发送一个rpc call request：
+20. 通过kucl_rpc_call_submit发送一个rpc call request：
 
     指定call，对方的service+method，响应回调函数：kucl_rpc_callback；
 
-6. 通过 kucl_epoll_wait 驱动工作线程，且指定call的reponse返回时会自动回调 kucl_rpc_callback
+21. 通过 kucl_epoll_wait 驱动工作线程，且指定call的reponse返回时会自动回调 kucl_rpc_callback
 
 ```
 #### server RPC流程
@@ -1370,15 +1475,15 @@ client:
 
 ```bash
 server:    
-1. kucl_rpc_init （底层调用kucl_init 进行初始化: 指定传输协议，内存使用，资源申请，接收buff大小，worker数，ib设备，max_conns, qp/cq/srq depth, trace/日志配置）
-2. 通过kucl 接口kucl_epoll_create 创建一个epoll fd;
-3. 创建rpc server，传入server ip + port，以及kucl_rpc_chan_opts 配置；
+22. kucl_rpc_init （底层调用kucl_init 进行初始化: 指定传输协议，内存使用，资源申请，接收buff大小，worker数，ib设备，max_conns, qp/cq/srq depth, trace/日志配置）
+23. 通过kucl 接口kucl_epoll_create 创建一个epoll fd;
+24. 创建rpc server，传入server ip + port，以及kucl_rpc_chan_opts 配置；
     rpc_server中包含：listen_channel, method_map, worker_id等等；
-4. 通过 kucl_rpc_register_method 注册服务方法:
+25. 通过 kucl_rpc_register_method 注册服务方法:
     包含 rpc server， service_name, method_name, rpc请求的回调函数： kucl_rpc_callback
 
-5. 通过 kucl_epoll_wait 驱动工作线程，在 kucl_rpc_callback 回调函数里处理 rpc request
-6. 发送则同客户端使用方式，通过调用kucl_rpc_call_submit函数提交 rpc response
+26. 通过 kucl_epoll_wait 驱动工作线程，在 kucl_rpc_callback 回调函数里处理 rpc request
+27. 发送则同客户端使用方式，通过调用kucl_rpc_call_submit函数提交 rpc response
 
 ```
 

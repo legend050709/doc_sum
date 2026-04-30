@@ -43,6 +43,10 @@
 
 # 参考
 ```c
+# TCP 半连接队列和全连接队列满了会发生什么？又该如何应对？（+++++++++）
+https://mp.weixin.qq.com/s/2qN0ulyBtO2I67NB_RnJbg
+
+
 # TCP SYN Queue and Accept Queue Overflow Explained
 https://www.alibabacloud.com/blog/tcp-syn-queue-and-accept-queue-overflow-explained_599203
 

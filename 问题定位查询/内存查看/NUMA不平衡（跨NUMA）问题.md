@@ -1,5 +1,175 @@
 ```table-of-contents
 ```
+# 概念
+## NUMA
+NUMA（Non-Uniform Memory Access）:是“内存访问模型”
+
+特点：
+- 每个 CPU socket 有自己的本地内存
+- 访问远端内存更慢
+
+```bash
+Socket0        Socket1
+  |              |
+Memory0        Memory1
+```
+
+
+## PCIe / Root Complex（RC）
+PCIe 是 **I/O 设备挂载结构**
+```bash
+CPU Socket
+  └── Root Complex
+        ├── GPU
+        ├── NIC
+        └── NVMe
+```
+
+### 查任意设备的 RC
+路径中 `pci0000:XX` 的 `XX`（domain+bus）就是 RC 的唯一标识。**同一个 `pciXXXX:XX` 目录下的所有设备，都在同一个 RC 里**。
+
+查任意设备的 RC:
+```bash
+# 查任意设备的 RC 根
+readlink -f /sys/bus/pci/devices/0000:03:00.0
+# 输出: /sys/devices/pci0000:00/0000:00:01.1/0000:01:00.0/...
+#                  ^^^^^^^^^^^ 这就是 RC 标识
+
+比如：
+# lspci |grep -i eth
+0000:1a:00.0 Ethernet controller: Intel Corporation Ethernet Connection X722 for 10GbE SFP+ (rev 09)
+0000:1a:00.1 Ethernet controller: Intel Corporation Ethernet Connection X722 for 10GbE SFP+ (rev 09)
+0000:1a:00.2 Ethernet controller: Intel Corporation Ethernet Connection X722 for 1GbE (rev 09)
+0000:1a:00.3 Ethernet controller: Intel Corporation Ethernet Connection X722 for 1GbE (rev 09)
+0000:3b:00.0 Ethernet controller: Mellanox Technologies MT27710 Family [ConnectX-4 Lx]
+0000:3b:00.1 Ethernet controller: Mellanox Technologies MT27710 Family [ConnectX-4 Lx]
+
+# readlink -f /sys/bus/pci/devices/0000:3b:00.0
+/sys/devices/pci0000:3a/0000:3a:00.0/0000:3b:00.0
+
+
+#lspci -t
+...
++-[0000:3a]-+-00.0-[3b]--+-00.0
+|           |            \-00.1
+|           +-02.0-[3c]----00.0 
+
+...
+```
+
+
+### 如何判断2个Pcie设备是否在一个RC下
+(1) 方法一：
+找到每个设备的 PCIe root（RC 标识）
+```bash
+/sys/devices/pci0000:00/        ← RC 0 的根（bus 0x00）
+  0000:00:01.1/                 ← Root Port (RC0)
+    0000:01:00.0/               ← PCIe Switch upstream port
+      0000:02:00.0/             ← PCIe Switch downstream port
+        0000:03:00.0            ← GPU 0，在 RC0 下
+        0000:05:00.0            ← NIC 0，在 RC0 下
+
+/sys/devices/pci0000:80/        ← RC 1 的根（bus 0x80）
+  0000:80:01.1/                 ← Root Port (RC1)
+    0000:83:00.0                ← GPU 2，在 RC1 下
+```
+路径中 ==`pci0000:XX` 的 `XX`（domain+bus）就是 RC 的唯一标识==。**同一个 `pciXXXX:XX` 目录下的所有设备，都在同一个 RC 里**。
+
+（2）方法二：nvidia-smi topo
+```bash
+nvidia-smi topo -m
+
+        GPU0  GPU1  NIC0
+GPU0     X     PIX   PHB
+GPU1    PIX     X    SYS
+NIC0    PHB    SYS    X
+```
+
+输出的连接类型编码了 RC 关系：
+
+|符号|含义|是否同 RC|
+|---|---|---|
+|`PIX`|同一个 PCIe Switch 下|同 RC，最优|
+|`PXB`|同 RC 内跨 PCIe Switch|同 RC，稍差|
+|`NODE`|同 socket 但可能跨 RC（AMD 场景）|同 socket|
+|`SYS`|跨 socket（走 UPI）|跨 RC，性能最差|
+
+`PIX` 和 `PXB` 说明在同一个 RC 下，`SYS` 是必须避免的配对。
+
+
+
+## UPI
+QPI/UPI是 **CPU socket 之间的高速互联总线**；
+
+
+|名称|全称|厂商|作用|
+|---|---|---|---|
+|**QPI**|**QuickPath Interconnect**|Intel（老架构，如 Xeon E5/E7）|处理器之间（socket间）及与 I/O hub 的高速互连总线|
+|**UPI**|**Ultra Path Interconnect**|Intel（Skylake Xeon 及以后）|QPI 的继任者，带宽更高、延迟更低、协议更高效|
+
+|参数|QPI（Haswell/Broadwell）|UPI（Skylake 以后）|
+|---|---|---|
+|速率|6.4 – 9.6 GT/s|10.4 – 11.2 GT/s|
+|每方向带宽（单链路）|~12.8 – 19.2 GB/s|~20 – 22 GB/s|
+|延迟|约 50~70 ns|约 40~60 ns|
+|本地 DRAM 延迟|约 70~80 ns|约 70~80 ns|
+|跨 socket 访问延迟|约 120~150 ns|约 110~130 ns|
+
+简单来说，**QPI / UPI 就是不同 CPU socket 之间互相通信的物理高速链路**。  
+**UPI/QPI 是 socket-to-socket 的物理链路**，它的触发边界是物理 CPU 封装（die）之间的跨越，和 RC、NUMA 都不是同义词，只是在特定平台上三者恰好重合。
+如果主板上有多个物理 CPU（多路系统），每个 CPU 有自己的本地内存控制器，**跨 CPU 访问内存**（即访问另一个 socket 的内存）就必须经过 QPI/UPI 传输。
+
+UPI/QPI 的真正触发条件是：跨物理 socket（CPU 封装），不是跨 RC，也不是跨 NUMA。
+
+### 跨 NUMA 一定经过 UPI/QPI 吗？
+基本是的。
+
+（1）情况1：访问远端内存
+```bash
+CPU0 → Memory1
+
+路径：CPU0 → UPI/QPI → CPU1 → Memory1
+```
+
+(2) 情况2：访问远端 PCIe 设备（GPU/NIC）
+```bash
+比如：
+CPU0 → GPU（挂在 CPU1）
+
+路径通常是：
+CPU0 → UPI/QPI → CPU1 → PCIe Root Complex → GPU
+```
+
+### 跨 PCIe Root Complex 一定经过 UPI/QPI 吗？
+**不一定**。比如：GPU 和 NIC 同 socket，但不同 RC
+
+![](attachments/rc_numa_upi_boundary_comparison.svg)
+
+
+### 小结
+
+|概念|属于哪一层|是什么|
+|---|---|---|
+|UPI / QPI|CPU 互联层|物理 CPU 封装（socket）之间的点对点高速串行链路|
+|NUMA|内存拓扑层|描述哪块内存"距离"哪个 CPU 更近的软件/硬件模型|
+|Root Complex|PCIe 层|PCIe 树的根节点，由 CPU 的 PCIe 控制器实现|
+
+真正决定数据路径的，是这三个维度各自独立的问题：
+```bash
+Q1: 跨 socket 了吗？
+    YES → 必走 UPI/QPI（Intel）或 xGMI（AMD 多路）
+    NO  → 不走 UPI/QPI，继续问 Q2
+
+Q2: 跨 RC 了吗？（但在同 socket 内）
+    YES → 走片内互联（Intel mesh / AMD Infinity Fabric）
+         延迟增加，但比 UPI 小很多
+    NO  → 同 RC 内 P2P，最快
+
+Q3: 跨 NUMA 了吗？（内存访问方向）
+    YES → 内存访问延迟高（远端 DRAM 控制器）
+         和 PCIe DMA 路径是正交的概念
+    NO  → 本地内存访问，低延迟
+```
 
 # NUMA 不平衡问题（NUMA Imbalance）
 
@@ -30,25 +200,6 @@
 
 
 ## 后果分析
-
-
-### 跨NUMA通信：QPI/UPI
-
-|名称|全称|厂商|作用|
-|---|---|---|---|
-|**QPI**|**QuickPath Interconnect**|Intel（老架构，如 Xeon E5/E7）|处理器之间（socket间）及与 I/O hub 的高速互连总线|
-|**UPI**|**Ultra Path Interconnect**|Intel（Skylake Xeon 及以后）|QPI 的继任者，带宽更高、延迟更低、协议更高效|
-
-简单来说，**QPI / UPI 就是不同 CPU socket 之间互相通信的物理高速链路**。  
-如果主板上有多个物理 CPU（多路系统），每个 CPU 有自己的本地内存控制器，**跨 CPU 访问内存**（即访问另一个 socket 的内存）就必须经过 QPI/UPI 传输。
-
-|参数|QPI（Haswell/Broadwell）|UPI（Skylake 以后）|
-|---|---|---|
-|速率|6.4 – 9.6 GT/s|10.4 – 11.2 GT/s|
-|每方向带宽（单链路）|~12.8 – 19.2 GB/s|~20 – 22 GB/s|
-|延迟|约 50~70 ns|约 40~60 ns|
-|本地 DRAM 延迟|约 70~80 ns|约 70~80 ns|
-|跨 socket 访问延迟|约 120~150 ns|约 110~130 ns|
 
 
 

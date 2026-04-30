@@ -6,9 +6,11 @@
 传统的 XDP 架构与 Jumbo Frame (巨型帧，通常 MTU 达到 9000 字节，即 9K) 存在冲突，原因在于 **XDP 的设计约束**：
 
 ## XDP 的性能基础
-XDP 的高性能来源于其极简的数据结构和 **Zero-Copy (零拷贝)** 思想。
-早期 XDP 框架传递给 eBPF 程序的数据结构 (`xdp_buff`) 假定数据缓冲区是**连续**的。这是为了让 eBPF 程序能够简单地通过指针和偏移量访问整个数据包，即直接在网卡接收到的原始数据缓冲区上操作，而无需将数据拷贝到内核的 `sk_buff` 结构中。。
+XDP 的高性能来源于其极简的数据结构和 **bypass 协议栈，Zero-Copy (零拷贝)** 思想。
 
+早期 XDP 框架传递给 eBPF 程序的数据结构 (`xdp_buff`) 假定数据缓冲区是**连续**的。
+
+这是为了**让 eBPF 程序能够简单地通过指针和偏移量访问整个数据包，即直接在网卡接收到的原始数据缓冲区上操作，而无需将数据拷贝到内核的 `sk_buff` 结构中**。
 
 ## Jumbo Frame 的物理大小
 - Linux 内核的默认内存页（PageSize）大小通常是 **4KB**。
@@ -61,9 +63,6 @@ struct xdp_buff {
 ```
 
 
-
-
-
 ## 问题
 
 ### XDP程序和 jumbo frame不兼容
@@ -88,8 +87,6 @@ XDP multi-buffer 解决的核心问题：让 XDP 程序能访问由多个内存 
 ## 作用
 最直接的作用是解决了 **Jumbo Frame** 和 **XDP** 的共存问题，让用户可以在高带宽场景下使用 9K MTU 并同时享受 XDP 的超高性能。
 
-
-
 ## 内核改动
 
 内核支持multi-buffer需要内核和驱动两部分支持。内核主要是提供基础的multi-buffer的操作函数，比如读写非线性区域内存。驱动需要在收包逻辑中组装分片为一个xdp_buff。
@@ -99,7 +96,6 @@ XDP multi-buffer 解决的核心问题：让 XDP 程序能访问由多个内存 
 4. 数据结构struct xdp_frame增加flags字段，标记是否有分段。
 5. xdp数据操作函数，xdp_get_buff_len、xdp_load_bytes、xdp_store_bytes、xdp_adjust_tail、xdp_copy，主要是为了读写分段的数据。
 6. bpf map相关修改，相关性待定。
-
 
 ![](attachments/Pasted%20image%2020251114174236.png)
 

@@ -476,6 +476,101 @@ PFC 触发后，虽然避免了丢包，但可能引起线头阻塞。DCQCN 随�
 ## 总结
 
 # DCQCN的配置
+
+## 交换机侧的参数配置
+## 主机侧的参数配置
+### TI 和 TD
+在 RoCEv2 的 DCQCN 中，**TI（Increase Timer）** 和 **TD（Decrease Timer）** 是控制发送速率“加速 / 减速节奏”的两个关键时间参数，本质上是**发送端速率调整的节拍器（pacing timers）**。
+
+DCQCN 在发送端（Reaction Point, RP）实现速率控制，核心逻辑是：**收到 CNP → 降速 → 无拥塞时回升**。
+DCQCN 的核心目标是：**既要快速响应拥塞（降速），又要平滑恢复（升速）**；其中：TD 负责“快速刹车”，TI 负责“慢慢加速”。
+
+![](attachments/dcqcn_ti_td_rate_timeline.svg)
+
+####  TI — Rate Increase Timer（速率增加计时器）
+
+TI 是发送端（Reaction Point, RP）在**没有收到 CNP** 时周期性触发速率上调的时间间隔。每隔 TI 时间（或每发送 B 字节，二者取其先），RP 就执行一次速率增加。
+
+速率增加分两个阶段，TI 均作为触发周期：
+- **Fast Recovery (FR)**：刚发生降速后，快速恢复到目标速率 Rt（接近降速前）
+- **Active Increase (AI)**：进入稳态后，以固定步长 Rai 线性加速
+
+- TI 控制：**多久尝试“加速”一次**
+- 触发条件：当前没有明显拥塞（或拥塞已经缓解）
+- 行为：
+    - 周期性地 **增加发送速率**
+    - 类似 TCP 的 additive increase（但 DCQCN 更复杂）
+
+直观理解：TI 决定“多久踩一脚油门”
+
+#### TD —Rate Decrease Timer（降速降低计时器）
+
+TD 是两次连续降速之间的**最短时间间隔**。收到第一个 CNP 触发降速后，在 TD 时间内即使再次收到 CNP，也**不会再次降速**。
+这是因为一次拥塞事件会在 RTT 内产生多个 CNP 副本，若不设保护窗口，同一个拥塞会造成多次叠加降速，速率会被打到极低。
+
+- TD控制：**多久执行一次“减速响应”**
+- 触发条件：收到 **CNP（Congestion Notification Packet）**
+- 行为：
+    - 周期性地 **降低发送速率**
+    - 避免一次 CNP 就连续疯狂降速（节流）
+
+直观理解：TD 决定“刹车动作的频率上限”
+
+#### 两者配合
+
+|阶段|TI 的作用|TD 的作用|
+|---|---|---|
+|CNP 到来|暂停增速，等 FR 阶段完成|开启保护窗口，屏蔽后续重复 CNP|
+|FR 阶段|每隔 TI 触发一次快速步进|TD 窗口内不允许再次降速|
+|AI 阶段|每隔 TI 累加 Rai|TD 过期后才允许下次降速|
+
+TI 和 TD 不是对立的，而是： **构成一个“负反馈控制系统”**
+TI和TD类似于AIMD，可以类比控制论：
+- TD = 快速负反馈（抑制系统发散）
+- TI = 慢速正向恢复（提高利用率）
+
+#### 常用配置
+通常推荐 `TD ≈ RTT`（数据中心内约 1–4 μs）；
+
+- TD：μs 级（快速）
+- TI：几十 μs ~ ms 级（慢恢复）
+
+### 范例
+参数分两类：
+- `roce_rp/*` → 控制“怎么调速”
+- `roce_np/*` → 控制“多久发一次CNP”
+
+```bash
+# DCQCN优化参数；
+# 策略：减少反馈 + 加速更猛 + 降速更轻
+## 适合于：
+- 网络 buffer 足够大
+- ECN 阈值合理
+- 追求吞吐（throughput > latency）
+
+
+echo 1 > /sys/class/net/$eth/ecn/roce_rp/enable/1  
+echo 1 > /sys/class/net/$eth/ecn/roce_np/enable/1  
+echo 64 > /sys/class/net/$eth/ecn/roce_np/min_time_between_cnps  // 两次发送 CNP 的**最小时间间隔**
+echo 15 > /sys/class/net/$eth/ecn/roce_rp/rpg_ai_rate   // 每次“加速阶段”（TI触发）增加多少速率(ai: additive Increase)
+echo 150 > /sys/class/net/$eth/ecn/roce_rp/rpg_hai_rate // “高速阶段（hai: Hyper Additive Increase）”的加速速率（比 ai_rate 更猛）
+echo 80 > /sys/class/net/$eth/ecn/roce_rp/rpg_min_dec_fac # 最小降速比例（Minimum Decrease Factor, 单位 %）,需要<100; 值越大 → 降速越“温和”.  比如：80，意味着 降到 80%（降得少）
+
+```
+
+
+把整个系统想成开车：
+
+|参数|对应|
+|---|---|
+|ai_rate|油门踩多少|
+|hai_rate|地板油|
+|min_dec_fac|刹车踩多狠|
+|min_time_between_cnps|刹车提醒频率|
+
+
+
+
 ## 端上的配置
 
 ![](attachments/111aa.png)

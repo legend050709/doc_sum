@@ -3,7 +3,7 @@
 
 
 # 数据结构
-## GCC 现代原子内建（完整的C11 内存模型写法
+## GCC 现代原子内建（完整的C11 内存模型写法）
 ### `__ATOMIC_ACQUIRE`
 ### `__ATOMIC_RELAXED`
 

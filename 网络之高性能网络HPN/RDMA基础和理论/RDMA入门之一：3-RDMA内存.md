@@ -514,6 +514,7 @@ RDMA的核心目标是**绕过CPU和操作系统**，直接通过网卡访问远
 ## 方案一：ODP MR（按需分页MR）
 
 参考：[# Understanding On Demand Paging (ODP)](https://enterprise-support.nvidia.com/s/article/understanding-on-demand-paging--odp-x)
+
 ODP（On-Demand Paging）：注册MR时指定`IBV_ACCESS_ON_DEMAND`标识则创建`ODP MR`，其初始地址翻译表里VA对应的物理页并不存在，因此设备首次访问`MR VA`时会产生`IO page fault(IOPF)`，HCA驱动处理此`IOPF`并换入所需物理页，更新HCA里的地址翻译表，则下次设备DMA时不再发生IOPF。
 若操作系统决定`swap out` VA对应的物理页，也会由HCA驱动更新地址翻译表将VA对应entry置为`page none-present`。
 
@@ -537,7 +538,7 @@ ibv_reg_mr(ctx->pd, ctx->buf, size, access_flags);
 ```
 
 
-## DM作为MR
+## DM作为MR（比如：GDR）
 DM(device memory): register the allocated device memory as a memory region.
 
 设备内存作为MR，省去了RNIC通过DMA从主机内存中读写数据。
@@ -545,11 +546,8 @@ DM(device memory): register the allocated device memory as a memory region.
 
 # UMR
 
-
 ## 介绍
 **User-mode memory registration (UMR)**： 是 Mellanox/NVIDIA RDMA 网卡（ConnectX-4 及以上）提供的一种高级内存注册机制，允许在**不重新注册物理内存**的前提下，**动态地重新定义一个 MR 的内存布局**。
-
-
 
 ## 核心数据结构
 
@@ -575,6 +573,8 @@ UMR 通过 KLM（Key-Length-Mkey） 或 MTT（Memory Translation Table） 条目
 
 ## 特性
 ### 将多块非连续的MR拼接成一个VA连续的MR
+**VA连续**：==对于应用程序来说，VA连续就可以（不关注底层是否PA连续）==，这样应用可以一次性处理一大块数据（比如：存储中的大块压缩），就不需要拷贝来凑成一大块。
+
 
 ![](attachments/Pasted%20image%2020251230154011.png)
 
@@ -629,8 +629,6 @@ Server C 响应:  [RPC Header C (32B)] [Message Body C (K bytes)]
 目标内存:       [Body A][Body B][Body C]  ← 逻辑连续，零拷贝
 ```
 
-
-
 #### 解决一：RDMA Write with Immediate + 分段两次写（RPC协议改造，无 UMR 要求）
 修改 RPC 协议，让 Server 做两次 RDMA Write：
 ```bash
@@ -645,6 +643,7 @@ Write 2 with IMM: 写 rpc Body → Client 的聚合 Buffer + offset
 这个不仅可以做到多个消息体的逻辑地址连续，也可以做到多个消息体的物理地址连续。
 
 #### 解决二：UMR（Indirect MR）
+
 **UMR（User-Mode Memory Registration / Indirect MKey）** 是 mlx5 硬件的一项能力，允许你在用户态创建一个"虚拟 MKey"，这个 MKey 的虚拟地址空间映射到若干段不连续的物理内存区域。对远端 server 来说 以及本地的应用程序来说，它看到的是一块连续的目标地址。
 
 ##### 方案一：RPC header 长度固定：

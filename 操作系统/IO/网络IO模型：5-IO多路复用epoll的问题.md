@@ -34,7 +34,7 @@
 
 
 
-## 同一个 `listen fd` 在多个 CPU 上调用 `accept`的问题(accept 的 scale out 问题)
+## accept 的 scale out 问题：同一个 `listen fd` 在多个 CPU 上调用 `accept`的问题
 ### 背景
 一个典型的场景是一个需要处理大量短连接的 HTTP 1.0 服务器，由于需要 accept() 大量的 TCP 建连请求，所以希望把这些 accept() 分发到不同的 CPU 上来处理，以充分利用多 CPU 的能力。
 

@@ -1,7 +1,7 @@
 ```table-of-contents
 ```
 # 概述
-DPDK 考虑了 NUMA 以及多内存通道的访问效率，会在系统运行前要求配置Linux 的 HugePage，初始化时申请其内存池，用于 DPDK 运行的主要内存资源。Linux 大页机制利用了处理器核上的的 TLB 的 HugePage 表项，这可以减少内存地址转换的开销。
+DPDK 考虑了 NUMA 以及多内存通道的访问效率，会在系统运行前要求配置Linux 的 HugePage，初始化时申请其内存池，用于 DPDK 运行的主要内存资源。Linux 大页机制利用了处理器核上的的 TLB(Translation Lookaside Buffers) 的 HugePage 表项，这可以减少内存地址转换的开销。
 
 # 内存多通道(channel)的使用
 现代的内存控制器都支持内存多通道(channel)，比如 Intel 的 E5-2600V3 系列处理器，能支持 4个通道，可以同时读和取数据。依赖于内存控制器及其配置，内存分布在这些通道上。每一个通道都有一个带宽上限，如果所有的内存访问都只发生在第一个通道上，这将成为一个潜在的性能瓶颈。
@@ -31,6 +31,23 @@ NUMA（Non Uniform Memory Access Architecture）与 SMP（Symmetric Multi Proces
 **DPDK 提供了一套在指定 NUMA 节点上创建 memzone、ring, rte_malloc 以及 mempool 的API，可以避免远端内存访问这类问题**。
 在一个 NUMA 节点端，对于内存变量进行读取不会存在性能问题，因为该变量会在 CPU cache 里。
 但对于跨 NUMA 架构的内存变量读取，会存在性能问题，可以采取复制一份该变量的副本到本地节点（内存）的方法来提高性能。
+
+# 大页内存
+## 大页内存作用
+
+从虚拟地址映射到物理地址的转换工作主要是TLB(Translation Lookaside Buffers)与MMU一起完成的。例如，使用4KB的系统页，虚拟地址寻址时，首先在TLB中查找，如果不命中，则需要通过MMU加载的页表基地址进行多次寻表来找到对应的物理地址，如果查不到表，则产生缺页，缺页异常会有相应的handle处理，来填充页表和更新TLB。
+
+TLB的出现是为了减小MMU通过寻址查表带来的CPU开销。TLB容量有限(不同的SoC不同)，系统缺页是不可避免的。而采用大页加上TLB功能，可减小缺页异常，减小TLB miss 。例如，2MB大小的内存访问，如果是4K大小的系统页粒度，则会产生512次缺页异常，但若使用2M的页，一次数据访问只会出发一次缺页异常。页粒度的增大，使得同样大小的TLB空间可以保存更多虚拟地址到物理地址的映射。充分发挥TLB的优势，减小MMU的的使用，减小查表寻址和缺页异常处理的开销，从而提高应用程序的性能。
+
+DPDK之所以称为高性能数据面的应用，一部分原因也得益大页内存的作用。实测发现：
+DPDK运行于无大页模式，使用4K页，实测有比较大的TLB miss，而使用大页，TLB miss几乎为0。
+
+## no-huge 非大页支持
+
+DPDK使用大页内存作为性能优化的一个手段。但大页内存在云计算等环境下可能会出现内存资源浪费的情况，作为售卖资源的云服务商，希望能找到更充分的内存资源利用的方法。在此背景下，DPDK引入了no-huge机制，即不使用hugepage，从而解放更多的系统资源。
+
+eal层参数设置了`--no-huge`参数，即无大页模式，也是传统内存分配机制之一。因为在该配置下，使用`RTE_PGSIZE_4K`页大小，将会有很多页，每个页一个文件，文件描述符将非常多，因此会使能`single_file_segments`。以`rte_config:mem_config:memsegs[0] 的 rte_memseg_list`，来关联`--socket_mem`传入的预留的内存数，计算`memseg`个数，并按此预留的内存大小映射到进程。
+
 
 
 # 预留内存(`--socket-mem/-m`)
@@ -211,9 +228,29 @@ memzone: DPDK中一块**有名字的、物理地址连续**的内存区域，在
 
 每个memzone描述的都是一块连续的物理内存，memzone结构本身并不在大页上，但是它描述的连续物理内存在大页上。
 
+#### 接口
+
+网卡驱动的硬件描述符的内存申请接口`rte_eth_dma_zone_reserve()`，`rte_ring`和`rte_mempool`的申请接口，底层都是申请`memzone`，其基本接口是`rte_memzone_reserve_aligned()`。
+
+```c
+struct rte_memzone * rte_memzone_reserve_aligned(const char *name, size_t len, int socket_id,
+                unsigned flags, unsigned align);
+                
+int rte_memzone_free(const struct rte_memzone *mz);
+```
+
+
+以下rte_mempool创建过程做个简单示意：
+
+![](attachments/Pasted%20image%2020260424161902.png)
+
+memzone所关联的内存都是来自与malloc_heap中malloc_elem关联的大页内存。
+
+
 #### 特点
 命名 + 跨进程可见：主 / 从进程可按名查找。
 强控制：**指定 socket、对齐、边界、物理连续、IOVA 连续**。
+
 
 #### 应用
 memzone的使用场景：当应用需要一块有名字、可全局访问的连续大内存时使用，主要用于系统初始化阶段。
@@ -312,6 +349,15 @@ struct rte_memseg {
 (3)**每个大页文件系统指定的页的大小是固定的，因此不同页大小的大页，mount的目录是不一样的**。
 
 
+#### 大页内存申请
+
+动态申请大页的含义及流程，请见如下图所示：
+
+![](attachments/Pasted%20image%2020260424162042.png)
+
+从以上申请内存的接口实现上可以看出，rte_mempool、rte_ring、pkt_mbuf和rte_malloc系列函数对应的内存，来源实际都是通过heap中存放的mmap到进程的大页内存。
+
+但要注意，==DPDK中不是所有的场景都需要使用rte_malloc系列函数申请内存，在控制面上，一般直接使用malloc等C库函数申请内存==即可。
 
 
 
@@ -495,6 +541,7 @@ rte_malloc_heap_memory_add("my_heap", mem2, 256MB, iova_addrs2, n_pages2, page_s
 ```bash
 # DPDK内存管理概述
 https://zhuanlan.zhihu.com/p/658824633
+https://zhuanlan.zhihu.com/p/702445686
 
 # DPDK 22.11内存管理变化解析 [++++++++]
 http://blog.chinaunix.net/uid-28541347-id-5877488.html
@@ -517,4 +564,6 @@ https://doc.dpdk.org/guides/linux_gsg/build_sample_apps.html
 
 # DPDK性能影响因素分析
 https://zhuanlan.zhihu.com/p/557294705
+
+
 ```
