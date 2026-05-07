@@ -1,3 +1,6 @@
+```table-of-contents
+```
+# PCI介
 # 背景
 测试4层LB时，client、server通过dperf打流，发现使用Mellanox Cx4-Lx 25G网卡的dpvs程序，bps总是无法打满带宽。但是dpvs的cpu使用率并不高，且存在Imiss丢包。
 
@@ -129,6 +132,22 @@ lspci -s PCI_ID -vv
 #### MPS
  **Max Payload Size, 简称MPS**：
 PCIe设备是以TLP（Translation Layer Protocol）的形式发送报文的，而max payload size(简称mps)决定了pcie设备实际使用的tlp能够传输的最大字节数(类似于网络协议中的MTU)。PCIe设备发送TLP时，其最大payload不能超过mps的值。  
+
+
+##### MPS定义
+
+- 单个 TLP 的**Data Payload**最大字节数，固定可选：**128/256/512/1024/2048/4096B**。
+- 链路初始化时**两端协商**，整条链路用同一个 MPS（取最小值）。
+
+作用场景
+- ✅ **所有写操作（Memory Write）**：大包必须拆成≤MPS 的小包发送。
+- ✅ **读响应（Completion）**：返回的数据段不能超过 MPS。
+- ✅ **链路层基础限制**：决定 PCIe 包的 “最大车厢容量”，影响**带宽利用率 / 延迟 / 缓存开销**。
+
+MPS=256B：一次写 512B → 拆成**2 个 256B TLP**发送。
+
+##### MPS和MPSS
+
 mps定义在Device control register中。Device Control register 如下：
 ![](attachments/Pasted%20image%2020230731113601.png)
 
@@ -165,15 +184,91 @@ PCIe设备发送数据报文时，使用Max_Payload_Size参数决定TLP的最大
 ![](attachments/Pasted%20image%2020230727182803.png)
 Data Payload的最大size是由设备的MPS（Max Payload Size）决定的。
 
-##### MPS的设置
-在实际应用中，尽管有些PCIe设备的Max_Payload_Size Supported参数可以为256B、512B、1024B或者更高，但是如果PCIe链路的对端设备可以支持的Max_Payload_Size参数为128B时，系统软件将使用对端设备的Max_Payload_Size Supported参数，初始化该设备的Max_Payload_Size参数，即选用PCIe链路两端最小的Max_Payload_Size Supported参数初始化Max_Payload_Size参数。
+##### TLP的Overhead开销
+
+MPS 的设置，确定了传输指定数据量所需的 TLP（Transaction Layer Packet） 数量。随着 MPS 的增加，传输同一块数据所需的 TLP 数量会减少。
+
+
+在不考虑Ack/Nak机制和Flow Control机制等因素的情况下，PCIe总线的真实有效速率可以这样计算：
+![](attachments/Pasted%20image%2020260506201717.png)
+
+> TLP开销Overhead 为：
+
+> 对于任意的一个TLP来说，除了Data Payload，还有物理层添加的包头（1 Byte）、数据链路层添加的包编号（2 Bytes）、事务层添加的包头（12 or 16 Bytes）、事务层添加的ECRC（4Bytes，可选的）、数据链路层添加的LCRC（4Bytes）和物理层添加的包尾（1 Byte）。具体如下图所示：
+![](attachments/Pasted%20image%2020260506201914.png)
+
+![](attachments/image%20(16).png)
+因此：如果只从TLP Overhead考虑的话，显然每个TLP包含的Data Payload的量越大，真实有效速率越高「**实际应用中却并非如此，还要考虑其他因素**」。
+
+在网卡收到数据包时，DMA通过PCIe将数据包从网卡硬件缓存中搬到内核内存中，如果MPS更大，则可以有更大的传输效率。
+
+##### MPS的协商
+注：==MPS类似于TCP/IP中的MTU==。
+
+```bash
+         RC(512)
+           │  链路①
+       Switch(512)
+       /          \
+  链路②           链路③
+DevA(512)       DevB(256)
+```
+
+
+###### 逐链路协商结果（per-link 策略）
+
+|链路|两端能力|协商 MPS|
+|---|---|---|
+|链路① RC ↔ Switch|512 vs 512|**512**|
+|链路② Switch ↔ DevA|512 vs 512|**512**|
+|链路③ Switch ↔ DevB|512 vs 256|**256**|
+
+DevA 和 RC 之间走的是 512，路径上每一跳都支持 512，全程畅通无阻。
+```
+DevA(512) ──[512B TLP]──▶ Switch(512) ──[512B TLP]──▶ RC(512)
+```
+
+核心问题：RC 怎么知道写 DevB 只能用 256B？
+这是 per-link 策略的关键难点。RC 自身 MPS 寄存器设为 512，**但它写 DevB 时必须用 256B 的 TLP**，否则 DevB 处理不了。
+```bash
+RC 写 DevA：可以发 512B TLP ✅
+RC 写 DevB：只能发 256B TLP ✅（软件保证）
+
+Switch 转发时：
+  链路① 上跑 512B → Switch 能处理 ✅
+  链路③ 上跑 256B → DevB 能处理 ✅
+```
+**谁来保证？** —— 软件（BIOS/OS/驱动）在配置阶段记录了每个 Endpoint 的 MPS，DMA 引擎或 CPU 发起传输时按目标设备的 MPS 切片。
+
+###### 全局最小值策略
+
+整个 PCIe 层级域（整个树： 一个RC对应一个PCIe树）必须使用同一个全局 MPS，不能各跑各的。
+
+```bash
+全拓扑最小 = 256（因为 DevB 拖累）
+→ RC、Switch、DevA、DevB 全部强制设为 256
+→ DevA ↔ RC 之间也只能跑 256B TLP（白白浪费带宽）
+```
+
+###### 小结
+
+|策略|DevA MPS|DevB MPS|实现复杂度|
+|---|---|---|---|
+|**per-link**|**512**|256|较高（软件要记录每个目标的 MPS）|
+|**全局最小**|256|256|简单（统一配置）|
+
+Linux 内核默认用**全局最小值策略**（`pci=pcie_bus_safe`），因为实现更简单可靠；性能敏感场景可以配置 `pci=pcie_bus_perf` 启用 per-link 策略。
+
+
+##### MPS的协商范例
 
 DevCtl中的mps的大小是由PCIe链路两端的设备协商决定的，系统的DevCtl 的 MPS值设置是在上电以后的设备**枚举配置（即枚举DevCap的MPS supported，选择 最小的）**阶段完成的。
+
 以主板上的PCIe RC和PCIe SSD为例，他们都在Device Capability Register里声明自己能支持的各种MPS，OS的PCIe驱动侦测到他们各自的能力值，然后挑低的那个设置到两者的Device Control register中。
 
 虽然PCIe Spec规定，TLP的Data Payload最高可达4096 Bytes，但同时也规定了PCIe体系结构中，所有的设备，都必须使用相同的Max_Payload_Size值。换一句话说，整个总线的Max_Payload_Size值必须使用总线体系结构中所有设备的最小的Max_Payload_Size Supported值(即最小的DevCap 的 MPS)。具体如下图所示：
 ![](attachments/Pasted%20image%2020230801112925.png)
->**注：**每个设备所支持的Max_Payload_Size最大值信息，存在于Device Capability Register中。
+>**注：** 每个设备所支持的Max_Payload_Size最大值信息，存在于Device Capability Register中。
 >Max_Payload_Size值的设置是在PCIe总线枚举和配置的过程中完成的，软件确定了Max_Payload_Size的值后，会将该值写入到每个设备的Device Control Register中。
 
 **选用PCIe链路两端最小的Max_Payload_Size Supported参数初始化Max_Payload_Size参数**。
@@ -205,6 +300,85 @@ MRRS可以比MPS大，比如MPS设置为256B，MRRS设置为4KB，通常MRRS大�
 
 ![](attachments/Pasted%20image%2020230727181911.png)
 
+##### MRRS是没有协商的
+
+MRRS 相当于我基于它，设置本端接收缓冲区大小，隐含告诉对端我本端最大能承接多少；
+因此，MRRS是设备自己设（主机设自己的，设备设自己的），不需要协商，只要 MRRS ≥ MPS 即可
+
+##### MRRS影响的是请求的个数，MPS影响的是发送的TLP的大小
+
+|参数|全称|作用方向|约束对象|
+|---|---|---|---|
+|**MPS**|Max Payload Size|发送端写数据 / 完成包响应|**TLP 的 payload 大小上限**|
+|**MRRS**|Max Read Request Size|发起读请求端|**单次读请求能请求的字节数上限**|
+
+
+- **返回的响应 Completion TLP 个数**
+    只由 总读取字节数 + MPS 决定，和 MRRS 一毛钱关系都没有。
+    只要 MPS 固定、要读的总数据固定，拆出来的响应 TLP 数量永远固定。
+    
+- **下发的 Memory Read 请求 TLP 个数**
+    只由 总读取字节数 + MRRS 决定。
+    MRRS 越大，发起的读请求包越少。
+
+
+固定 MPS=256B
+```bash
+1. MRRS=512B
+    一次读请求最多要 512B
+    响应时，链路会拆成：2 个 256B TLP 响应包
+    
+2. MRRS=1024B
+    一次读请求直接要 1024B
+    响应时，链路拆成：4 个 256B TLP 响应包
+
+3. MRRS=4096B
+    响应时，链路拆成：16 个 256B TLP 响应包
+```
+
+MRRS 影响的是 Read 请求发包次数：**MRRS 越大，发的读请求越少，总线命令开销越小，吞吐越高；MRRS不影响TLP的最大大小，TLP的最大大小是由MPS决定的**。
+```bash
+要读 4KB 数据:
+- MRRS=512：要发 8 次 Read 请求；响应时，基于TLP最大为MPS，需要16个 256B的 TLP响应包；
+- MRRS=1024：只发 4 次 Read 请求；响应时，基于TLP最大为MPS，需要16个 256B的 TLP响应包；
+- MRRS=4096：只发 1 次 Read 请求；响应时，基于TLP最大为MPS，需要16个 256B的 TLP响应包；
+
+
+----------------------------
+
+要读：总数据 1024B，分别看2种 MRRS：MRRS=512B、MRRS=1024B
+（1）MPS=256，MRRS=512B
+主机端发起Read请求：
+    Read Req #1  请求 512B  → 对端
+    Read Req #2  请求 512B  → 对端
+对端受MPS=256限制，自动拆小包返回：
+    Comp TLP #1  256B
+    Comp TLP #2  256B
+    Comp TLP #3  256B
+    Comp TLP #4  256B
+总结：
+    只发 2次Read请求
+    照样收 4个256B响应包
+
+(2) MPS=256，MRRS=1024B
+规则：一次直接拉满要 1024B（我们要的总量刚好 1024）
+主机端发起Read请求：
+    Read Req #1  请求 1024B  → 对端
+对端还是受MPS=256限制，拆成4个小包返回：
+    Comp TLP #1  256B
+    Comp TLP #2  256B
+    Comp TLP #3  256B
+    Comp TLP #4  256B
+总结：
+    仅发 1次Read请求
+    依然收 4个256B响应包
+```
+
+- **MPS 由链路稳定性、兼容决定**，一般 256/512 别动太小
+- **MRRS 建议设成比 MPS 大一档甚至拉满 4KB**
+- 高性能设备（NVMe/GPU/10G + 网卡）：
+    MPS=256/512，**MRRS 直接拉 4096**
+
 #### MPS对性能的影响
 网卡自带的内存和CPU使用的内存进行数据传递时，是通过PCIe总线进行数据搬运的。Max Payload Size为每次传输数据的最大单位（以字节为单位），它的大小与PCIe链路的传送效率成正比，该参数越大，PCIe链路带宽的利用率越高。
 ![](attachments/Pasted%20image%2020230727181817.png)
@@ -222,12 +396,16 @@ pice协议规定有数据的TLP包的传递规则是：按照指定DW长度单�
 
 #### setpci设置
 ![](attachments/Pasted%20image%2020230731113119.png)
-注：【14：12】是mrrs, [7:5]是mps。
+注：`【14：12】`是mrrs, `[7:5]`是mps。
 
 > 注：setpci对于MRRS的设置，在设备重启之后，会失效。
 > 可以通过在BIOS中设置MRRS，并且保存配置，下次再次reboot，依然有效。
 
-***注：DevCtl 的MPS在运行时不可以更改，MRRS在运行时可以更改。***
+> 注：整个总线的Max_Payload_Size值必须使用总线体系结构中所有设备所支持的最小的Max_Payload_Size值。「木桶原理」
+![](attachments/Pasted%20image%2020230926113202.png)
+
+**注：DevCtl 的MPS在运行时不可以通过 setpci 来更改，MRRS在运行时可以通过 setpci 更改。**
+
 ![](attachments/Pasted%20image%2020230731225751.png)
 
 #### 内核参数控制MPS模式
@@ -497,8 +675,8 @@ EXPORT_SYMBOL_GPL(pcie_bus_configure_settings);
 ```
 搜索pcie_bus_configure_settings调用的地方。
 主要归为：
-1. 控制器驱动（DT和ACPI），在枚举完成所有设备并分配号BAR资源之后，调用此接口进行MPS的协商配置。
-2. hotplug驱动，热插拔场景，新插入一个设备的时候也会调调用此接口进行MPS协商。
+4. 控制器驱动（DT和ACPI），在枚举完成所有设备并分配号BAR资源之后，调用此接口进行MPS的协商配置。
+5. hotplug驱动，热插拔场景，新插入一个设备的时候也会调调用此接口进行MPS协商。
 
 
 
@@ -548,6 +726,65 @@ int pcie_set_mps(struct pci_dev *dev, int mps)
 }
 EXPORT_SYMBOL(pcie_set_mps);
 ```
+
+
+### PCie反压
+如果网卡丢包，还可以看看是否存在PCI背压的统计，Pause Frame 发送的统计。如下所示：
+```c
+1> 下图为Mellanox Cx4-LX 25G的统计输出
+# ethtool -S eth03 | grep -i -e pci -e pause -e control
+     tx_mac_control_phy: 1266552
+     rx_mac_control_phy: 0
+     rx_pause_ctrl_phy: 0
+     tx_pause_ctrl_phy: 1266552
+     rx_pci_signal_integrity: 0
+     tx_pci_signal_integrity: 3
+     outbound_pci_stalled_rd: 0
+     outbound_pci_stalled_wr: 0
+     outbound_pci_stalled_rd_events: 0
+     outbound_pci_stalled_wr_events: 0
+     rx_global_pause: 0
+     rx_global_pause_duration: 0
+     tx_global_pause: 1266552
+     tx_global_pause_duration: 555665182
+     rx_global_pause_transition: 0
+     tx_pause_storm_warning_events: 0
+     tx_pause_storm_error_events: 0
+
+主要是：
+ tx_pause_ctrl_phy：网卡发送的Pause帧的数量
+ outbound_pci_stalled_wr：Pcie背压
+
+2> 下图为 Intel 82599 10G的统计输出
+# ethtool -S eth03 | grep -i flow_
+     tx_flow_control_xon: 0
+     rx_flow_control_xon: 0
+     tx_flow_control_xoff: 0
+     rx_flow_control_xoff: 0
+```
+-  Mellanox Cx4-Lx 的统计说明：
+![](attachments/Pasted%20image%2020230912141450.png)
+![](attachments/Pasted%20image%2020230912141546.png)
+
+-  Intel 82599 10G 的统计说明:
+rx_flow_control_xon是在**网卡的RX Buffer满或其他网卡内部的资源受限**时，给交换机端口发送的开启流控的pause帧计数。对应的，tx_flow_control_xoff是在资源可用之后发送的关闭流控的pause帧计数。
+
+- 查看网络流控配置
+```c
+ethtool -a eth1
+```
+![](attachments/Pasted%20image%2020230926111744.png)
+
+- 设置网络流控配置
+解决方案：关闭网卡流控
+
+```
+ethtool -A ethx autoneg off //自协商关闭
+ethtool -A ethx tx off //发送模块关闭
+ethtool -A ethx rx off //接收模块关闭
+```
+
+
 
 ### 提升PCI利用率的其他方法
 参考：dpdk的在Mellanox Cx4-Lx网卡上的调优。

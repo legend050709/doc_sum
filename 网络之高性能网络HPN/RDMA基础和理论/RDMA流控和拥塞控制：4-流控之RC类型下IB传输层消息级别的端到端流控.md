@@ -167,9 +167,8 @@ recv buff 可能不够用，导致网卡无法接收更多的消息。主要的�
 RDMA RC（Reliable Connected）和 DC（Dynamic Connected）服务类型是可靠传输，每一个发出去的消息都必须被对端接收侧有对应的 Receive Work Request（RWR）来消费。
 接收缓冲区有两种组织方式：
 
-|   |   |   |
-|---|---|---|
 |模式|描述|RQ 资源归属|
+|---|---|---|
 |Private RQ（不使用 SRQ）|每个 RC QP 独占一个 RQ，大小 = rx_queue_len|每 QP 独立|
 |SRQ（Shared Receive Queue）|多个 QP 共享一个 SRQ|全局共享|
 
@@ -201,6 +200,7 @@ RNR NAK 的代价极高：
 // bit[6]   = HARD_REQ
 // bit[7]   = FC_GRANT
 ```
+
 #### EP（Endpoint，端点）
 **是什么：** 代表一条到对端的逻辑连接。RC 传输层中每个 EP 对应一个 QP（Queue Pair）。
 ```c
@@ -211,7 +211,7 @@ struct uct_rc_ep {
     ucs_arbiter_group_t arb_group; // 发送被阻塞时的 pending 队列
 };
 ```
-**核心作用：** fc.fc_wnd 是整个流控机制的"心脏"——它记录了"我还能向对端发多少个 AM 而不需要等授权"。
+**核心作用：** `fc.fc_wnd` 是整个流控机制的"心脏"——它记录了"我还能向对端发多少个 AM 而不需要等授权"。
 
 Peer EP（对端端点）： 接收方视角中，代表"来自某个发送方的连接"。在 RC 中，它和本端的 EP 是一一对应的（共用同一条 RC QP 的两端）。
 
@@ -252,7 +252,8 @@ invoke_am_handler(real_am_id, ...);
 ```
 
 ##### PURE_GRANT（纯信用授予，独立消息）
-**是什么：** 一个**没有任何 AM payload** 的独立消息，唯一用途就是授予信用。`am_id = 0xE0（SOFT_REQ | HARD_REQ | GRANT 三位全1）`。
+
+**是什么**： 一个没有任何 AM payload 的独立消息，唯一用途就是授予信用。`am_id = 0xE0（SOFT_REQ | HARD_REQ | GRANT 三位全1）`。
 
 **触发时机：**
 1. 收到 HARD_REQ 时，接收方没有其他 AM 可以搭载 Grant → 必须发独立 PURE_GRANT
@@ -306,7 +307,7 @@ if (status == NO_RESOURCE) {
 
 **特点：** 紧急授权，有可能触发一个额外的独立消息（PURE_GRANT）。
 
-#### Piggyback：在数据前面添加AM头作为流控信息
+#### Piggyback(夹带)：在数据前面添加AM头作为流控信息
 Piggyback = 把 FC 控制信号"塞进"正常数据消息的 header 高位，零额外网络开销。
 
 ### 流程
@@ -325,7 +326,7 @@ DC（Dynamic Connected）传输层与 RC 的本质区别：多个 EP 共享少�
 
 #### DC是可靠的，为什么UCX的DC流控存在超时重传的逻辑
 
-**（1）DC 的可靠性保证了什么，没有保证什么？**
+##### DC 的可靠性保证了什么，没有保证什么？
 
 |操作类型|DC 硬件是否保证可靠？|
 |---|---|
@@ -351,11 +352,11 @@ Grant 消息本身是可靠传输的，但发送 Grant 的 fc_ep 对应的 DCI
 发送方 EP₁ 永远等不到 Grant ← 死锁！
 ```
 
-**(2) 超时重传的真正作用：防死锁**
+##### 超时重传的真正作用：防死锁
 
 超时重传的逻辑是："我发了 HARD_REQ，你那边虽然收到了，但你回 Grant 时 fc_ep 的 DCI 挂了，Grant 没发出来。我不知道这件事，所以我等了 5 秒后，主动再发一次 HARD_REQ 触发你重新发 Grant。"
 
-**(3) 小结**：
+##### 小结
 
 |问题根因|说明|
 |---|---|
@@ -374,9 +375,34 @@ Grant 消息本身是可靠传输的，但发送 Grant 的 fc_ep 对应的 DCI
 
 
 ### UCX 流控的 问题
+
+#### 饥饿问题：多 EP 竞争下的 SRQ 饥饿问题
+
+FC 的 grant 是逐 EP 独立进行的，所有 EP 共享一个 SRQ，但没有任何跨 EP 的 SRQ 总量协调机制。当某个 EP 发送非常活跃时，可能消耗大量 SRQ 槽位，导致其他 EP 的消息无法入队（硬件 RnR）。
+软件层 FC 只能限制"每个 EP 的在途消息数"，无法感知 SRQ 整体压力。
+
+#### 带宽利用率不足的问题
+fc_wnd_size = 512 是每个 EP 的**最大 in-flight 上限**，但实际场景中：
+多个 peer 同时向同一个节点发送 AM，且**全都打满 fc_wnd**，这种情况极少发生。
+
+大部分场景下，由于QP的 实际 in-flight message不均衡，这样会导致一个问题。每个QP的 in-flight 都限制在 SRQ_size / N 以下。
+比如：2个发送端的QP共享SRQ，SRQ的深度为1024，那么平均每个QP分到的配额是512;
+
+实际的场景下：
+（1）如果没有FC，QP1的   in-flight message 可能有 700个，QP2的 in-flight message 可能有 300个，总的in-flight message 有 900个，不会占满 SRQ，此时可能都不需要限速。
+（2）如果存在FC,  QP1的   in-flight message 限制在 512个，QP2的 in-flight message 可能有 300个，总的in-flight message 有 812个，也不会占满SRQ，相对于没有FC，存在FC时，带宽利用率要低一些。
+
+注：SRQ下基于`SRQ_size / N`的每个QP的流控，可以加一个**超额+补偿**的机制，也就是这个QP的剩余额度>0但是不足，也是允许发送；但是下一轮需要考虑补充。这样可以稍微提升一些带宽利用率。但不是根本方法。
+
+#### 动态增删QP时，额度计算的不精确问题
+每个 QP 能占用的 SRQ 槽位上限约为 SRQ_size / N；
+但是连接（QP）的创建以及销毁都是动态的，那么就带来了额度计算不精确问题。
+
+注：N可以设置为一个SRQ最多被多少个QP共享，这样实际上每个QP分配到的额度其实都是偏小的，和实际上这个SRQ正在被多少个QP共享没有关系。
+
 #### UCX FC 是有意识的不精确设计，而非精确流控
 
-- SRQ 容量 = rx_queue_len = 4095，被所有 EP 共享
+- SRQ 容量 = rx_queue_len = 4095，被所有 EP 共享；所有 EP 使用相同的 fc_wnd_size。当接收端同时被 N 个 QP 共享时，理论上每个 QP 能占用的 SRQ 槽位上限约为 SRQ_size / N。
 - fc_wnd_size（默认 512）是每个 EP 的最大 in-flight AM 数
 
 ```bash
@@ -389,11 +415,9 @@ self->config.fc_wnd_size = ucs_min(config->fc.wnd_size,
                                    config->super.rx.queue_len);  // min(512, 4095)
 ```
 
-
-
 ##### 为什么说FC不精确
 **为什么说它不精确？**
-假设有 N 个远端对等体（peer），每个 peer 对应一个 RC EP：
+目前 每个 EP 的 fc_wnd_size = 512，假设有 N 个远端对等体（peer），每个 peer 对应一个 RC EP：
 ```bash
 SRQ 容量 = 4095 个 WR（全局共享）
 每个 EP 的 fc_wnd_size = 512
@@ -418,23 +442,6 @@ fc_wnd_size = 512 是每个 EP 的**最大 in-flight 上限**，但实际场景
 
 只要接收方 progress 在正常运转，每消费一个 WR 后立即 repost（srq_post_recv），SRQ 的瞬时 in-use WR 数量远小于理论最大值，实际上几乎不可能填满。
 
-##### 理想精确FC
-
-**理想情况下，fc_wnd_size 应该在建立连接时通过 RC 地址协商，==动态分配 SRQ 配额==**（即 SRQ_capacity / 连接数 = 精确的 per-EP 配额）。但 UCX 目前没有实现这个，使用的是静态全局配置。
-
-```bash
-## 精确流控的理想做法（UCX 未实现的 TODO）
-
-接收方 SRQ 容量 = 4095
-当前 EP 数量 = N
-
-精确 per-EP 配额 = floor(4095 / N)
-→ 建连时通过 rc_address 把这个值告诉对端
-→ 每个 EP 的 fc_wnd_size = 动态计算值
-
-优点：严格保证 SRQ 不被耗尽
-缺点：EP 数量变化时（新连接/断开）需要重新协商，复杂度高
-```
 
 ##### 小结
 
@@ -450,23 +457,51 @@ fc_wnd_size = 512 是每个 EP 的**最大 in-flight 上限**，但实际场景
 
 #### client端的发送缓冲区(pending队列)没有资源限制
 client端pending队列的长度没有限制，没有反压到上层应用；若上层应用持续发送，则内存会一直增加。需要队列长度限制并向上层应用通知。
+一旦pending队列的长度超过了阈值，后续业务继续writev，就需要返回`-1 + EAGAIN`；
 
 #### server端的接收缓冲区没有资源限制
+目前仅仅是SRQ的接收能力的感知，没有可用的recv buffer的感知「recv buffer在几个地方使用，一个是SRQ中提前预下发，一个是业务程序占用不释放的部分」。
 server端发送grant时没有检查接收能力（接收缓冲区的剩余空间），若上层应用一直不处理接收到的数据，则接收buffer的内存占用一直增加。 需要接收能力感知的grant策略。
 
 ### 竞品对比
 
-|   |   |   |   |   |   |
-|---|---|---|---|---|---|
 |方案|流控粒度|机制|保护对象|DC 支持|额外开销|
+|---|---|---|---|---|---|
 |UCX RC/DC FC|每 EP（即每个QP/连接）|软件信用窗口 + piggyback|AM（消耗接收方Recv WQE的操作）|（特有机制）|极低（3bit复用）|
 |原生 IB Verbs|无（开发者自己管）|依赖 RNR retry|所有操作|❌|无|
 |MVAPICH2 MPI|每连接|Prepost + RDMA Write token|MPI 消息|❌|较高（额外消息）|
 |libfabric verbs|有限|依赖 RNR retry + 有限 CQ|部分操作|❌|中等|
 |NCCL|不需要|仅用 RDMA Write（不消耗 RQ）|GPU 数据|部分|无|
 
+### UCX的FC改进
+
+目前，多个QP共享SRQ的容量，每个QP分到的信用为：每个 QP 能占用的 SRQ 槽位上限约为 SRQ_size / N；这样会到来 带宽利用率不足 + 饥饿的问题。
+
+#### 总体思想
+
+FC的最终目标是：充分利用带宽资源（和没有FC时的带宽资源利用率接近） +  基本上无 RNR NACK的发生。
+这个就是一个**trade-off**。一方面是带宽利用率， 一方面是 RNR NACK。
+
+#### 具体措施
+
+**（1）动态 rx_max_batch 自适应**
+当 SRQ available 水位低于某阈值（如 SRQ_depth × 0.25）时，临时降低 rx_max_batch（如从 8 降到 1），立即 re-post，避免 SRQ 彻底耗尽。
+
+**（2）SRQ 全局信用池（Credit Pool）**
+引入全局 SRQ 信用池，所有 EP 共享一个总额度 srq_total_credits = SRQ_depth。每个 EP 发送前从全局池申请信用，消息处理完成后归还。
+
+**（3）基于 SRQ 水位的 back-pressure 反压**
+如果SRQ没有一个低水位的阈值（low-threshold）的反压，那么多个QP共享一个SRQ，并且每个QP感知到的都是 SRQ的深度，多个QP并行发送message的时候，可能会导致SRQ的接收缓存不足的问题。
+
+设置低水位的阈值（low-threshold），可以应对后续突发导致的RNR问题。这个阈值必须设置合理。
+当SRQ中实际可用的WQE的个数低于low-threshold时，接收端主动向所有活跃 EP 广播 back-pressure 信号，降低所有 EP 的 fc_wnd_size，当水位恢复时再恢复。
+这类似于 DCQCN（Data Center Quantized Congestion Notification）在 RoCE 中的拥塞控制机制。
+
+**（4）一个SRQ最多被N个QP共享**
+设置一个SRQ，可以被QP共享的阈值限制。
+
 ### QA
-#### UXC 的 FC 对 RDMA Write/Read 是否有流控保护
+#### UCX 的 FC 对 RDMA Write/Read 是否有流控保护
 无需保护，也没有。
 - RDMA Write：不消耗接收方 RQ（无 Receive Work Request），无 RNR 风险
 - RDMA Read：由 `iface->tx.reads_available` 控制并发数量，与 FC 机制独立。

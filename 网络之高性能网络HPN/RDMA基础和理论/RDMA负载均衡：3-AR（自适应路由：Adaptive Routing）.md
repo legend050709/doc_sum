@@ -12,6 +12,11 @@
 - 端到端AI网络可见性
 
 # AR
+## 概述
+
+传统 ECMP 主要依赖静态哈希，而 **adaptive routing** 会对发往 ECMP 组的流量按出口队列负载进行选择，使数据包优先走当前拥塞最小的端口。也就是说，它不再仅依赖“哈希是否分得均匀”，而是把实时队列状态引入路径选择。
+
+这一步对 **大象流** 尤其重要。静态 ECMP 在面对长流时容易因哈希碰撞形成热点，而 adaptive routing 的目标正是缓解这种由于流量分布不均导致的链路失衡。NVIDIA 还进一步说明，这一机制可与 ConnectX/BlueField 侧的 RoCE 乱序处理能力配合，使路径动态变化对应用透明。
 
 ## 背景
 大模型训练中的 all-reduce、all-to-all、parameter synchronization 和 expert dispatch 会形成大规模、持续性、同步化的 elephant flows；

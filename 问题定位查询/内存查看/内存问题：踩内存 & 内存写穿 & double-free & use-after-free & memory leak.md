@@ -319,7 +319,7 @@ mprotect 如果是2个进程共享同一个物理内存，在2个进程中看到
 ```c
     uint64_t i, size;
     uint64_t pagesize = 2 * 1024 * 1024;  // 2M的大页
-    struct kucl_conn *new_conn;
+    struct ucl_conn *new_conn;
 
     fdtable.fds = rte_ring_create("fdarray", kcontext.skconn_max_fds,
                                   SOCKET_ID_ANY, 0);
@@ -327,29 +327,29 @@ mprotect 如果是2个进程共享同一个物理内存，在2个进程中看到
         return -1;
     }
 
-    size = KUCL_CONN_SIZE * (kcontext.skconn_max_fds - 1);
+    size = ucl_conn_SIZE * (kcontext.skconn_max_fds - 1);
     size += pagesize; // 前面追加哨兵
     size = (((size) + (pagesize)-1) & ~((pagesize)-1)); // 2M 对齐
 
-    new_conn = (struct kucl_conn *)rte_zmalloc("fdtable", size,
+    new_conn = (struct ucl_conn *)rte_zmalloc("fdtable", size,
                                                RTE_CACHE_LINE_SIZE); // new_conn 是cacheline 对齐，不一定是 2M大页对齐；
     if (!new_conn) {
         return -1;
     }
     fdtable.table =
-        (struct kucl_conn *)(((uintptr_t)(new_conn) + (pagesize)-1) &
+        (struct ucl_conn *)(((uintptr_t)(new_conn) + (pagesize)-1) &
                              ~((pagesize)-1)); // 设置为 2M大页对齐
 
     protect_addr = (uint8_t *)fdtable.table;
-    fdtable.table = (struct kucl_conn *)(protect_addr + pagesize);
+    fdtable.table = (struct ucl_conn *)(protect_addr + pagesize);
     mprotect((void *)protect_addr, pagesize, PROT_READ);
 
-    KUCL_LOG_INFO("kconn_init: protect_addr:%p, fdtable.table:%p, new_conn:%p, "
+    UCL_LOG_INFO("kconn_init: protect_addr:%p, fdtable.table:%p, new_conn:%p, "
                   "fdtable.size:%ld, pagesize:%ld",
                   protect_addr, fdtable.table, new_conn, size, pagesize);
                   
     for (i = 1; i < kcontext.skconn_max_fds; i++) {
-        struct kucl_conn *conn = KUCL_CONN_GET_BY_INDEX(fdtable.table, i - 1);
+        struct ucl_conn *conn = ucl_conn_GET_BY_INDEX(fdtable.table, i - 1);
         conn->fd = 0;
         rte_ring_enqueue(fdtable.fds, (void *)i);
     }
@@ -498,7 +498,7 @@ gdb 查看：
 
 ## 可用工具以及思路
 
-### ASAN
+
 
 ### `userfaultfd`（缺页异常）
 #### 介绍
@@ -563,7 +563,7 @@ cons_db: 华为网卡用户态驱动中，存储ci的值的指针，驱动将该
 
 ● 现象
 perftest测试华为网卡是正常的；
-kucl测试华为网卡是异常的：主要是因为每次 cons_db 都自增了1，即地址出错了，导致写入到硬件的ci的值都是0，进而出现了cq溢出的问题。
+ucl测试华为网卡是异常的：主要是因为每次 cons_db 都自增了1，即地址出错了，导致写入到硬件的ci的值都是0，进而出现了cq溢出的问题。
 cons_db的值每次自增和某个统计计数每次自增1很像。
 
 ● 原因
@@ -575,7 +575,300 @@ cons_db的值每次自增和某个统计计数每次自增1很像。
 对于一个结构体中出现了联合体`union`时，其使用一定要注意。
 因为，==联合体`union`中成员共享同一个内存空间。如果错误的使用了联合体的成员，可能会导致踩内存==。
 
+# 踩内存范例：结构体中间的某个成员被踩
+## 问题
+```bash
+场景：
+  - DPDK mempool，成千上万个元素，活跃使用中约 100 个
+  - 线程 B 计算出错误指针，踩到了线程 A 持有的某个 elem 中的某个成员
+  - 哪个 elem 被踩，运行前完全不知道
+  - 被踩的成员前后成员均完好（只有单一成员被踩）
+
+核心需求：
+  - 踩内存的那一刻同步捕获现场（踩内存的线程 B 的调用栈）
+  - DPDK 使用大页（2MB/1GB hugepage）
+```
+
+
+## 问题分析
+
+## 方案分析
+### DR 寄存器(调试寄存器: Debug registers)
+X86寄存器有如下：
+```bash
+①8个通用寄存器：EAX,EBX,ECX,EDX,ESI,EPI,ESP.EBP
+②1个标志寄存器：EFLAGS
+③6个段寄存器：CS,DS,ES,FS,GS,SS
+④5个控制寄存器：CR0,CR1,CR2,CR3,CR4
+⑤8个调试寄存器：DR0,DR1,DR2,DR4,DR5,DR6,DR7
+⑥4个系统地址寄存器：GDTR,IDTR,LDTR,TR
+```
+
+在x86架构CPU内部，提供了**8个调试寄存器DR0~DR7**。调试寄存器主要作用是调试应用代码、系统代码、开发多任务操作系统.来监视代码的运行和处理器的性能。
+
+![](attachments/Pasted%20image%2020260503124937.png)
+```bash
+DR0 ← 断点地址 0
+DR1 ← 断点地址 1
+DR2 ← 断点地址 2
+DR3 ← 断点地址 3
+DR6 ← 状态寄存器（哪个断点触发了）
+DR7 ← 控制寄存器（每个断点的启用/类型/长度）
+```
+
+这 8 个寄存器通常成组使用：
+- **DR0 - DR3 (线性地址寄存器)：**
+    - 存储 4 个断点的线性地址。
+    - 在 64 位模式下，这些寄存器保存 64 位有效地址。
+- **DR4 - DR5 (保留)：**
+    - 通常保留。当 `CR4` 寄存器中的 `DE` (Debugging Extensions) 位被置 1 时，访问 DR4/DR5 会产生异常。
+- **DR6 (调试状态寄存器)：**
+    - 报告调试异常的来源。当断点触发时，DR6 的特定位会被置位，告诉调试器是哪个断点（DR0-DR3）被触发。
+- **DR7 (调试控制寄存器)：**
+    - 控制断点的启用/禁用。
+    - 定义断点类型：执行断点（Execution）、写入断点（Data Write）、读写断点（Data Read/Write）。
+    - 定义断点监控的长度（1、2、4 或 8 字节）。
+
+**工作流程**；
+```bash
+1. 把目标地址写入 DR0~DR3（任意一个空闲的）
+2. 在 DR7 中配置该断点为"写触发"+ 长度
+3. 使能该断点（DR7 对应使能位置 1）
+
+CPU 执行每条指令后，检查：
+  如果有内存写操作，且写入地址落在 DRn 指定的范围内
+      → 设置 DR6 中的对应标志位
+      → 产生 Debug 异常（INT 1 / #DB）
+      → OS 将其转换为 SIGTRAP 发给当前线程
+      → 精确到踩内存的那条指令
+```
+
+**约束**：
+```bash
+每个线程只有 4 个可用断点（DR0~DR3）
+每个断点只能监控连续的 1/2/4/8 字节
+DR 寄存器是每 CPU 核心独立的，线程切换时由 OS 保存/恢复
+用户态可以通过 ptrace(PTRACE_POKEUSER) 或 perf_event_open 设置
+```
+
+
+#### 硬件 watchpoint（ DR 寄存器）
+
+**原理**：对目标成员地址设写断点，CPU 写入时同步触发 SIGTRAP，精确到指令。
+
+**致命缺陷**：x86 每线程只有 **4 个 DR 寄存器可用**，100 个活跃元素 >> 4，根本放不下。轮换监控虽然理论可行，但实现复杂且覆盖率是概率性的，不能保证命中。
+
+**结论**： 单独使用不可行，100 个活跃元素场景下无解。
+
+#### GDB watchpoint 方案
+GDB 的 watchpoint 本质上也走 DR 寄存器
+GDB 的 watch 命令在 x86 底层就是设 DR0~DR3，所以**同样受 4 个的限制**。唯一的区别是 GDB 有一个"软件 watchpoint"的 fallback：
+```bash
+(gdb) watch -location some_var   # 硬件 watchpoint，受限4个
+(gdb) watch some_var             # 软件 watchpoint（fallback）
+```
+
+**软件 watchpoint 的原理**：GDB 在每条指令执行后单步检查目标地址的值有没有变化，相当于每条指令都做一次内存比较。
+
+**问题**：DPDK 程序是 busy-poll 的，每秒执行数十亿条指令，软件 watchpoint 会使程序**慢到完全无法运行**（慢 1000x 以上），根本无法复现正常的并发行为，所以 GDB 软件 watchpoint 在这个场景下实际不可用。
+
+GDB 硬件 watchpoint 的价值：如果你通过 Canary 或 Intel PT 已经锁定了是"某个特定元素的这个 offset"，下次复现时，只对这一个已知地址设硬件 watchpoint，4 个完全够用，反而是最简单的最终确认手段。
+
+#### debugfs ftrace
+**ftrace uprobe**：只能在函数入口/出口打点，无法监控任意内存地址的写入。
+
+#### 缺陷
+
+**原理**：对目标成员地址设写断点，CPU 同步触发 SIGTRAP，精确到踩内存的那条指令。
+**致命缺陷**：x86 每线程只有 **4 个 DR 寄存器**可用，100 个活跃元素远超上限，无法覆盖全部。
+
+### mprotect 只读陷阱（关大页，改 allocator）
+
+mprotect 保护的是一个整页(只能基于整页设置属性，不可以基于某个成员大小来设置属性)，也就是某个字段单独放入到一个页中，然后设置只读。
+由于之前，结构体之间的成员的内存是紧凑的，互相挨着的，现在如果给某个成员放入到一个整页中，会导致前面的成员会有padding，那么再次踩内存可能就踩了padding内存部分，而不是放入到单独页的成员了。导致问题无法复现了。
+
+比如：
+
+```bash
+原始布局（紧凑排列）：
+	[member_a: offset 0~47]
+	[suspect: offset 48~63] ← 被踩的成员，offset=48
+	[member_c: offset 64~...]
+
+线程B 的错误计算：
+	wrong_ptr = some_base + wrong_delta
+	→ 恰好命中 offset=48 这个位置 → 踩中 suspect
+
+注：线程 B 的错误指针，未必是通过 struct 内部 offset 计算出来的。这个指针值直接就是一个错误的绝对地址，和 struct 的布局根本没关系。
+改变 struct 布局 → suspect 成员的绝对地址变了
+	→ 线程B 的错误绝对地址不再指向 suspect 成员
+	→ 踩内存位置发生了变化（可能踩别处，可能不踩任何有效数据）
+	→ bug 无法复现
+```
+
+为了用 mprotect 保护 suspect，需要让它独占一个 4KB 页，就必须在它前面加 padding 对齐：
+
+```bash
+调整后布局（为了 mprotect 对齐）：
+	[member_a: offset 0~47]
+	[padding:  offset 48~4095]  ← 补了 4048 字节的 padding
+	[suspect:  offset 4096~4111] ← 现在独占一页，offset 变成了 4096
+	[member_c: offset 4112~...]
+
+线程B 同样的错误计算：
+	wrong_ptr = some_base + wrong_delta
+	→ 命中 offset=48 这个位置 → 踩中的是 padding，不是 suspect
+	→ mprotect 的保护页没有被触发
+	→ SIGSEGV 不发生
+	→ bug "消失了"
+```
+
+### 巡检线程
+
+**原理**：在目标成员前后插 magic 值，另起线程定时扫描所有元素检查 canary 是否被破坏。
+
+**致命缺陷**：无法精确抓现场。
+信号是异步的——巡检线程检测到损坏时，施害线程 B 早已跑了 N 条指令甚至被调度走。只能知道"有人踩了"，无法拿到施害者的调用栈。
+
+**结论**：无法精确定位，只能作为"发现问题"的辅助手段，不能作为"抓现场"的方案。
+
+### 最后方案
+
+#### Intel PT 离线过滤（推荐，零侵入）
+Intel PT（Processor Trace）是 Intel 硬件提供的**指令级追踪**，全程记录 CPU 执行路径。以极低开销**全程录制所有指令的执行轨迹**，保存在环形缓冲区中。**完全不修改任何内存布局**，bug 正常发生，事后回放录像找到踩内存的那条指令。
+
+
+|约束|Intel PT 的应对|
+|---|---|
+|不改内存布局|✅ 纯硬件录制，零侵入|
+|活跃 100 个元素|✅ 录制全部指令，没有数量限制|
+|需要精确到指令|✅ 指令级时序还原|
+|事先不知道哪个 elem 被踩|✅ 事后按条件过滤|
+
+**巡检线程**：Canary 损坏 → 确认"发生了踩内存" → 触发保存 PT trace → 事后分析。
+当 Canary 检测到被踩后（巡检线程发现的，有延迟检测也没关系），PT 已经录下了整个时间段内所有线程的完整指令执行序列。通过 PT 解码可以精确找到向该地址写入的指令。
+
+```bash
+# 步骤1：启动时开启 PT 录制（环形缓冲，内存开销可控）
+perf record -e intel_pt//u --snapshot -m,64M -p $(pidof your_binary) &
+
+# 步骤2：程序运行，bug 正常发生
+# （内存布局完全未变，踩内存正常发生，PT 在后台默默录制）
+
+# 步骤3：检测到异常后（Canary末尾检测，或程序崩溃），保存 PT 快照
+kill -USR2 $perf_pid
+
+# 步骤4：解码 PT trace，用过滤条件精确找到踩内存指令
+perf script --itrace=m64 | awk -F: '{print $NF}' | python3 filter.py
+```
+
+解码 PT trace时的过滤条件。
+```python
+# filter.py
+POOL_BASE    = 0x7f0000000000  # 运行时从 /proc/pid/maps 获取
+ELEM_SIZE    = 256             # 你的 struct 大小
+MEMBER_OFFSET = 48             # suspect_member 的 offset
+
+for line in sys.stdin:
+    addr = parse_addr(line)
+    if POOL_BASE <= addr < POOL_BASE + POOL_SIZE:
+        offset = (addr - POOL_BASE) % ELEM_SIZE
+        if offset == MEMBER_OFFSET:
+            print(f"HIT: {line}")
+```
+
+#### perf_event（硬件 watchpoint）+ BPF 联动采集（概率命中）
+
+##### ebpf的能力
+
+|能力|说明|
+|---|---|
+|uprobe|在用户态函数入口/出口执行 BPF 程序|
+|perf_event + BPF|在 perf 事件触发时执行 BPF 程序|
+|采集调用栈|bpf_get_stackid() 可以拿到用户态/内核态调用栈|
+|读取寄存器|可以读取触发时的 PT_REGS（rip、rsp、rbp 等）|
+|高频无锁输出|bpf_perf_event_output() 输出到 ring buffer|
+
+**eBPF 无法直接监控"任意用户态地址被写入"**。原因：
+```bash
+内核 kprobe/uprobe 只能在"函数边界"挂钩
+eBPF 没有"地址写入监控"的 hook 点
+
+唯一能监控地址写入的硬件机制 = DR 寄存器（watchpoint）
+perf_event_open + BPF 的组合，底层仍然用的是 DR 寄存器 → 仍然受 4 个的限制
+```
+所以 eBPF **本身不能直接实现"无限制地址监控"**，它的价值在于**配合其他机制提供更丰富的上下文**。
+
+
+##### 具体方案
+
+**原理**：用 perf_event_open 设置硬件 watchpoint（DR 寄存器），即设置一个地址的写断点，在触发时挂载 eBPF 程序执行过滤逻辑，在触发时不仅记录地址，还运行 BPF 程序采集完整的多线程上下文；不满足则放行（修改 watchpoint 到下一个候选地址）。
+
+mempool 的内存是**连续的**，每个元素大小**固定**，因此 suspect 成员在每个元素中的偏移量是固定的。所有 suspect 成员的地址构成一个**等差数列**：
+
+```bash
+suspect 成员的合法地址集合：
+	{ pool_base + member_offset,
+	pool_base + elem_size + member_offset,
+	pool_base + 2 * elem_size + member_offset,
+	... }
+
+等价过滤条件：
+	addr ∈ [pool_base, pool_base + pool_size) && (addr - pool_base) % elem_size ∈ [member_offset, member_offset + member_size)
+```
+
+**整体流程**：
+```bash
+初始化：
+  watchpoint → pool_base + member_offset（第 0 个元素）
+
+触发流程：
+  write 命中 watchpoint
+      ↓
+  eBPF 程序：
+      offset = (fault_addr - pool_base) % elem_size
+      if offset == member_offset:
+          bpf_get_stackid() → 输出调用栈
+      // 无论是否命中，更新 watchpoint 到下一个元素
+      next_addr = fault_addr + elem_size
+      update_watchpoint(next_addr)
+```
+
+**特点**：
+- 运行时即时响应，不需要保存 trace 文件
+- 仍受 DR 寄存器限制（同时只能保护 1 个元素），但通过滚动换位可以最终覆盖全部
+```bash
+watchpoint 仍受 DR 限制，根本上无法同时保护 100 个元素，只能轮换
+```
+- ==命中概率==取决于踩内存频率与轮换速度的比值
+```bash
+命中是概率性的, 踩内存频率低时可能需要很长时间才能捕获
+```
+
+
+**说明**：
+```bash
+eBPF 的本质定位：
+  eBPF 是"信息采集增强器"，不是"监控触发器"
+
+  触发器：必须是硬件机制（DR 寄存器 / page fault）
+  增强器：触发后，BPF 程序可以做比 signal handler 更多的事
+
+  单独的 eBPF ≠ 完整方案
+  eBPF + (DR watchpoint 或 内核模块页表钩子) = 完整方案
+```
+
+## 整体排查流程
+### 先确定是踩内存导致
+之前为什么一直难以排查，因为之前的排查方向都是double-free。方向错了。
+因此，在查具体原因之前，一定要弄清楚具体的原因。
+
+对于踩内存，可以将对应的成员前后添加指定的魔数，程序根本不会更改这个魔数（只有初始化的时候赋值，后续只有读取，没有写入），如果查询到这个魔数被更改，那么就是踩内存，而不是double-free。
+
+
 # 参考
 ```bash
+# 工欲善其事必先利其器——AddressSanitizer
+https://zhuanlan.zhihu.com/p/382994002
 
 ```

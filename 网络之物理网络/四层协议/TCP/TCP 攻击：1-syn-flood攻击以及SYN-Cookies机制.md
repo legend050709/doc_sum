@@ -8,7 +8,9 @@
 如果经过多次超时重传后，还没有收到, 那么服务器会回收资源并关闭`半连接`，仿佛之前最初的`SYN`报文从来没到过一样！
 ![](attachments/Pasted%20image%2020231127162512.png)
 
-这看上一切正常，但是如果有坏人**故意**大量不断发送伪造的`SYN`报文，那么服务器就会分配大量注定无用的资源，并且服务器能保存的半连接的数量是有限的！所以当服务器受到大量攻击报文时，它就不能再接收正常的连接了。换句话说，它的服务不再可用了！这就是`SYN Flood`攻击的原理，它是一种典型的`DDoS`攻击。
+这看上一切正常，但是如果有坏人**故意**大量不断发送伪造的`SYN`报文，那么服务器就会分配大量注定无用的资源，并且服务器能保存的半连接的数量是有限的！
+所以当服务器受到大量攻击报文时，它就**不能再接收正常的连接**了。换句话说，它的服务不再可用了！这就是`SYN Flood`攻击的原理，它是一种典型的`DDoS`攻击。
+
 # Syn-cookie
 ## 思路
 `Syn-Flood`攻击成立的**关键在于服务器资源是有限的，而服务器收到请求会分配资源**。
@@ -16,7 +18,7 @@
 
 那么现在的问题就是服务器如何在**不分配**资源的情况下：
 1. **验证之后可能到达的`ACK`的有效性**，保证这是一次完整的握手
-2. **获得`SYN`报文中携带的`TCP`选项信息**；
+2. **如何从三次握手的ack中提取`SYN`报文中携带的`TCP`选项信息**；
 
 
 ## SYN cookies 算法
@@ -24,10 +26,9 @@
 `SYN Cookies`[算法](https://en.wikipedia.org/wiki/SYN_cookies)可以：
 **解决上面的第`1`个问题以及第`2`个问题的一部分。**
 
-`SYN Cookie`技术可以让服务器在收到客户端的`SYN`报文时，**不分配资源保存客户端信息(五元组信息，client的seq，client的syn的option信息)**，而是将这些信息**保存在`SYN+ACK`的初始seq序号和时间戳中**。对正常的连接，这些信息会随着`ACK`报文被带回来。
+`SYN Cookie`技术可以让服务器在收到客户端的`SYN`报文时，**不分配资源保存客户端信息(五元组信息，client的seq，client的syn的option信息)**，而是将这些信息**保存在`SYN+ACK`的初始seq序号和时间戳中。对正常的连接，这些信息会随着`ACK`报文被带回来**。
 
-即：SYN Cookies本质是服务端根据连接信息（比如：五元组hash值+时间戳和MSS），按照一定格式编码出一个初始seq序号，在后续收到客户端ack时，根据这个序号能反推出连接信息（比如：mss）。
-
+即：SYN Cookies本质是服务端根据连接信息「比如：hash(五元组+时间戳的高位)和MSS」，按照一定格式编码出一个初始seq序号，在后续收到客户端ack时，根据这个序号能反推出连接信息（比如：mss）。
 
 
 ### 生成syn-ack的seq序列号
@@ -50,9 +51,13 @@
 即：回复的 `syn-ack` 的 `seq num`中保存有 `syn`包中的  `mss`，五元组的hash值。
 那么收到 `ack`包的 `ack num` 中就可以解析出 `syn`包中的  `mss` 等。
 
-
+#### 时间戳参与hash的作用
 注：时间戳，可以**防止重放攻击**。即使重放，但是时间不对，也不可以通过 `syn-cookie`的校验。 
 
+时间戳，有2个作用：
+1》时间戳在此中可以认为是随机值；
+2》防重放：时间戳一般会取前N位，即只要是在一定时间范围内得到三次握手的ACK，进行hash的时间戳都是相同的，就可以将三次握手的ACK验证通过。
+hash计算和验证的时候，从系统中取时间戳，
 
 ### 验证三次握手ack的ack num
 当客户端收到此`SYN+ACK`报文后，根据`TCP`标准，它会回复`ACK`报文，且报文中`ack = n + 1`，那么在服务器收到它时，**将`ack - 1`就可以拿回当初发送的`SYN+ACK`报文中的seq序号了(即： cookie)**！服务器巧妙地通过这种方式间接保存了一部分`SYN`报文的信息。
@@ -90,7 +95,7 @@ Cookie = 三次握手的ACK包的ack_num -1 = Syn-ACK包的 seq_num
 客户端序号 = Syn包的seq_num = 三次握手的ACK包的seq_num -1
 ```
 
-其实就是做减法(还有验证时间戳的逻辑，为了简化就不写了)。这样得到的MSS序号实际是个MSS Entry。
+其实就是做减法(还有验证时间戳的逻辑，为了简化就不写了)。这样得到的MSS序号实际是个MSS Entry Index。
 
 Linux内核中有个MSS表，如下：
 
@@ -102,15 +107,15 @@ static __u16 const msstab[] = {
     1460,
 };
 ```
-可以看到里面有4个Entry。解码后，协议栈会判断MSS Entry的合法性。如果得到的MSS Entry 不在0、1、2、3当中，就认为是非法值；否则认为是合法值，根据Entry查表拿到MSS值。另外，在现在Linux内核中，MSS Entry最常见的值是3。
+可以看到里面有4个Entry。解码后，协议栈会判断MSS Entry Index的合法性。如果得到的MSS Entry Index 不在0、1、2、3当中，就认为是非法值；否则认为是合法值，根据Entry查表拿到MSS值。另外，在现在Linux内核中，MSS Entry最常见的值是3。
 
 #### 潜在问题
 接下来考虑一个问题：假如解码Cookie之前发生丢包，会出现什么后果？
 
-例如：客户端发送的首个包有3个字节，并且该包被丢失，服务端处理的cookie实际是第二个包。根据上面计算MSS的流程，这种情况只会影响其中的`客户端序号`「客户端发送2个包，第一个包的seq=N， 第二个包的seq=N+3」，导致计算出的MSS Entry比正常值小3。由前面所说，MSS Entry正常值大概率就是3,因此这里计算出的MSS Entry很可能就是`3-3=0`；
+例如：客户端发送的首个包有3个字节，并且该包被丢失，服务端处理的cookie实际是第二个包。根据上面计算MSS的流程，这种情况只会影响其中的`客户端序号`「客户端发送2个包，第一个包的seq=N， 第二个包的seq=N+3」，导致计算出的MSS Entry Index比正常值小3。由前面所说，MSS Entry Index正常值大概率就是3,因此这里计算出的MSS Entry很可能就是`3-3=0`；
 
-`0`，依然是个合法的MSS Entry,也就是说此时协议栈并不知道他接收的实际上是第二个包，协议栈以为这就是个客户端的首个ACK包！当然如果首包长度是4,那么服务端就能根据MSS Entry发现问题了。
-> 注：即==建立连接之后，Client连续发送多个包，首个包的长度<=3的时候，首包丢失，则会存在问题==。
+`0`，依然是个合法的MSS Entry Index,也就是说此时协议栈并不知道他接收的实际上是第二个包，协议栈以为这就是个客户端的首个ACK包！当然如果首包长度是4,那么服务端就能根据MSS Entry发现问题了。
+> 注：即==建立连接之后，Client连续发送多个包，首个包的长度<=3的时候，首包丢失，则依然可以cookie校验通过，会存在问题==。
 
 ##### 什么时候第一个包可能会丢失
 第一个数据包长度<=3, 有可能第一个数据包在三次握手的第三个ACK中，即第三个ACK中携带数据作为第一个数据包。
@@ -120,9 +125,18 @@ static __u16 const msstab[] = {
 ## SYN Cookies 缺点
 既然`SYN Cookies`可以减小资源分配环节，那为什么没有被纳入`TCP`标准呢？
 原因是`SYN Cookies`也是有代价的：
-1. `MSS`的编码只有**3**位，因此最多只能使用 **8** 种`MSS`值
-2. 服务器必须拒绝客户端`SYN`报文中的其他只在`SYN`和`SYN+ACK`中协商的选项，原因是服务器没有地方可以保存这些选项，比如`Wscale`，`SACK`选项等。
+
+### 缺点一：`MSS`的编码只有**3**位
+`MSS`的编码只有**3**位，因此最多只能使用 **8** 种`MSS`值
+
+### 缺点二：丢失了其他的tcp option，比如`Wscale`，`SACK`选项
+服务器必须拒绝客户端`SYN`报文中的其他只在`SYN`和`SYN+ACK`中协商的选项，原因是服务器没有地方可以保存这些选项，比如`Wscale`，`SACK`选项等。
+
+### 缺点三：消耗CPU资源
 3. 增加了密码学运算，消耗了CPU。「以时间换空间」
+
+### 缺点四：首包(<=3B)丢失后后续ack依然可以验证通过
+建立连接之后，Client连续发送多个包，首个包的长度<=3的时候，首包丢失，则依然可以cookie校验通过。
 
 # Linux中的Syn-cookie
 `Linux`上的`SYN Cookies`实现与`wiki`中描述的算法在序号生成上有一些区别，其`SYN+ACK`的序号通过下面的公式进行计算：
@@ -130,6 +144,8 @@ static __u16 const msstab[] = {
 
 ```c
 seq = hash(saddr, daddr, sport, dport, 0, 0) + req.th.seq + t << 24 + (hash(saddr, daddr, sport, dport, t, 1) + mss_ind) & 0x00FFFFFF
+
+mss_ind: mss index;
 ```
 其中：
 `req.th.seq`表示客户端的`SYN`报文中的序号；
@@ -178,23 +194,8 @@ tcp_v4_rcv
          |- tcp_ack
 ```
 
-## SYN Cookies 与时间戳选项
-如果服务器和客户端**都**打开了时间戳选项，那么服务器可以将客户端在`SYN`报文中携带了`TCP`选项的使能情况暂时保存在`Syn-ACK`报文的`TSval`时间戳中。
-当前使用了低 **6** 位，分别保存`Wscale`、`SACK`和`ECN`。
-![](attachments/Pasted%20image%2020231127163702.png)
-客户端会在`ACK`的`TSecr`字段，把这些值带回来。
 
-# syn-cookie的缺点
-既然SYN Cookies可以跳过资源分配环节，那为什么没有被纳入TCP标准呢？原因是SYN Cookies也是有代价的：
-
-1. MSS的编码只有2位，因此最多只能使用 4 种MSS值；
-2. 服务器必须拒绝客户端SYN报文中的其他只在SYN和SYN+ACK中协商的选项，原因是服务器没有地方可以保存这些选项，比如Wscale和SACK；
-```bash
-Linux doesn't know any optional TCP parameters of the other party. Information about Timestamps, ECN, Selective ACK, or Window Scaling is lost, and can lead to degraded TCP session performance.
-```
-3. 增加了Hash运算；
-
-## SYN Cookie与TCP timestamps
+## SYN Cookie与TCP timestamps：syn-ack中的timestamp携带sack以及Wscale选项
 承接前面所述SYN Cookie的缺点：
 ```bash
 Fortunately Linux has a work around. If TCP Timestamps are enabled, the kernel can reuse another slot of 32 bits in the Timestamp field. It contains:
@@ -207,7 +208,7 @@ Fortunately Linux has a work around. If TCP Timestamps are enabled, the kernel c
 +-----------+-------+-------+--------+
 ```
 如果服务器和客户端都打开了时间戳选项（Linux默认打开），那么服务器可以将客户端在SYN报文中携带了TCP选项的部分使能情况暂时保存在时间戳中。当前使用了低 6 位，分别保存Wscale、SACK和ECN。
-![](attachments/Pasted%20image%2020240401110354.png)
+![](attachments/Pasted%20image%2020231127163702.png)
 
 客户端会在ACK的TSecr字段，把这些值带回来。
 
@@ -221,16 +222,16 @@ Fortunately Linux has a work around. If TCP Timestamps are enabled, the kernel c
 # QA
 ## 是否每个ack包都进行cookie的校验
 Q：在收到ACK报文的时候会计算cookie是否合法，那么是不是任何一个ACK报文都计算cookie值呢？
-> 应该是在收到三次握手的最后一个ACK报文时才进行计算。即：收到`ack`包，但是找不到会话的情况下，才进行`syn cookie`的检查。
+> 应该是在收到三次握手的最后一个ACK报文时才进行计算。即：==收到`ack`包，但是找不到会话的情况下，才进行`syn cookie`的检查==。
+
 
 ## cookie校验的问题
 正常情况下，是对三次握手的ACK包进行`cookie`的校验。
-但是实际上，`cookie`校验的时候，是无法区分这个ACK是否三次握手的ack，还是别人构造的一个ACK，也不知道是不是四次挥手(或者三次挥手)的最后一个ACK。只能依赖于，cookie校验之前，是否可以查询到会话。
+但是实际上，`cookie`校验的时候，是无法区分这个ACK是否三次握手的ack，还是别人构造的一个ACK，也不知道是不是四次挥手(或者三次挥手)的最后一个ACK。
 
-
+只能依赖于，cookie校验之前，是否可以查询到会话。
 
 ## dpvs中的 `reuse conn的cookie校验通过问题
-
 
 # 其他
 ## hping3发起syn flood攻击
@@ -244,6 +245,7 @@ hping3 -c 1000 -d 120 -S -p 80 --flood --rand-source 192.168.100.1
 
 ![](attachments/Pasted%20image%2020231127163836.png)
 ![](attachments/Pasted%20image%2020231127163859.png)
+
 ## SYN-Cookie设置
 Linux中的`/proc/sys/net/ipv4/tcp_syncookies`是内核中的`SYN Cookies`开关。其值如下所示：
 - 值为 0 :始终不生效
@@ -697,13 +699,7 @@ SYN cookie是服务器专门选择的初始序列号(ISN: initial seq num)，用
 `VS` 开启了 `syn-proxy`后，正常情况下，用户的`HTTP`请求的耗时会增加一个`RTT`。
 ![](attachments/image%20(4).png)
 
-## syn-cookie的缺点
-既然SYN Cookies可以跳过资源分配环节，那为什么**没有被纳入TCP标准**呢？原因是SYN Cookies也是有代价：
-1. MSS的编码只有2位，因此最多只能使用 4 种MSS值；
-2. 无法保存其他tcp选项，比如Wscale和SACK等
-3. 增加了Hash运算
 
-因此：Linux文档中说明，SYN Cookie机制只是用来应对攻击，如果没有攻击，只是服务器负担过重，不建议使用这个功能。因为这个功能**不是TCP标准**，通过Cookie建立的TCP连接，不支持TCP扩展功能。**但是，tcp_syncookies默认开启，设置为1，在SYN队列被塞满后开始工作。**
 
 # 参考
 ```c

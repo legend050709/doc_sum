@@ -245,6 +245,67 @@ UCX中实现了DC。
 ## per-thread的VRC
 ## per-procoss的VQP
 
+### 整体架构图
+
+### worker中的conn如何和relay线程中的真实QP关联
+
+#### vqp的key以及创建和查找
+
+![](attachments/Pasted%20image%2020260503150953.png)
+
+**(1) VQP的key**：
+sip+dip+peer_pid; 
+多个conn是否共享一个VQP，通过key来决定。
+VQP每关联一个conn，则refcnt++；每取消关联一个conn，则refcnt--；
+
+**(2) kpoll的relay子线程**：
+因为`ibv_create_qp`很耗时（4ms-8ms），如果是通过kpoll线程来创建，在存在大量的突发新建QP的情况下，新建耗时过长。
+
+**(3)spinlock 保护的范围**：
+Worker 在 rdma_create_qp 中用 qp_create_locks 保护的是"哈希查找 → 若未找到则分配结构体 → 注册到哈希表"这一段。物理 ibv_create_qp 在 kpoll 中执行，不在 spinlock 保护范围内（因为不会产生重复创建——哈希表已注册保证了唯一性）。
+
+#### conn的释放
+conn释放时，其关联的vQP的refcnt--；只有VQP的`refcnt==0`的时候，才会在kpoll中进行销毁（释放回qp-cachepool或者qp-cachepool满的情况下，直接销毁）。
+
+#### relay 中 ibv_poll_cq 产生 WC，如何透传给哪个 worker 中的哪个 conn
+
+![](attachments/Pasted%20image%2020260503153708.png)
+
+poll 出来的 ibv_wc 中包含两个关键信息：
+```bash
+  (1)recv_wc: wc->imm_data 包含 conn_id（对端发送时带上的 peer_conn_id），wc->wr_id 包含 skbuff 地址 + vqp_index
+  (2)send_wc: wc->wr_id 包含 skbuff 地址 + vqp_index（发送时编码进去的）
+```
+
+定位 conn 的两种方式：
+```bash
+  (1)recv WC: wc->imm_data & KUCL_CONN_ID_MASK → fd → GET_TP_CONN_BY_OWN_FD(fd) → conn
+  (2)send WC: skbuff->conn_id → GET_TP_CONN_BY_OWN_FD(conn_id) → conn
+```
+
+### n 个 relay 线程中的 QP 如何分配？
+
+QP 到 relay 线程的分配采用 round-robin 轮询策略。
+每个conn中保存有这个conn的数据，应该交给哪个relay处理的信息，即worker中的conn对应的VQP在哪个relay中。
+
+注：==其实真实QP的创建「控制面操作」，都是在kpoll及其slave线程中；只不过QP的使用「数据面操作」，即`ibv_post_send/ibv_poll_cq`是在某个relay线程中==。
+
+
+
+### 发送数据时 worker和relay如何联动
+worker和relay之间，发送数据存在rte_ring（多生产者单消费者），worker作为生产者，relay作为消费者。
+
+### 接收数据时 worker和relay如何联动
+worker和relay之间，接收数据存在rte_ring（单生产者多消费者），relay作为生产者，worker作为消费者。
+
+### 多线程并发安全
+
+### 容灾考虑
+有可能，一个VQP上关联了很多conn（sip/dip/peer_pid）相同，因此，如果一个物理QP的链路异常，则会影响较大。
+因此，考虑基于VQP的key（sip/dip/peer_pid）会创建2个QP，分布在2个relay线程中使用。
+正常情况下，一个conn只会关联一个relay中的vqp使用（通过conn中记录relay_id,就可以知道将该conn下的数据分发给哪个relay线程）。
+
+
 # 参考
 ```bash
 

@@ -2,6 +2,7 @@
 ```
 
 # 概述
+
 UCL(unified communication library) 是 RDMA 统一通讯库中间件。
 业务使用RDMA，可以发挥RDMA的`kernel bypss`,  `offload cpu`、`zero-copy`的特性。
 通过`UCL`，屏蔽了底层RDMA编程的众多概念以及编程复杂性，为业务提供`类socket`编程的接口，让业务快速、简易的享受到`RDMA`带来的低时延、高带宽的高性能网络服务。
@@ -27,12 +28,13 @@ UCL(unified communication library) 是 RDMA 统一通讯库中间件。
 之前社科应该使用了Raw(没有序列化和反序列化)+rdma，相对于基于内核TCP的rpc性能提升了70%；然后百度开源的底层基于RDMA的brpc相对于基于内核tcp的brpc性能应该是提升了17%。
 
 #### 其他
-统一封装的通讯库中间件(比如：KUCL)，可以达到网络侧和业务侧分层解耦，业务层关注业务侧的逻辑，不需要关注底层的网络传输协议。
+统一封装的通讯库中间件(比如：UCL)，可以达到网络侧和业务侧分层解耦，业务层关注业务侧的逻辑，不需要关注底层的网络传输协议。
 底层的网络传送协议可以随意的切换，业务侧代码都不需要改动。另外就是可以为业务侧屏蔽底层(网络层)各种复杂的概念、编程接口等等。  
 
 
 ### 业务需求
-业内除了阿里自研的**通算场景的通讯库**X-RDMA之后，其他的更多的是**智算场景面向集合通信的通讯库**。
+
+业内除了阿里自研的**通算场景的通讯库**X-RDMA之后，其他的更多的是**智算场景（基于GPU）面向集合通信的通讯库**。
 一个比较大的原因就是这些头部厂商的业务起步早，业务因为性能的需求，更早的在业务层面自己就完成了RDMA的集成。
 但是KS的现状是此类基础服务业务暂未开始RDMA方面的建设工作，这就为通算场景的统一通讯库提供了契机。
 
@@ -41,13 +43,13 @@ UCL(unified communication library) 是 RDMA 统一通讯库中间件。
 #### 分布式存储服务
 分布式存储服务，比如底层使用块存的服务，类似于Ceph的存储服务。
 
-存放服务分为多层：端上(给业务「比如MySQL」提供虚拟的磁盘)、调度层（选择哪个节点进行落盘，多副本，纠错恢复）、底层落盘层（DPDK + Nvme）。
+存放服务分为多层：端上(给业务「比如MySQL」提供虚拟的磁盘)、调度层（选择哪个节点进行落盘，多副本，纠错恢复）、底层落盘层（SPDK + Nvme）。
 
 （1）网络通信一：
 存储服务的端上(提供虚拟磁盘的服务)和存储调度层之间需要UTCP或者RDMA传输。
 
 （2）网络通信二：
-存储调度层和底层落盘层之间的通信。
+存储调度层和底层落盘层之间的通信(同一个POD内，使用RDMA通信)。
 
 #### 数据库/KV Cache
 
@@ -134,10 +136,10 @@ API风格：倾向于类socket接口，业务适配简单。
 传输支持：UCX不支持utcp，对于Lossy RDMA场景，使用UTCP（Lossy RDMA出现之前）可能更好。
 公司的战略：软件自主可控，硬件生态开放。
 
-## KUCL和阿里的X-RDMA对比
+## UCL和阿里的X-RDMA对比
 ### 对比
 
-### KUCL可以从X-RDMA借鉴的地方
+### UCL可以从X-RDMA借鉴的地方
 #### 边界动态调节优化
 ##### 混合消息策略（MixMsg）：大消息和小消息自动优化
 大消息：两段式接收（汇合协议：  rendezvous protocol）
@@ -237,6 +239,33 @@ struct iovec {
 ### 使用
 
 # 设计思想
+## 总结
+
+总结来说，UCL 的设计哲学是数据路径极致优化 + 控制路径充分解耦 + 异常时自动降级保活。
+高性能靠 bypass kernel + 零拷贝 + 无锁 + NUMA-aware，高可用靠 fallback FSM + QP Pool + ctrl/data 分离 + 多 SRQ。
+
+### 高可用
+高可用主要体现在四个层面：
+（1） RDMA→UTCP 自动降级：当 RDMA 通道出现 CQ error、QP error 或心跳超时时，通过 FSM 有限状态机自动协商降级到 UTCP 通道继续通信，业务层完全无感知。RDMA 恢复后通过 re-negotiate 自动恢复。
+> 注：通过在UCL抽象层设置发送和接收缓冲区，实现传输层UTCP和RDMA的切换时的数据不丢，不重。
+> 发送端发送数据的时候，收到ACK或者send_CQE的时候，才会将数据从发送队列中剥离，否则会存在一个缓存。
+> 接收端接收数据的时候，会存在一个数据的去重。
+> 对于UTCP而言，可以通过seq来去重；对于RDMA而言，PSN实在BTH头，网卡进行卸载，CPU程序不可见，因此需要在每个发送的数据之前添加固定长度的头（带有Seq）信息。
+
+（2）QP Pool 复用：预创建 QP 池，建连时从池中取已初始化的 QP，避免 ibv_create_qp 的耗时和失败风险。连接断开时 reset QP 放回池中复用。
+（3）控制/数据路径分离：kpoll 控制线程处理建连、协商、心跳，kpoll的slave 线程异步执行 ibv_create_qp 等耗时操作，worker 线程专注数据收发。控制路径异常不拖垮数据路径。
+（4）多 SRQ 分组：连接按 ID 分组到不同 SRQ，单连接流量异常不影响全局。
+
+
+### 高性能
+高性能主要体现在六个层面：
+（1） DPDK bypass kernel：PMD busy-poll 收包，无中断无上下文切换，syscall 开销从 ~5us 降到 ~0.1us。
+（2）RDMA 零拷贝 Put/Get：UCL_put 直接 RDMA Write 到远端内存，CPU 不参与数据搬运。Prealloc 模式下远端预分配 buffer，本地 RDMA Write 后通知远端读取。
+（3）NUMA-aware 三层内存：大页绑定 NUMA node → DPDK mempool per-lcore cache → thread cache 无锁 TAILQ，全链路避免跨 NUMA 访问和锁竞争。
+（4）锁最小化/无锁操作：数据路径几乎无锁——conn 查找 O(1) 数组索引、QP Pool SPSC ring、skbuff mempool per-lcore cache、malloc thread cache、VQP sq SPSC ring。
+（5）CPU 亲和性 + 批量操作：线程独占 CPU core busy-poll，ibv_poll_cq/mempool_get_bulk/txq_enqueue_burst 全部批量处理。
+（6）cache-line对齐：核心数据结构全部cache-line对齐；避免 false sharing：不同线程操作的数据不在同一 cache line；
+
 ## 零拷贝进行发送和接收
 ### 背景
 #### 基于linux内核的应用的发送和接收
@@ -735,17 +764,17 @@ WQE和CQE可以通过WR_ID进行关联，因为具有相同的WR_ID；
 业务需要连续的内存，就需要在业务层拷贝，浪费性能。现在业务希望将一个或者多个大片的连续内存发送出去，接收端是一大片连续的内存进行接收。
 
 #### 设计
-对外提供的接口叫做kucl_put/get来发送以及获取大块数据，底层使用的是rdma的write进行大块连续数据的发送和接收。
-kucl_put 用于发送大块内存，kucl_get用于接收大块内存，每个大块内存在业务层有一个block_id来标识，方便业务来查找。
+对外提供的接口叫做UCL_put/get来发送以及获取大块数据，底层使用的是rdma的write进行大块连续数据的发送和接收。
+UCL_put 用于发送大块内存，UCL_get用于接收大块内存，每个大块内存在业务层有一个block_id来标识，方便业务来查找。
 
 
 发送一个大的数据段，在此之前，发送端和接收端都需要使用send/recv 发送控制信息的请求和响应，然后才是发送端使用rdma write_with_imm发送具体的数据信息给对端。
 具体就是：发送端先用send发送控制信息(主要是接下来要发送的真实数据的大小，以及block_id、inner_block_id等信息），对端recv进行接收；
-比如：kucl_put要发送1G的数据，在通讯库中，发送端先用send发送控制信息，告知要发送1G的大块数据，然后接收端收到控制信息之后，准备一个已经注册过MR的1G的内存，然后响应的时候告知这个地址，长度，key等供接下来的的rdma write使用；
+比如：UCL_put要发送1G的数据，在通讯库中，发送端先用send发送控制信息，告知要发送1G的大块数据，然后接收端收到控制信息之后，准备一个已经注册过MR的1G的内存，然后响应的时候告知这个地址，长度，key等供接下来的的rdma write使用；
 send/recv 完成控制信息的请求和响应之后，然后发送端用write_with_imm来发送数据信息；
 
 
-其实，用户其实不感知通讯库中的控制信息和数据信息，只是使用了kucl_put发送，kucl_get来接收。在通讯库将将其拆分为控制信息的发送和响应，以及数据信息的发送。
+其实，用户其实不感知通讯库中的控制信息和数据信息，只是使用了UCL_put发送，UCL_get来接收。在通讯库将将其拆分为控制信息的发送和响应，以及数据信息的发送。
 
 #### 问题和解决
 
@@ -765,10 +794,10 @@ send/recv 完成控制信息的请求和响应之后，然后发送端用write_w
 
 其中，发送端发送数据信息时，inner_block_id 以及 peer_conn_id 合并， 可以作为 imm_data的一部分，那么接收端就可以从imm_data中提取出 inner_block_id 以及本端连接的 conn_id，然后和之前收到了控制信息进行关联了。
 
-至于 inner_block_id 的管理，inner_block_id 是连接内部的一个成员，发送端的每个连接(即 fd)收到了一个 kucl_put 调用就会自增一次。
+至于 inner_block_id 的管理，inner_block_id 是连接内部的一个成员，发送端的每个连接(即 fd)收到了一个 UCL_put 调用就会自增一次。
 ```c
 
-struct kucl_block_data {
+struct UCL_block_data {
 	void *base;
 	uint64_t block_id; // 用户感知的block_id, 标识一块大数据。
 	uint64_t len;
@@ -779,16 +808,16 @@ struct kucl_block_data {
 	};
 };
 
-int kucl_put(int fd, struct kucl_block_data blocks[], int len, int flag); 
-// 一次kucl_put发送多个blocks，每个blocks中的block_id都相同，这样对端接收的时候，可以一次性接收一大块数据。
-int kucl_get(int fd, struct kucl_block_data blocks[], int *len, int flag);
+int UCL_put(int fd, struct UCL_block_data blocks[], int len, int flag); 
+// 一次UCL_put发送多个blocks，每个blocks中的block_id都相同，这样对端接收的时候，可以一次性接收一大块数据。
+int UCL_get(int fd, struct UCL_block_data blocks[], int *len, int flag);
 ```
 
 
 #### 事件的产生
 **发送端**：通过 rdma write_with_imm 进行发送真实数据，收到了CQE之后，才上报一个 BLOCK_OUT事件，即大数据发送完成。
 **接收端**：每个conn内部，有2个block的链表，一个是pending_block链表，一个是ready_block链表；接收端成功收到数据信息之后，从imm_data中提取出 inner_block_id 以及本端连接的 conn_id，进而得到连接信息后，在pending_block链表中得到对应的 block信息，就可以将block从 pending_block 链表摘除，加入到ready_block链表，然后产生了一个BLOCK_IN的事件告知用户；
-用户epoll_wait得到了这个事件，后续就可以调用kucl_get，就可以从ready_block链表中得到一个传输完成的 block；
+用户epoll_wait得到了这个事件，后续就可以调用UCL_get，就可以从ready_block链表中得到一个传输完成的 block；
 
 
 #### 整体流程
@@ -804,8 +833,8 @@ int kucl_get(int fd, struct kucl_block_data blocks[], int *len, int flag);
 
 ```bash
 比如：
-kucl_push ：是暴露给业务（server端）的广播大块数据的接口；
-kucl_poll：是暴露给业务（Client端）获取sever端大块数据的接口。 
+UCL_push ：是暴露给业务（server端）的广播大块数据的接口；
+UCL_poll：是暴露给业务（Client端）获取sever端大块数据的接口。 
 ```
 
 帮我设计下整体的流程，以及整体的图解。
@@ -832,23 +861,156 @@ kucl_poll：是暴露给业务（Client端）获取sever端大块数据的接口
 
 ## 连接的自动降级和恢复机制：RDMA异常时fallback到UTCP
 
-**（1）背景**：
-目前实现了一个对外提供类socket接口的点对点的通信库（抽象层：即kucl层），底层封装了基于DPDK的用户态TCP协议栈，以及RDMA协议；
-连接默认都是per-thread的，不会跨线程使用；每个conn的具体数据结构紧凑，即前面是kucl层相关的成员，紧挨着的是rdma层的结构，然后是utcp的结构，最后是ktcp的结构；
+### 数据结构
+
+目前实现了一个对外提供类socket接口的点对点的通信库（抽象层：即UCL层），底层封装了基于DPDK的用户态TCP协议栈，以及RDMA协议；
+连接默认都是per-thread的，不会跨线程使用；每个conn的具体数据结构紧凑，即前面是UCL层(统一抽象层)相关的成员，紧挨着的是rdma层的结构，然后是utcp的结构，最后是ktcp的结构；
 默认创建一个socket是底层默认使用rdma协议，如果感知到rdma连接存在问题，则会切换到用户态tcp协议，使用curr_tp表示当前传输层的协议。
 如果使用rdma协议的话，还会额外创建一个基于内核tcp的tcp conn，进行协商建链，主要是协商QPN，MTU等信息；
 
 
-**（2）rdma 连接 fallback 到 utcp conn的切换流程(还是在一个kucl_conn 结构体内切换)**:
+当 transport=TP_ANY 时，UCL 会同时初始化 RDMA 和 UTCP 两个传输层的私有数据（pdata[0] 和 pdata[1] 均有效），切换过程中，用户感知到的fd始终不变，底层的数据结构也是一个统一的数据机构。通过 curr_tp 字段决定当前使用哪个传输层。这是 fallback 能够快速切换的底层基础——两个传输层并不是互斥的，而是同时存在于同一个连接对象中。
+```bash
+UCL_conn (fd=X, fb_enable=1)
+┌──────────────────────────────────────────────────┐
+│  curr_tp = TP_RDMA  ← 当前数据面使用的传输层    │
+│  fb_enable  = 1     ← fallback 使能             │
+│  flags:                                          │
+│    UCL_CONN_FLAG_RCONN_OK  ← RDMA 连接就绪     │
+│    UCL_CONN_FLAG_UCONN_OK  ← UTCP 连接就绪     │
+│    UCL_CONN_FLAG_IN_FB     ← 正在进行切换协商  │
+│                                                  │
+│  pdata[TP_RDMA=0] = rdma_conn ─→ ctrfd + QP     │
+│  pdata[TP_USTACK=1] = ustack_conn → DPDK TCP    │
+│                                                  │
+│  txq: 发送窗口（unack→nxt→write，携带 seq）     │
+│  rxq: 接收窗口（unread→max，携带 seq）           │
+└──────────────────────────────────────────────────┘
+
+两套传输资源从建立之初就同时分配并就绪，切换时只需修改 curr_tp + 同步 seq，无需重新建立连接。
+```
+
+
+### 心跳检查机制
+
+
+（1）kpoll 控制线程创建 timerfd_hb，每 1 秒扫描所有 managed 连接：
+具体，就是kpoll给每个conn所在的worker发送消息，在worker中触发心跳的检查。
+
+（2）Worker 线程收到 UCL_CONN_EVENT_HB_CHECK 消息后，实际发送的是纯 RDMA Write（不带 Immediate Data），长度为 0 字节。
+
+```bash
+对比普通数据传输：
+● 普通数据：IBV_WR_RDMA_WRITE_WITH_IMM（带 Immediate），对端 SRQ 消耗一个 recv WR，
+触发 IBV_WC_RECV_RDMA_WITH_IMM，然后通知应用 BLOCKIN
+● 心跳：IBV_WR_RDMA_WRITE（无 Immediate），对端不消耗 recv WR，对端无感知
+（心跳只是单向探测本端 QP Send Path 是否畅通，通过 CQE 完成时间差测量 RTT）
+```
+
+(3) 心跳 Write CQE 完成时，如果存在CQE err 或不存在CQE ERR时，测量 RTT 并决策。
+
+```bash
+kpoll thread (1s timer)
+    │
+    │  conn_unactive || curr_tp==UTCP
+    ▼
+  HB_CHECK event ──→ worker thread
+                          │
+                          ▼
+                    rdma_write_hb()
+                    IBV_WR_RDMA_WRITE, len=0, signaled
+                          │
+                     (发出 RDMA Write WR，等待 CQE)
+                          │
+                          ▼  [CQE 返回]
+                    write_complete_tsc = poll_start - write_tsc  (RTT)
+                          │
+                          ▼
+                  rdma_congestion_trigger_fb()
+                    ┌───────────────┬──────────────────────────┐
+                    │  RTT > 1s     │  RTT ≤ 1s               │
+                    │  curr_tp=RDMA │  curr_tp=UTCP            │
+                    │  UCONN_OK     │  hb_active > 10          │
+                    ▼               ▼                          │
+               FB_CONGESTION    hb_active++                    │
+               FB_REQ           (连续 10 次满足)               │
+               (R→U)            → FB_REQ (U→R)                │
+                    └───────────────┘
+```
+
+```bash
+心跳 RTT（write_complete_tsc）
+      │
+      ├──[ RTT > 1s ]──────────────→  hb_active = 0
+      │                               curr_tp == RDMA && UCONN_OK?
+      │                                   │ YES → FB_CONGESTION + FB_REQ (R→U)
+      │                                   │ NO  → 仅计数，等下次心跳
+      │
+      └──[ RTT ≤ 1s ]─────────────→  hb_active++
+                                      curr_tp == UTCP && hb_active > 10?
+                                          │ YES → CLR(CONGESTION) + FB_REQ (U→R)
+                                          │ NO  → 继续等待
+```
+
+### RDMA到UTCP的切换的触发条件
+#### 前提条件
+```bash
+前提：fb_enable=1  &&  UCL_CONN_FLAG_UCONN_OK 已置位
+        （即 UTCP 连接已经建立并就绪）
+```
+
+**不满足前提时**：回退到传统错误处理，上报 EPOLLERR 给应用层，由应用层close连接。
+
+#### 触发条件
+对于RDMA write 发送的心跳探测，如果出现了send CQE错误，或 RTT 超时，则认为RDMA心跳检测失败，即RDMA异常。
+
+(1) 触发路径一：RDMA Send WC 失败（Send/Write 操作）
+(2) 触发路径二：拥塞/超时（心跳 RTT > 1s）
+
+RDMA发生异常之后，如果此时UTCP是OK的 && 开启了 fallback， 则考虑向UTCP进行切换。
+```bash
+RDMA 硬件异常
+    │
+    ├── QP 进入 ERROR 状态（网络故障/内存错误/协议错误）
+    │       │
+    │       └── CQ poll → WC status=IBV_WC_RNR_RETRY / RETRY_EXC_ERR / 其他非SUCCESS
+    │               │
+    │               ├── fb_enable && UCONN_OK ──→ RDMA_CONN_FLAG_FB_QP_ERR
+    │               │                              UCL_CONN_EVENT_FB_REQ
+    │               │                              （透明切换到 UTCP）
+    │               └── 否则 ────────────────────→ EPOLLERR
+    │                                              UCL_CONN_FLAG_FD_ERROR
+    │                                              （应用层感知错误，需关闭重连）
+    │
+    └── IBV Async Event（QP_FATAL / CQ_ERR / PORT_ERR）
+            │
+            └── 仅做 rdma_stats_inc 统计，不直接触发 fallback
+                （QP 的实际错误最终体现为 CQE flush error）
+```
+
+
+###  RDMA到UTCP的切换流程
+
+**rdma 连接 fallback 到 utcp conn的切换流程(还是在一个UCL_conn 结构体内切换)**:
 
 ![](attachments/rdma_fallback_and_merge.svg)
 
-1> 为什么需要utcp的五元组和RDMA控制连接的五元组相同：
+
+#### 为什么需要utcp的五元组和RDMA控制连接的五元组相同
 ```bash
-rdma的控制连接和utcp的五元组相同，是为了后续的连接合并；
+rdma的控制连接和utcp的五元组相同，是为了后续的server端的连接合并；
+
+对于server端：
+	listen-conn accept出的新的conn:
+	1>如果TP是RDMA，会创建一个新的 accepted 的 UCL_conn;
+	2>如果TP是UTCP，会创建一个新的 accepted 的 UCL_conn;
+	注：两个新的 accepted 的 UCL_conn的fd不同。
+
+server端用户首先感知到的fd 是 TP=RDMA, accepted 的 UCL_conn;
+在RDMA->UTCP的fallback过程中，需要将 TP=UTCP时，创建的新的 accepted 的 UCL_conn 合并到 用户感知到的 fd 对应的 conn上。
 ```
 
-2> 五元组相同可能带来的问题：
+#### 五元组相同可能带来的问题
 
 ```bash
 可能utcp会给rdma控制连接的报文给劫持了。因为使用了dpdk的 ioslated rte_flow进行dpdk utcp和kernel tcp的流分叉, 优先匹配给UTCP的流量，只有匹配不上的流量才会给kernel协议栈；
@@ -858,28 +1020,178 @@ rdma的控制连接和utcp的五元组相同，是为了后续的连接合并；
 
 ![](attachments/dscp_rte_flow_separation.svg)
 
-3> 连接合并：
+#### 连接合并
 ```bash
-开启Fallback + 创建的TP_ANY的socket，默认是创建了一个kucl_conn, 其实在这个结构体内部，创建了rdma_conn, 以及 utcp_conn;
-rdma和utcp之间的切换，始终都是在一个kucl_conn上切换，设置curr_tp来进行切换。
+开启Fallback + 创建的TP_ANY的socket，默认是创建了一个UCL_conn, 其实在这个结构体内部，创建了rdma_conn, 以及 utcp_conn;
+rdma和utcp之间的切换，始终都是在一个UCL_conn上切换，设置curr_tp来进行切换。
 
 rdma的控制连接在控制信息交换完成之后，会进行utcp连接的建立（从三次握手开始），也是用相同的五元组（五元组信息可以来自于RDMA的控制连接），
-此时server端的listen的utcp_conn会accept一个新的utcp_conn，其和server端的accept的rdma_conn，不在一个kucl_conn里，需要进行整合。
-那么基于什么进行整合，就需要基于相同的五元组进行整合，即server端accept的新的utcp_conn的五元组信息作为查找条件，遍历链表，查找到rdma_conn的控制信息相同的kucl_conn, 然后将 server端accept的新的utcp_conn对应的连接关闭。
+此时server端的listen的utcp_conn会accept一个新的utcp_conn，其和server端的accept的rdma_conn，不在一个UCL_conn里，需要进行整合。
+那么基于什么进行整合，就需要基于相同的五元组进行整合，即server端accept的新的utcp_conn的五元组信息作为查找条件，遍历链表，查找到rdma_conn的控制信息相同的UCL_conn, 然后将 server端accept的新的utcp_conn对应的连接关闭。
 
 问题：这中间涉及到 tsock信息的close以及网卡的硬件规则是否需要重新下发的问题。
 ```
 
-4> 切换过程中的数据重传问题：
+
+#### fallback起始时协商seq
+为了保证RDMA->UTCP切换过程中，消息不丢，补充，在切换的过程中，需要协商接下来发送的消息的起始位置。
+
+![](attachments/Pasted%20image%2020260507115732.png)
+
+##### 协商通道
+Fallback 协商消息通过 ctrfd（RDMA 建立时配套的控制面 TCP 套接字）传输，
+与数据面 RDMA 完全隔离，即使 RDMA 数据面故障也能正常进行协商。
+
+##### 消息定义
+```c
+// src/rdma/ctrl/ctrl.h
+enum rdma_ctrl_msg_type {
+    RDMA_CTRL_MSG_TYPE_FB_REQ   = ...,  // 发起切换请求
+    RDMA_CTRL_MSG_TYPE_FB_ACK   = ...,  // 确认 seq 对齐
+    RDMA_CTRL_MSG_TYPE_FB_READY = ...,  // 双方就绪，执行切换
+};
+
+struct rdma_ctrl_msg_fb {
+    uint8_t  fb_type;       // R2U=0（RDMA→UTCP）/ U2R=1（UTCP→RDMA）
+    uint8_t  error;         // 触发原因：0=正常 / QPERR=1 / CONGESTION=2
+    uint64_t last_ack_seq;  // txq.seq（发端已 ACK 的字节数）
+    uint64_t next_exq_seq;  // rxq.seq（收端期望接收的下一字节序号）
+    ...
+};
+```
+
+#### RDMA → UTCP 完整切换流程
 ```bash
-KUCL conn层，设置接收缓冲区/队列（kucl_rxq），和发送缓冲区/队列（kucl_txq）；
+触发端（Client）                              对端（Server）
+════════════════════════════════════════════════════════════
+
+① 检测到 WC 失败 或 RTT 超阈值
+   SET_FLAG(UCL_CONN_FLAG_IN_FB)           ─ 协商保护开始 ─
+
+② [Worker] fb_update_UCL_rxq()             先刷新本端 rxq.seq
+   [kpoll]  rdma_ctrl_init_fb_msg():
+     last_ack_seq = txq.seq   ← 我已 ACK 发到哪
+     next_exq_seq = rxq.seq   ← 我期望收到哪
+   rdma_ctrl_send_fb_req_msg()
+   ──────────────── FB_REQ ─────────────────→
+
+                                           ③ rdma_ctrl_handle_fb_req_msg()
+                                              fb_update_UCL_rxq()  ← 刷新 rxq
+                                              SET_FLAG(IN_FB)
+                                              if (seq 已对齐)
+                                                  send FB_ACK
+                                              else
+                                                  send FB_REQ   ← 继续协商
+   ←────────────── FB_ACK ──────────────────
+
+④ rdma_ctrl_handle_fb_ack_msg()
+   fb_update_UCL_rxq()          ← 再次刷新 rxq
+   UCL_txq_fallback_nxt()       ← 对齐 txq.nxt 到 peer.rxq.seq
+   if (seq 已对齐)
+       if (自己是 FB_REQ_SENT)   → send FB_ACK（互相确认）
+       else                       → send FB_READY
+   ──────────────── FB_READY ───────────────→
+
+                                           ⑤ rdma_ctrl_handle_fb_ready_msg()
+                                              status = RDMA_CONN_STATUS_FB_READY
+                                              cntl->cb(FB_SWITCH)
+                                              ↓
+                                           fb_done_switch_conn_tp(conn)
+                                              conn->curr_tp = TP_USTACK ✓
+                                              rdma_close(force=false)    非强制
+                                              CLR_FLAG(IN_FB)
+                                              UCL_conn_add_event(IN|OUT)
+
+⑥ [Worker 收到 FB_SWITCH]
+   fb_done_switch_conn_tp(conn)
+   conn->curr_tp = TP_USTACK ✓
+   CLR_FLAG(IN_FB)
+   // 补发 txq pending 数据（nxt→write 区间）
+   nr_iov = UCL_txq_pending_cnt(&conn->txq)
+   iovs = UCL_txq_dequeue_iovs(&conn->txq, nr_iov)
+   UCL_writev(conn->fd, iovs, ...)   ← 此时走 UTCP 发送
+
+                               ─ 协商结束，数据面切到 UTCP ─
+```
+
+### 数据一致性保证：切换过程中的数据一致性问题
+
+```bash
+UCL conn层，设置接收缓冲区/队列（UCL_rxq），和发送缓冲区/队列（UCL_txq）；
 发送的时候：收到了对方的ACK，产生了OUT事件，才会移动发送窗口，然后才会有write_done；
 接收的时候：接收的数据也是先放入到接受缓冲区中，供业务调用read读取。
 
 Ps: 收缓冲区/队列，和发送缓冲区/队列对后续的流控也是有作用的。
 ```
 
-![](attachments/kucl_buffer_flow.svg)
+![](attachments/UCL_buffer_flow.svg)
+
+
+### UTCP到RDMA的回迁条件
+#### 心跳回迁检测
+切到 UTCP 后，kpoll 仍持续 1 秒触发 HB_CHECK，Worker 持续发 RDMA Write 心跳。
+只要 RDMA 链路恢复正常（RTT < 1s 连续 10 次），就自动回迁到 RDMA。
+
+
+### 切换的影响范围和协商保护
+
+#### 存量长连接：完全透明
+存量 RDMA 长连接切换对应用层不可见：
+
+|阶段|应用层视角|
+|---|---|
+|IN_FB 协商中|UCL_writev 正常入队 txq，UCL_readv 可从 rxq 返回数据|
+|FB_SWITCH 完成|curr_tp 改为 UTCP；pending 数据补发；触发 EPOLLIN\|EPOLLOUT|
+|应用感知|无感知，无需重连；可能观察到短暂的 IO 等待（协商期间）|
+
+### 小结
+
+```bash
+                     应用层 (UCL_writev / UCL_readv)
+                              │
+                   ┌──────────┴──────────┐
+                   │   Socket 分发层     │
+                   │  curr_tp 路由       │
+                   │   + txq/rxq 缓存   │
+                   └──────────┬──────────┘
+              ┌───────────────┴────────────────┐
+              │                                │
+    ┌─────────▼──────────┐          ┌──────────▼──────────┐
+    │  RDMA Transport    │          │  UTCP Transport     │
+    │  pdata[TP_RDMA]    │          │  pdata[TP_USTACK]   │
+    │                    │          │                     │
+    │  IBV_QP (RC)       │          │  DPDK-based TCP     │
+    │  Send/Recv CQ      │          │  userspace stack    │
+    │  SRQ               │          │                     │
+    └─────────┬──────────┘          └──────────┬──────────┘
+              │                                │
+              │ CQ Poll (Worker Thread)         │
+              │ ┌──────────────────────────┐   │
+              │ │  WC 成功 → 正常 BLOCKIN  │   │
+              │ │  WC 失败 (QP ERR):       │   │
+              │ │  ┌ UCONN_OK → FB_REQ    │   │
+              │ │  └ 否则 → EPOLLERR      │   │
+              │ └──────────────────────────┘   │
+              │                                │
+              └──── FB 协商消息（ctrfd TCP）───→│
+                                               │
+            kpoll Thread (Control)             │
+            ┌───────────────────────────────┐  │
+            │  timerfd_hb（1s）             │  │
+            │  ┌ rdma_ok && unactive → HB_CHECK → rdma_write_hb()
+            │  │                           │  │
+            │  │   [CQE: RTT > 1s]         │  │
+            │  │   → FB_CONGESTION         │  │
+            │  │   → FB_REQ（R→U）         │  │
+            │  │                           │  │
+            │  │   [CQE: RTT ≤ 1s × 10]   │  │
+            │  │   → FB_REQ（U→R）         │  │
+            │  │                           │  │
+            │  └ !rdma_ok && server → FB_RENEGO
+            └───────────────────────────────┘
+```
+
+![](attachments/Pasted%20image%2020260507115620.png)
 
 
 # 多路径(负载均衡)和容灾
@@ -889,7 +1201,7 @@ Ps: 收缓冲区/队列，和发送缓冲区/队列对后续的流控也是有�
 即sip和dip中间创建多个QP，由于每个QP的udp的五元组应该是不一样的，那么在以太网中基于五元组进行`ECMP`的`Hash`时，就会选择不一样的路径。
 
 **（1）单连接多QP+通讯库层的缓存排序**
-即：同一个conn的流量，底层使用多个QP进行发送，多个QP对应多个五元组，即多路径传输，由于是多个QP会导致数据乱序，需要在kucl层进行数据的重组(保序)，保证上送给业务的数据依然是有序的。
+即：同一个conn的流量，底层使用多个QP进行发送，多个QP对应多个五元组，即多路径传输，由于是多个QP会导致数据乱序，需要在UCL层进行数据的重组(保序)，保证上送给业务的数据依然是有序的。
 
 **（2）单连接多QP+消息拆分+。、bRDMA write**
 类似于DDP：每个QP，直到将数据写入到指定的位置，那么就可以不在软件层进行缓存。
@@ -1074,15 +1386,15 @@ local_ip → 映射到 GID
 ![](attachments/mermaid-1776957964797.png)
 
 
-（1）业务自己申请的大块内存（每个numa一个大块）交给KUCL层管理（申请大块内存是防止频繁的进行MR的注册与取消注册的耗时）；
+（1）业务自己申请的大块内存（每个numa一个大块）交给UCL层管理（申请大块内存是防止频繁的进行MR的注册与取消注册的耗时）；
 其中一半是发送数据用，一半是接收数据用（具体收发的比例可调节）。
 1.1> 对于发送数据：将一整块发送数据 作为外部内存，注册到dpdk中，通过memheap来进行管理，每次按需取不固定大小时，则从这个heap中按需取对应大小即可（dpdk的memheap可以帮忙进行管理数据块的切割、合并、空闲管理等等）。
 
 1.2> 对于接收数据：为了零拷贝，则需要将一大块接受内存划分为多个小块，预申请好（如果是UTCP，就是rx queue关联的mbufpool，每个大小是2K+ > 1500; 如果是RDMA，则是预申请一定大小，比如4k，post 到 recv queue中），等到数据的到来。
 
 
-（2）如果业务不申请内存，而是告知KUCL一个大小，KUCL自己要申请多大的内存，然后进行管理。
-KUCL也需要申请一个大块的大页内存，然后注册MR，然后拆分为收发内存块。其他的流程和上面的类似。
+（2）如果业务不申请内存，而是告知UCL一个大小，UCL自己要申请多大的内存，然后进行管理。
+UCL也需要申请一个大块的大页内存，然后注册MR，然后拆分为收发内存块。其他的流程和上面的类似。
 
 ### 写内存
 上面写了，对于要发送的内存，通过 从heap中取任意大小的内存块（底层调用 rte_malloc_socket (size, heap_id)）。
@@ -1136,14 +1448,14 @@ mbufpool 和 普通的 mempool 都是 从起始的大的接收内存块中申请
 读写零拷贝，就涉及到什么时候进行内存的释放的问题？
 那么，就需要通过异步的方式来进行释放内存。
 **对于读来说**：
-存储收到数据的内存是KUCL内提前预申请好的，业务处理完毕之后，通过 `read_done` 进行释放。
+存储收到数据的内存是UCL内提前预申请好的，业务处理完毕之后，通过 `read_done` 进行释放。
 
 
 **对于写来说**：
 ![](attachments/Pasted%20image%2020260423235832.png)
 
-要发送的数据，是业务通过 kucl_malloc 从指定的受到heap管理的大块发送内存中申请，writev的时候，业务提前设置回调函数（write_done），
-kucl中在完成数据的发送（对于UTCP而言，就是收到指定的ack；对于RDMA而言，就是收到send的CQE），则考虑自动调用 write_done 进行释放。
+要发送的数据，是业务通过 UCL_malloc 从指定的受到heap管理的大块发送内存中申请，writev的时候，业务提前设置回调函数（write_done），
+UCL中在完成数据的发送（对于UTCP而言，就是收到指定的ack；对于RDMA而言，就是收到send的CQE），则考虑自动调用 write_done 进行释放。
 
 
 
@@ -1202,7 +1514,7 @@ QP的创建，状态修改等比较耗时；如果新建较多，那么多个QP�
 
 之前测试过：
 ```bash
-（1）`ibv_create_qp`平均耗时在4-8ms；
+（1）`ibv_create_qp`平均耗时在4-8ms；QP状态切换在1-3ms；
 （2）平均每个QP协商建链完成，大概耗时9ms。
 注：这个是QP的异步创建以及协商下的耗时。当时是为了防止转发线程线程（worker）进行收发时的时延抖动，将耗时的QP的创建/销毁/状态更改，通过`rte_ring`传递消息的方式，放入到了控制线程(kpoll)。
 
@@ -1210,7 +1522,10 @@ QP的创建，状态修改等比较耗时；如果新建较多，那么多个QP�
 ```
 
 ### 预注册内存池
-将大块内存提前完成注册(pinning), 较少了RDMAt通信过程中的耗时较长的MR的注册开销，为RDMA收发消息和应用层对象提供了零拷贝所需要的高速缓冲区。
+将大块内存提前完成注册(pinning), 减少了RDMA通信过程中的耗时较长的MR的注册开销，为RDMA收发消息和应用层对象提供了零拷贝所需要的高速缓冲区。
+
+### MR cache：LRU管理
+对于无法提前注册一大块内存的情况下，可以考虑将MR 进行cache，而不是取消注册。使用LRU进行管理。
 
 ### SRQ
 ### SQP：多个conn下的QP复用（Shared QP）
@@ -1375,9 +1690,9 @@ QP的 max_recv_sge 不可以设置为1。因为对于发送message类型的消�
 
 ## RPC支持
 ### 目标
-KUCL通讯库对外提供两类接口：
-1》类socket的接口(通过libkucl.so)
-2》RPC接口（通过libkuclrpc.so）
+UCL通讯库对外提供两类接口：
+1》类socket的接口(通过libUCL.so)
+2》RPC接口（通过libUCLrpc.so）
 
 ### 使用
 
@@ -1393,15 +1708,15 @@ KRPC相关：为了在KRPC时，基于RDMA来实现数据收发的零拷贝，�
 
 （3）新的框架：原有框架的实现现在要自己进行实现，包括错误处理，部分写处理、延迟发送、超时重传等等处理。
 
-kucl_writev：使用多个iov，每个iov的结构如下：
+UCL_writev：使用多个iov，每个iov的结构如下：
 
 ```c
-ssize_t kucl_writev(int fd, struct kucl_iovec *iovs, int nr_iov, int flags);
-ssize_t kucl_readv(int fd, struct kucl_iovec *iovs, int nr_iov);
+ssize_t UCL_writev(int fd, struct UCL_iovec *iovs, int nr_iov, int flags);
+ssize_t UCL_readv(int fd, struct UCL_iovec *iovs, int nr_iov);
 
 typedef void (*event_notify_t)(void *base, void *user_data);
 
-struct kucl_iovec {
+struct UCL_iovec {
     void *iov_base;
     uint64_t reserved1;
     uint32_t iov_len;
@@ -1456,17 +1771,17 @@ struct kucl_iovec {
 ![](attachments/deepseek_mermaid_20260407_b553cd.png)
 ```bash
 client:
-16. kucl_rpc_init （底层调用kucl_init 进行初始化: 指定传输协议，内存使用，资源申请，接收buff大小，worker数，ib设备，max_conns, qp/cq/srq depth, trace/日志配置）
-17. 通过kucl socket接口 kucl_epoll_create 创建一个epoll fd;
-18. 创建rpc channel(即一个连接)，传入参数server ip + port，以及kucl_rpc_chan_opts 配置；
-19. 通过kucl_rpc_call_create分配一个请求调用（rpc call：一个连接上可以有多个call）;
+（1）UCL_rpc_init （底层调用UCL_init 进行初始化: 指定传输协议，内存使用，资源申请，接收buff大小，worker数，ib设备，max_conns, qp/cq/srq depth, trace/日志配置）
+（2）通过UCL socket接口 UCL_epoll_create 创建一个epoll fd;
+（3）创建rpc channel(即一个连接)，传入参数server ip + port，以及UCL_rpc_chan_opts 配置；
+（4）通过UCL_rpc_call_create分配一个请求调用（rpc call：一个连接上可以有多个call）;
     一个call上封装好了：rpc数据「call_header(call_id, 各部分长度) + message的序列化 + data部分」、call所属的channel 等等。
 
-20. 通过kucl_rpc_call_submit发送一个rpc call request：
+（5）通过UCL_rpc_call_submit发送一个rpc call request：
 
-    指定call，对方的service+method，响应回调函数：kucl_rpc_callback；
+    指定call，对方的service+method，设置响应回调函数：UCL_rpc_callback；
 
-21. 通过 kucl_epoll_wait 驱动工作线程，且指定call的reponse返回时会自动回调 kucl_rpc_callback
+（6）通过 UCL_epoll_wait 驱动工作线程，且指定call的reponse返回时会自动回调 UCL_rpc_callback
 
 ```
 #### server RPC流程
@@ -1475,15 +1790,15 @@ client:
 
 ```bash
 server:    
-22. kucl_rpc_init （底层调用kucl_init 进行初始化: 指定传输协议，内存使用，资源申请，接收buff大小，worker数，ib设备，max_conns, qp/cq/srq depth, trace/日志配置）
-23. 通过kucl 接口kucl_epoll_create 创建一个epoll fd;
-24. 创建rpc server，传入server ip + port，以及kucl_rpc_chan_opts 配置；
+（1）UCL_rpc_init （底层调用UCL_init 进行初始化: 指定传输协议，内存使用，资源申请，接收buff大小，worker数，ib设备，max_conns, qp/cq/srq depth, trace/日志配置）
+（2）通过UCL 接口UCL_epoll_create 创建一个epoll fd;
+（3）创建rpc server，传入server ip + port，以及UCL_rpc_chan_opts 配置；
     rpc_server中包含：listen_channel, method_map, worker_id等等；
-25. 通过 kucl_rpc_register_method 注册服务方法:
-    包含 rpc server， service_name, method_name, rpc请求的回调函数： kucl_rpc_callback
+（4）通过 UCL_rpc_register_method 注册服务方法:
+    包含 rpc server， service_name, method_name, rpc请求的回调函数： UCL_rpc_callback
 
-26. 通过 kucl_epoll_wait 驱动工作线程，在 kucl_rpc_callback 回调函数里处理 rpc request
-27. 发送则同客户端使用方式，通过调用kucl_rpc_call_submit函数提交 rpc response
+（5）通过 UCL_epoll_wait 驱动工作线程，在 UCL_rpc_callback 回调函数里处理 rpc request
+（6）发送则同客户端使用方式，通过调用UCL_rpc_call_submit函数提交 rpc response
 
 ```
 
@@ -1491,11 +1806,14 @@ server:
 ![](attachments/deepseek_mermaid_20260407_92fa01.png)
 
 
-内部事件驱动流程图（基于 kucl_epoll_wait）:
+内部事件驱动流程图（基于 UCL_epoll_wait）:
 ![](attachments/deepseek_mermaid_20260407_cc4e07.png)
 
 ### 后续扩展
 #### 通用RPC设计
+
+KRPC 的定位是一个通用 RPC 通信框架，专注于提供高性能的消息传输能力，而非绑定任何特定的序列化协议。框架本身只负责 RPC 消息的路由与传输，不参与业务数据的序列化/反序列化。序列化协议的选择（Protobuf、FlatBuffers、自定义二进制协议等）完全由业务方决定。
+
 ##### 背景
 不同的业务，有不同的序列化需求。比如：
 	有的业务不需要序列化(Raw格式)；
@@ -1504,25 +1822,28 @@ server:
 
 ##### 方案
 **（1）通用rpc层**：
-通用层不进行任何的序列化和反序列化；是否进行序列化，以及序列化的工作，交给业务来实现。
+==通用层不进行任何的序列化和反序列化；是否进行序列化，以及序列化的工作，交给业务来实现==。
 
 对于通用层来讲，readv收取一个固定长度头（rpc_hdr）+ payload（头中指定）长度的数据。
- 通用层也不感知 service 和 method，收到上面的信息之后；如果是异步的rpc处理，直接就会交给回调函数（rpc_cb）处理。这个`rpc_cb` 是在 `rpc`层实现的；
+ 通用层也不感知 service 和 method，收到上面的信息之后；如果是异步的rpc处理，直接就会交给通用的回调函数（rpc_cb）处理。这个`rpc_cb` 是在 `rpc`层实现的；
  `rpc_cb` 调用业务传递的业务层实现的 `cb_handle` 函数，传递的参数是：业务层的头指针，头长度，业务层的payload指针，payload长度。
 
 **（2）业务侧中间层**：
-业务侧实现自己的 `cb_handle` 函数，在业务头(固定长度)中一般含有`service + method`，基于`service + method`可以找到自己实现的方法；
+业务侧实现自己的 `cb_handle` 函数，在==业务头==(变长)中一般含有`service + method`（指定`service_name_len, method_name_len`），基于`service + method`可以找到自己实现的方法；
+业务侧实现自己的 `cb_handle` 函数，可以兼容处理业务的多个`service+method`方法，可以认为是==业务自己实现的一个统一的处理接口==。
+
 
 **（3）业务侧处理逻辑**：
-在业务实现的`method`这个方法中，对于序列化的`message`以及真实的`payload`进行处理。这样业务就可以自己进行反序列化处理，以及各种处理。
-
+在业务实现的每个`method`方法中，对于序列化的`message`以及真实的`payload`进行处理。这样业务就可以自己进行反序列化处理，以及各种处理。
+> 注：最终的头的格式为：`通用rpc_hdr(固定长度) + 业务hdr_len（变长）  [ + 序列化的业务message信息（变长）] + 业务payload`。
+> 其中，对于通用的rpc而言，`业务hdr_len（变长）  [ + 序列化的业务message信息（变长）] + 业务payload` 可以认为都是通用rpc的payload部分。
 
 ![](attachments/未命名绘图11.drawio%201.svg)
 
 如上所示：
 ```bash
-A> 图中的（1） 就是 rpc 感知的信息，业务不感知这个 rpc_hdr;
-readv收到数据之后，就是一个固定的头 + payload; 是否序列化，以及如何序列化，通用rpc层不做任何决定。
+A> 图中的（1） 就是 通用rpc 感知的信息，业务不感知这个 rpc_hdr;
+readv收到数据之后，就是一个固定的头（rpc_hdr） + payload; 是否序列化，以及如何序列化，通用rpc层不做任何决定。
 ```
 
 #### 类protobuf-c工具：实现服务接口
@@ -1544,10 +1865,343 @@ readv收到数据之后，就是一个固定的头 + payload; 是否序列化，
 
 #### 线程模型
 RPC线程模型有两种：
-1> RTC模型（io和业务处理在一个线程）
-2> Reactor（pipeline）线程模型（io线程和业务的处理线程分离）
+1> RTC线程模型（rpc的io处理和业务处理在一个线程）
+2> Reactor（pipeline）线程模型（rpc的io线程和业务的worker处理线程分离）
 
 ![](attachments/175018.png)
+
+RTC模型在低延迟的业务处理场景下具有极致性能，但当业务处理（callback）耗时较长时，会阻塞 IO 事件循环，导致吞吐下降和尾部延迟恶化。
+Pipeline（Reactor）线程模型，将 IO 处理和业务处理分离到不同线程组，使得 IO 线程不被业务阻塞，保障网络层的及时响应。
+
+
+协议格式：
+```bash
++------------------+-------------------+------------------+
+|    rpc_hdr       |   business hdr    |     payload      |
+|  (20 bytes)     |   (变长)          |   (变长)         |
++------------------+-------------------+------------------+
+| magic_num (4B)   | svc_name_len (2B) | [ext_data]       |
+| rpc_id     (8B)  | method_name_len(2)| [业务数据]       |
+| hdr_len    (4B)  | service_name (变) | (框架不透明)     |
+| payload_len(4B)  | method_name  (变) |                  |
+|                  | ext_data_len  (4) |                  |
++------------------+-------------------+------------------+
+       ↑                  ↑                     ↑
+   框架解析/组装      框架解析(路由)        框架不感知
+```
+
+框架职责：
+```bash
+┌──────────────────────────────────────────────────────────┐
+│                   框架职责 (KRPC)                         │
+│                                                          │
+│  ┌──────────────┐   ┌──────────────┐   ┌─────────────┐  │
+│  │ 解析/组装     │   │ 解析/组装     │   │ 消息定界    │  │
+│  │ rpc_hdr      │──▶│ business hdr  │──▶│ (按长度切分) │  │
+│  └──────────────┘   └──────┬───────┘   └─────────────┘  │
+│                            │                              │
+│  ┌──────────────┐   ┌──────▼───────┐   ┌─────────────┐  │
+│  │ 传输层 IO    │   │ 路由分发      │   │ 超时/重试   │  │
+│  │ (readv/writev│   │ (find_method) │   │ 管理        │  │
+│  └──────────────┘   └──────────────┘   └─────────────┘  │
+└──────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────┐
+│                   业务方职责                               │
+│                                                          │
+│  ┌──────────────┐   ┌──────────────┐   ┌─────────────┐  │
+│  │ 选择序列化协议 │   │ 序列化       │   │ 反序列化    │  │
+│  │ (pb/fb/自定义)│   │ payload      │   │ payload     │  │
+│  └──────────────┘   └──────────────┘   └─────────────┘  │
+│                                                          │
+│  ┌──────────────┐                                       │
+│  │ 业务逻辑处理  │                                       │
+│  └──────────────┘                                       │
+└──────────────────────────────────────────────────────────┘
+```
+
+##### RTC线程模型
+
+![](attachments/Pasted%20image%2020260505222923.png)
+
+**(1)client端**
+```bash
+┌─────────────── Client 发送请求 (RTC) ────────────────┐
+│                                                        │
+│  Worker 线程 (调用方所在线程):                          │
+│    [1] UCL_call_alloc(chan)                           │
+│    [2] 业务方: 序列化 request → call->send_payload     │
+│    [3] UCL_call_submit(call, svc, method, cb, arg)   │
+│        │                                               │
+│        │  内部流程:                                     │
+│        ├─ [4] 组装 rpc_hdr + business hdr (框架职责)   │
+│        ├─ [5] call->status = READY                     │
+│        ├─ [6] writev() 发送完整帧                      │
+│        └─ [7] insert flighting_call + 启动 timer        │
+│                                                        │
+│  关键: 发送请求在同一线程内完成，零跨线程开销            │
+│  若调用方不在 Worker 线程:                              │
+│    → 投递到目标 Worker 的 req_list                     │
+│    → Worker 在 worker_poll() 中取出执行 [4]-[7]        │
+│                                                        │
+└────────────────────────────────────────────────────────┘
+
+
+┌─────────────── Client 收到响应 (RTC) ────────────────┐
+│                                                       │
+│  Worker 线程:                                         │
+│    [1] event_poll() → 收到可读事件                    │
+│    [2] pipe_append() → readv() 到 ibuf               │
+│    [3] 解析 rpc_hdr → 根据 rpc_id 找 flighting_call  │
+│    [4] 解析 business hdr → 提取 ext_data              │
+│    [5] 按 hdr_len + payload_len 切分完整帧            │
+│    [6] 将 payload 拷贝到 call->recv_payload           │
+│        (框架不反序列化，原样存放)                      │
+│    [7] remove flighting_call + cancel timer           │
+│    [8] cb(call, arg, UCL_RPC_OK)                    │
+│        │                                              │
+│        │  业务方在 cb 中:                              │
+│        │  ├─ 反序列化 call->recv_payload               │
+│        │  ├─ 执行业务逻辑 (赋值/通知等)               │
+│        │  └─ call_free(call)                           │
+│                                                       │
+│  超时路径:                                            │
+│    Worker 线程 timer 检测超时                         │
+│    → remove flighting_call                            │
+│    → cb(call, arg, UCL_RPC_TIMEOUT)                  │
+│                                                       │
+└───────────────────────────────────────────────────────┘
+
+
+```
+
+**(2) server端**：
+```bash
+[IO] event_poll → [IO] pipe_append → [IO] 解析 rpc_hdr
+    → [IO] 解析 business hdr → [IO] find_method
+    → [业务] cb() [反序列化/执行/序列化]
+    → [IO] 组装 rpc_hdr + hdr → [IO] writev
+```
+
+详细流程如下：
+```bash
+Worker 线程 (既做 IO 又做业务):
+    [1] event_poll       → 收到可读事件
+    [2] pipe_append     → 读取数据到 ibuf
+    [3] 解析 rpc_hdr    → 消息定界
+    [4] 解析 business hdr → 提取 service_name, method_name
+    [5] find_method      → 查找业务回调
+    [6] cb()             → 业务处理 (含 payload 反序列化，业务逻辑，序列化 response)
+    [7] 组装 rpc_hdr+hdr → 框架组装传输头
+    [8] writev           → 发送响应
+```
+
+
+
+##### Reactor（pipeline）线程模型
+
+![](attachments/Pasted%20image%2020260505225831.png)
+
+**（1）client 端**：
+```bash
+
+┌─────────────── Client 收到响应 (Pipeline) ──────────────┐
+│                                                            │
+│  IO 线程:                                                  │
+│    [1] event_poll() → 收到可读事件                         │
+│    [2] pipe_append() → readv() 到 ibuf                     │
+│    [3] 解析 rpc_hdr → 根据 rpc_id 找 flighting_call        │
+│    [4] 解析 business hdr → 提取 ext_data                   │
+│    [5] 按 hdr_len + payload_len 切分完整帧                 │
+│    [6] 将 payload 拷贝到 call->recv_payload                │
+│        (框架不反序列化，原样存放)                           │
+│    [7] remove flighting_call + cancel timer                │
+│    [8] inbound_enqueue(worker.inbound_queue)             │
+│        call->status = IN_QUEUING                          │
+│                                                            │
+│  ═══════════════ 投递到 Worker 线程 ═══════════════════   │
+│        │                                                   │
+│        ▼                                                   │
+│  Worker 线程:                                              │
+│    [9]  inbound_dequeue(call)                             │
+│    [10] call->status = PROCESSING                          │
+│    [11] cb(call, arg, UCL_RPC_OK)                         │
+│         │                                                  │
+│         │  业务方在 cb 中:                                  │
+│         │  ├─ 反序列化 call->recv_payload                   │
+│         │  ├─ 执行业务逻辑 (赋值/通知等)                   │
+│         │  └─ cb 返回后 call 生命周期结束                  │
+│         │                                                  │
+│    [12] call_free(call)                                    │
+│                                                            │
+│  超时路径:                                                 │
+│    IO 线程 timer 检测超时                                  │
+│    → remove flighting_call                                 │
+│    → inbound_enqueue 到 Worker                            │
+│    → cb(call, arg, UCL_RPC_TIMEOUT)                       │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
+
+远端 Server            Client IO Thread                     Client Worker Thread
+  │                       │                                    │
+  │                       │                                    │
+  │  ──── 响应帧 ────▶   │                                    │
+  │                       │ [1] readv() 读到 ibuf              │
+  │                       │ [2] 解析 rpc_hdr → 定界             │
+  │                       │ [3] 找 flighting_call               │
+  │                       │ [4] 解析 business hdr → ext_data   │
+  │                       │ [5] 切分 → recv_payload (不反序列化) │
+  │                       │ [6] remove flighting + cancel timer │
+  │                       │                                    │
+  │                       │ ─── call (含 opaque payload) ──▶   │
+  │                       │   inbound_enqueue                  │
+  │                       │                                    │
+  │                       │                                    │ [7] inbound_dequeue
+  │                       │                                    │ [8] cb(call, arg, OK)
+  │                       │                                    │     反序列化 recv_payload
+  │                       │                                    │     执行业务逻辑
+  │                       │                                    │ [9] call_free(call)
+  │                       │                                    │
+
+```
+
+
+**(2) server端：**
+
+```bash
+Client                 IO Thread                          Worker Thread
+  │                       │                                    │
+  │  ──── 请求帧 ────▶   │                                    │
+  │                       │ [1] readv() 读到 ibuf             │
+  │                       │ [2] 解析 rpc_hdr → 定界            │
+  │                       │ [3] 解析 business hdr → 路由      │
+  │                       │ [4] find_method() → 找到 cb        │
+  │                       │                                    │
+  │                       │ ─── call (含 opaque payload) ──▶  │
+  │                       │   inbound_enqueue                  │
+  │                       │                                    │
+  │                       │                                    │ [5] inbound_dequeue
+  │                       │                                    │ [6] cb(call)
+  │                       │                                    │     反序列化 payload
+  │                       │                                    │     执行业务逻辑
+  │                       │                                    │     序列化 response
+  │                       │                                    │
+  │                       │ ◀── call (含 response payload) ─── │
+  │                       │   outbound_enqueue                  │
+  │                       │   + eventfd 通知                   │
+  │                       │                                    │
+  │                       │ [7] outbound_dequeue                │
+  │                       │ [8] 组装 rpc_hdr + hdr             │
+  │  ◀─── 响应帧 ─────   │ [9] writev() 发送                 │
+  │                       │                                    │
+
+
+
+┌─────────────── Server IO 线程主循环 ───────────────┐
+│                                                       │
+│  while (true) {                                       │
+│      ┌─── Step 1: IO 事件轮询 ─────────────────┐    │
+│      │  event_poll() → 收到可读事件              │    │
+│      └──────────────────────────────────────────┘    │
+│                    │                                  │
+│                    ▼                                  │
+│      ┌─── Step 2: 读取原始数据 ────────────────┐    │
+│      │  pipe_append() → readv() 到 ibuf          │    │
+│      └──────────────────────────────────────────┘    │
+│                    │                                  │
+│                    ▼                                  │
+│      ┌─── Step 3: 解析 rpc_hdr ────────────────┐    │
+│      │  提取 magic_num, rpc_id, hdr_len,        │    │
+│      │  payload_len → 消息定界                   │    │
+│      └──────────────────────────────────────────┘    │
+│                    │                                  │
+│                    ▼                                  │
+│      ┌─── Step 4: 解析 business hdr ────────────┐    │
+│      │  提取 service_name, method_name,           │    │
+│      │  ext_data_len → 路由信息                   │    │
+│      └──────────────────────────────────────────┘    │
+│                    │                                  │
+│                    ▼                                  │
+│      ┌─── Step 5: 路由查找 ───────────────────┐    │
+│      │  find_method(service_name, method_name)   │    │
+│      │  ├─ 找到    → 继续分发                    │    │
+│      │  └─ 未找到  → 组装错误响应 → writev()     │    │
+│      └──────────────────────────────────────────┘    │
+│                    │ (找到)                           │
+│                    ▼                                  │
+│      ┌─── Step 6: 分发到 Worker ───────────────┐    │
+│      │  选择目标 Worker (affinity / RR)          │    │
+│      │  call->status = IN_QUEUING               │    │
+│      │  inbound_enqueue(worker.inbound_queue)   │    │
+│      │  (payload 不透明传递，框架不解析)          │    │
+│      └──────────────────────────────────────────┘    │
+│                                                       │
+│  ══════════════ 跨线程边界 (inbound_queue) ════════ │
+│                                                       │
+│      ┌─── Step 7: 从 outbound_queue 取响应 ────┐    │
+│      │  outbound_dequeue_batch() → 批量取出 call │    │
+│      └──────────────────────────────────────────┘    │
+│                    │                                  │
+│                    ▼                                  │
+│      ┌─── Step 8: 组装并发送响应 ───────────────┐    │
+│      │  组装 rpc_hdr + business hdr               │    │
+│      │  (send_payload 中是业务方已序列化的数据)  │    │
+│      │  writev() → 发送完整帧                     │    │
+│      └──────────────────────────────────────────┘    │
+│                                                       │
+│      ┌─── Step 9: 其他 poller ─────────────────┐    │
+│      │  timer 检查超时 / broken channel 清理    │    │
+│      └──────────────────────────────────────────┘    │
+│  }                                                    │
+└───────────────────────────────────────────────────────┘
+
+```
+
+
+```bash
+IO 线程职责:                         Worker 线程职责:
+─────────────                        ──────────────
+16. readv() 读取原始字节               1. 从 inbound_queue 取 call
+17. 解析 rpc_hdr                      2. 执行 cb(call, arg, OK)
+18. 解析 business hdr                 3. 业务方在 cb 中:
+19. 按 hdr_len + payload_len 切帧        - 反序列化 call->recv_payload
+20. find_method(svc, method)              - 执行业务逻辑
+21. 投递 call 到 inbound_queue           - 序列化到 call->send_payload
+22. 从 outbound_queue 取 call          4. 投递 call 到 outbound_queue
+23. 组装 rpc_hdr + business hdr
+24. writev() 发送完整帧
+```
+
+
+Pipeline 模式下，IO 线程是否需要感知 service_name / method_name？find_method 放在 IO 线程还是 Worker 线程？
+
+```bash
+方案 A: find_method 在 IO 线程 (推荐： 错误路径最短)
+============================================
+IO Thread:
+    readv → 解析 rpc_hdr → 解析 business hdr → find_method()
+        ├─ 找到    → inbound_enqueue(call, cb)     [1次跨线程]
+        └─ 未找到 → 直接组装错误响应 → writev()    [0次跨线程]
+
+Worker Thread:
+    inbound_dequeue → cb(call) → outbound_enqueue   [1次跨线程]
+
+总计: 2次跨线程 (正常路径), 0次跨线程 (错误路径)
+
+
+方案 B: find_method 在 Worker 线程 (不推荐)
+============================================
+IO Thread:
+    readv → 解析 rpc_hdr → 解析 business hdr → inbound_enqueue(call)
+                                                     [1次跨线程]
+
+Worker Thread:
+    inbound_dequeue → find_method()
+        ├─ 找到    → cb(call) → outbound_enqueue     [1次跨线程]
+        └─ 未找到 → 组装错误响应 → outbound_enqueue  [1次跨线程]
+
+总计: 2次跨线程 (正常路径), 2次跨线程 (错误路径)
+```
 
 #### 序列化和反序列化
 message的序列化和反序列化的好处之一：增强可扩展性（比较方便的进行扩展字段）。但是**序列化和反序列化带来的一个很大的问题，就是CPU的消耗，性那的下降**。
@@ -1574,12 +2228,12 @@ message的序列化和反序列化的好处之一：增强可扩展性（比较�
 uprobe: 用户态动态探针「无侵入，任意位置」。
         对于用户态的函数前插入指令断点，执行特定函数前，先到ebpf中执行执行的程序，获取信息，写入到map中；用户态程序从map中获取信息。
         同时函数退出时，也可以执行指定的程序，这样就可以获取函数的执行时间。
-        比如：ibv_post_send / ibv_poll_cq 以及 kucl 自己的内部函数打 uprobe；
+        比如：ibv_post_send / ibv_poll_cq 以及 UCL 自己的内部函数打 uprobe；
 
 USDT（Userland Statically Defined Tracing）:  
         用户态静态探针「代码预埋，指定API」，对于源码少量侵入。
         需要在代码中主动添加几行代码（探针）。USDT 探针未挂载时是 NOP 指令；
-        可以在 kucl 现有 Trace 体系的基础上，额外添加 USDT 探针。只需在关键路径加几行宏，未挂载时性能零损耗。
+        可以在 UCL 现有 Trace 体系的基础上，额外添加 USDT 探针。只需在关键路径加几行宏，未挂载时性能零损耗。
 
 
 uprobe 和 kprobe 相对：一个用户态，一个内核态，都是动态探针。
@@ -1591,9 +2245,9 @@ USDT 和 内核的 tracepoint相对：一个用户态，一个内核态，都是
 
 |方案|技术路径|适用 RDMA？|适用 DPDK？|侵入性|热路径开销|最佳场景|
 |---|---|---|---|---|---|---|
-|Native XDP/TC eBPF|内核网络驱动层|❌ 完全不可达|❌ 已被接管|零|极低|**不适用 kucl**|
+|Native XDP/TC eBPF|内核网络驱动层|❌ 完全不可达|❌ 已被接管|零|极低|**不适用 UCL**|
 |uprobe libibverbs|ibv_post_send/poll_cq|✅|不涉及|零|中 ~200ns|生产毛刺排查|
-|uprobe kucl 内部|kbuff_malloc/rdma_send|✅|✅|零|中|Thread Cache 监控|
+|uprobe UCL 内部|kbuff_malloc/rdma_send|✅|✅|零|中|Thread Cache 监控|
 |USDT 探针|源码加宏 + eBPF 挂载|✅|✅|**极小（加宏）**|**近零（未挂载=NOP）**|生产长期埋点|
 |perf_event 采样|CPU 周期采样|✅|✅|零|极低|CPU 火焰图|
 |MLX5 sysfs 计数器|硬件端口计数器|✅|✅|零|零|带宽/错误趋势|
@@ -1610,7 +2264,7 @@ USDT 和 内核的 tracepoint相对：一个用户态，一个内核态，都是
 # 性能数据
 
 ## 时延
-使用send/recv, kucl 测试程序在单个QP，100G同TOR下的两台设备，写4k，响应100B。
+使用send/recv, UCL 测试程序在单个QP，100G同TOR下的两台设备，写4k，响应100B。
 时延是：7.1us；perftest 是 6.7us。
 注：perftest中的send/recv的测试，时延是单向的时延，即RTT/2；
 
@@ -1620,6 +2274,7 @@ USDT 和 内核的 tracepoint相对：一个用户态，一个内核态，都是
 如果不限制并发度的情况下，按理一个线程，就可以给100G的带宽给打满。
 
 # 规划
+
 ![](attachments/image%20(12).png)
 
 ![](attachments/image%20(14).png)

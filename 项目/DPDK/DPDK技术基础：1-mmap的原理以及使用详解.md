@@ -99,7 +99,7 @@ MAP_POPULATE (since Linux 2.5.46)
 
 
 ### offset 和 fd
-当我们将 mmap 系统调用参数 flags 指定为 `MAP_ANONYMOUS` 时，表示我们需要进行匿名映射，既然是匿名映射，fd 和 offset 这两个参数也就没有了意义，fd 参数需要被设置为 -1 。
+当我们将 mmap 系统调用参数 flags 指定为 `MAP_ANONYMOUS` 时，表示我们需要进行匿名映射；**既然是匿名映射，fd 和 offset 这两个参数也就没有了意义，fd 参数需要被设置为 -1** 。
 
 当我们进行文件映射的时候，只需要指定 fd 和 offset 参数就可以了。
 
@@ -111,9 +111,98 @@ MAP_POPULATE (since Linux 2.5.46)
 在内存管理系统中，物理内存是按照内存页为单位组织的；在文件系统中，磁盘中的文件是按照磁盘块为单位组织的，内存页和磁盘块大小一般情况下都是 4K 大小，所以这里的 offset 也必须是按照 4K 对齐的。
 
 # 内核中实现
-## VMA
+## VMA（virtual memory area）
 
 ![](attachments/df13c9ad4dc3c851ce441c83304c097d.jpg)
+
+## Linux `mmap` 的地址区域
+
+```bash
+
+高地址
+┌─────────────────────────────┐ 0xFFFFFFFF (32位) / 更高 (64位)
+│         内核空间             │
+├─────────────────────────────┤
+│     栈区 Stack               │ ← 向低地址增长 ↓
+│         ↓                   │
+├─────────────────────────────┤
+│     ...空闲空间...           │
+├─────────────────────────────┤
+│     ↑                       │
+│  内存映射区 mmap Segment      │ ← mmap 在这里，默认向低地址增长 ↓
+│     ↓                       │
+├─────────────────────────────┤
+│     ...空闲空间...           │
+├─────────────────────────────┤
+│     ↑                       │
+│     堆区 Heap                │ ← 向高地址增长 ↑
+├─────────────────────────────┤
+│     BSS 段（未初始化数据）    │
+├─────────────────────────────┤
+│     数据段 Data              │
+├─────────────────────────────┤
+│     代码段 Text              │
+└─────────────────────────────┘ 0x00000000
+低地址
+```
+
+`mmap` 既不在堆区，也不在栈区，它有自己独立的内存映射区域（**Memory Mapping Segment**）。
+
+### mmap 地址增长方向
+
+|场景|增长方向|
+|---|---|
+|默认（未指定地址）|**向低地址增长**（从栈底往堆顶方向）|
+|指定了 `MAP_FIXED`|固定在你指定的地址|
+
+Linux 中：
+- heap（brk）通常向高地址增长
+- stack 通常向低地址增长
+- mmap 区域通常位于两者之间，并且内核倾向于从高地址向低地址分配 mmap 区域。
+
+#### mmap为什么默认是向低地址增长？
+
+内核在分配 mmap 区域时，起始点在栈下方，每次新的 `mmap` 调用会从上一次分配地址**往下**找空闲区域，这样堆（向上增长）和 mmap（向下增长）从两端向中间靠拢，最大化地利用空间。
+
+#### 验证方式
+```c
+
+#include <stdio.h>
+#include <sys/mman.h>
+
+int main() {
+    void *a = mmap(NULL, 4096, PROT_READ|PROT_WRITE,
+                   MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+    void *b = mmap(NULL, 4096, PROT_READ|PROT_WRITE,
+                   MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+    
+    printf("a = %p\n", a);
+    printf("b = %p\n", b);  // b 的地址 < a，说明向低地址增长
+    return 0;
+}
+
+输出示例：
+a = 0x7f8b2a000000
+b = 0x7f8b29fff000   ← 比 a 更低
+```
+
+## `malloc` 和 `mmap` 的关系
+
+- `malloc` 分配**小块内存**（< 128KB）→ 走 **堆区**（`brk`/`sbrk`）
+- `malloc` 分配**大块内存**（≥ 128KB）→ 直接调用 **`mmap`**，走映射区
+
+```bash
+glibc 的 `malloc`：
+
+- 小对象：
+    - 走 heap/brk
+- 大对象（默认约 128KB 以上）：
+    - 直接 mmap
+```
+
+所以大内存的 `malloc` 实际上也是在 mmap 区域，而非堆区。
+
+
 
 # mmap映射分类
 ## 匿名映射和文件映射
@@ -175,6 +264,7 @@ if (!(size % (1*1024*1024*1024))) {
     addr = mmap(NULL, size, PROT_READ | PROT_WRITE, flag, -1, 0);
 }
 ```
+
 ## 设备DMA map
 参考：[# DPDK内存管理 —— DMA MAP](https://zhuanlan.zhihu.com/p/585094736)
 参考：[libtpa中的tpa_heap.c文件中关于dma map的使用]()
@@ -183,7 +273,7 @@ rte_dev_dma_map
 ```
 
 
-# 进程之间通过mmap共享内存
+# 进程之间通过mmap共享内存：共享映射
 ## 通过 `mmap` 将同一个文件或共享内存区域映射到多个进程的地址空间中
 这种方式创建的共享内存具有以下特点：
 - 各进程看到的是**同一段物理内存**：两个进程共享同一个文件映射的内存
@@ -449,7 +539,7 @@ cat /proc/xxx/maps
 
 
 ```bash
-- `r-xp`：`p` 代表 Private。
+- `r-xp`：`p` 代表 Private。 r-x表示可读可执行；
 - 路径：显示了 ELF 文件的路径，证明它是 File-backed。
 - 偏移量：非零值代表这块内存对应文件中的某个位置（即 `.data` 或 `.bss` 段所在的位置）。
 ```
@@ -457,6 +547,24 @@ cat /proc/xxx/maps
 
 ### `coredump_filter`为`0x33`，为什么可以看到初始化的全局变量的内容
 初始化的全局变量，存放在`.data` 段，加载`.data` 段不是 `file-backed、MAP_PRIVATE` 吗？  为什么 `coredump_filter`为`0x33`产生的`coredump`，还可以看到全局变量的值呢？
+
+```bash
+0x33的含义：anonymous private + anonymous shared + ELF headers +  private huge pages；
+
+   The value in the file is a bit mask of memory mapping types (see mmap(2)).  If a bit is set in the mask, then memory mappings of the corresponding type are dumped; otherwise they  are  not  dumped.   The
+   bits in this file have the following meanings:
+
+	   bit 0  Dump anonymous private mappings.
+	   bit 1  Dump anonymous shared mappings.
+	   bit 2  Dump file-backed private mappings.
+	   bit 3  Dump file-backed shared mappings.
+	   bit 4 (since Linux 2.6.24)
+			  Dump ELF headers.
+	   bit 5 (since Linux 2.6.28)
+			  Dump private huge pages.
+	   bit 6 (since Linux 2.6.28)
+			  Dump shared huge pages.
+```
 
 #### 程序刚启动时(加载时)
 
@@ -517,7 +625,6 @@ int g = 1;   // 初始化的全局变量存储在 .data
 程序运行并修改变量：该页面通过 COW 变成了“私有匿名页面” (Private Anonymous Memory)==。
 
 
-
 ### 程序中的变量类型与 mmap 类型的对比表
 
 |**变量类型**|**存储段**|**映射类型**|**备注**|
@@ -529,7 +636,6 @@ int g = 1;   // 初始化的全局变量存储在 .data
 
 
 **注1**：虽然 `.bss` 段在概念上属于 ELF 的一部分，但由于它全是 0，内核通常直接将其映射到特殊的“零页”（Zero Page）上，这在行为上更接近 **Anonymous Private**。
-
 
 ## mmap和 Direct IO对比
 

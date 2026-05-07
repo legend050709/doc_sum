@@ -154,6 +154,49 @@ KEG收到边缘节点的ipsec封装报文之后，先进行解封装；然后再
 
 DPDK版本其实是为了支付版本进行开发的，支付版本的流量可能相对较大，都是IDC内的加密互通，则默认都是放开的。即不存在白名单，默认都是放开的。
 
+
+## 性能
+基于内核 ip xfrm 版本的ipsec的性能数据如下所示：
+
+ip xfrm的性能主要受限于CPU，提升单核的CPU性能，以及增加处理IPsec流量的CPU个数，都可以提升性能。
+
+### 单向测试：只打单向流量
+#### 测试方法
+在一端使用hping/iperf进行打流, 另外一端接收但是不响应，通过sar -D 查看网卡的流量。
+
+#### 结论
+![](attachments/ipsec1.png)
+
+单条隧道时（只能匹配到一个CPU核），开启GRO时，打TCP 1300B的大包，Rx bps 6.4G, Rx pps 0.6M；
+多条隧道时（可以多个CPU核处理）开启GRO时，打TCP 1300B的大包，Rx bps 23G, Rx pps 2M， 基本达到25G限速。
+
+（1）单隧道：对应单核
+![](attachments/image%20(10).png)
+![](attachments/image%20(12).png)
+
+（2）多隧道：对应多核
+![](attachments/image%20(21).png)
+![](attachments/image%20(23)%202.png)
+
+### 双向测试：打双向流量
+#### 测试方法
+测试拓扑如下图，采用2打2的拓扑，两台client端（bjrz-k411.lf、bjrz-k267.lf）打两台server端（bjrz-k400.lf、bjrz-k433.lf），中间经过keg设备（bjrz-k536.lf）的转发。从client发出的是加密报文，经过keg设备的解密后转发到server上，同时server回包经过keg设备的加密后，再转发到client设备上。
+
+![](attachments/image%20(24)%202.png)
+
+
+#### 测试结论
+
+![](attachments/ipsec5.png)
+
+根据当前测试数据能够得出如下结论
+1. 随着包长由小到大，pps递减，bps递增
+2. 随着隧道数的增加（由512条到1024条），性能相差不大
+3. 单条隧道tcp小包转发性能在0.2Mpps、0.18Gbps左右，大包转发性能在0.179Mpps、1.90Gbps左右
+4. 多条隧道tcp小包转发性能在1.644Mpps、1.51Gbps左右，**大包（1300B）转发性能在1.566Mpps、16.39Gbps左右**
+5. 测试的性能瓶颈主要由于**cpu被打满，故提升cpu性能（核数、单核性能）** 都有利于性能的提升
+
+
 # EVB
 ![](attachments/image%20(28).png)
 ![](attachments/image%20(27).png)

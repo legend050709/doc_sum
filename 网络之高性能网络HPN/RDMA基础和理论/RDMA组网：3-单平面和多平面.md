@@ -6,6 +6,8 @@
 一般是TCP平面和RDMA平面，分别跑TCP流量和RDMA流量。
 
 ## 双平面
+![](attachments/image%20(25).png)
+
 （1）参数平面
 8个GPU（8轨）+ `8*400G（Mellanox Cx7）`
 

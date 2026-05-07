@@ -122,6 +122,16 @@ DCQCN 是为了解决 RoCEv2 依赖 **PFC** 带来的 HOL 阻塞和拥塞扩散�
 
 ==RDMA 使用 InfiniBand (IB) 时，不使用 DCQCN。 DCQCN 是 RoCEv2 专用的拥塞控制机制，不适用于 InfiniBand==。
 
+## 为什么需要DCQCN
+### PFC的问题
+
+PFC 存在 Deadlock、Storm 等问题的本质是==无法精确管理每条 Flow==，**只能粗暴的关闭流量，而不能动态调整发送速率**。
+另外，由于 PFC 会上下游网络设备之间的层层反压，所以在大规模 Lossless Network 中，效率很低。
+
+![](attachments/Pasted%20image%2020260502165150.png)
+
+因此，PFC 往往还需要结合更高效的拥塞控制算法，例如：ECN、DC-QCN 等，在不同的业务场景中采用合适的算法是重中之重。
+
 ## 为什么 IB 不需要也不支持 DCQCN？
 
 **DCQCN**（Data Center Quantized Congestion Notification）是 **为 RoCE 在以太网上的无损传输设计的**，包含三部分：
@@ -135,10 +145,20 @@ DCQCN 是为了解决 RoCEv2 依赖 **PFC** 带来的 HOL 阻塞和拥塞扩散�
 > - IB 交换机使用 **FECN/BECN**（Forward/Backward ECN）机制，**不需要 IP 头**。
 > - IB 不走 UDP/IP，**无法使用 ECN（IP header bit）**。
 
-## 特点
-### 工作层次
+
+## DCQCN工作层次：以太网的网络层（ECN） + IB的传输层（CNP）
 DCQCN工作在以太网的网络层，以及IB的传输层。
 
+
+### ECN（Explicit Congestion Notification，显式拥塞通知）
+
+ECN 是 IP 层的一项扩展功能，允许网络设备在数据包头部标记拥塞状态，而非直接丢包。
+
+- 标记阶段：当交换机检测到出端口队列长度超过预设阈值时，将经过的数据包的 IP 头部中的 ECN 位设置为“CE”（Congestion Experienced）。
+
+- 反馈阶段：接收端识别到被标记的包后，在返回的确认报文（如 TCP ACK 或 RoCEv2 的 CNP）中携带拥塞信息。
+
+- 调速阶段：发送端接收到拥塞信号后，主动降低发送速率，避免进一步加剧网络压力。
 
 
 # CNP
@@ -226,22 +246,23 @@ CNP 的特点：
 从这里可以看出，拥塞发生点为DeviceA，但是对拥塞进行反馈的设备却是网络尾部的宿端服务器。过长的拥塞反馈路径使得源端服务器流量不能及时降速，从而导致转发设备缓存可能进一步拥塞恶化，甚至引发整网因PFC流控而暂停流量的发送。
 
 
-## 快速CNP
+## 快速CNP(fast-CNP)
 
-快速CNP拥塞通知：在转发设备上使能快速CNP拥塞通知功能后，转发设备会在转发报文时将报文的信息记录在流表表项中，并在后续收到携带ECN拥塞标记的报文时，基于学习到的流表表项信息向源端服务器发送CNP拥塞通知报文，缩短了拥塞反馈路径，从而及时调整源端服务器的流速，缓解转发设备缓存的拥塞。
+快速CNP拥塞通知：在转发设备上使能**快速CNP**拥塞通知功能后，转发设备会在转发报文时将报文的信息记录在流表表项中，并在后续收到携带ECN拥塞标记的报文时，基于学习到的流表表项信息**直接向源端服务器发送CNP拥塞通知报文**，缩短了拥塞反馈路径，从而及时调整源端服务器的流速，缓解转发设备缓存的拥塞。
 
 快速CNP（Congestion Notification Packet）拥塞通知方式的处理流程如下所示：
 ![](attachments/Pasted%20image%2020251114105226.png)
 
-11. 转发设备DeviceA发现端口存在拥塞，因此在转发报文时给报文携带ECN拥塞标记（ECN字段置为11），以标示网络中存在拥塞。
-12. 转发设备DeviceB收到报文后，发现报文中携带ECN拥塞标记（ECN字段为11），则知道网络中存在拥塞，因此向源端服务器发送CNP拥塞通知报文，以通知源端服务器进行流量降速。
-13. 同时，转发设备DeviceB发现报文的目的地址不是本机，则将报文转发给宿端服务器。
+（1）转发设备DeviceA发现端口存在拥塞，因此在转发报文时给报文携带ECN拥塞标记（ECN字段置为11），以标示网络中存在拥塞。
+（2）转发设备DeviceB收到报文后，发现报文中携带ECN拥塞标记（ECN字段为11），则知道网络中存在拥塞，因此向源端服务器发送CNP拥塞通知报文，以通知源端服务器进行流量降速。
+（3）同时，转发设备DeviceB发现报文的目的地址不是本机，则将报文转发给宿端服务器。
 
+### 源端服务器的过度降速问题
+对于宿端服务器，收到携带ECN拥塞标记的报文，也会向源端发送CNP拥塞通知报文。对于DeviceA发出的同一份ECN拥塞标记报文，若DeviceB和宿端服务器都进行响应并向源端服务器发送CNP拥塞通知报文，则会引起源端服务器的过度降速。
 
-对于宿端服务器，收到携带ECN拥塞标记的报文，也会向源端发送CNP拥塞通知报文。对于DeviceA发出的同一份ECN拥塞标记报文，若DeviceB和宿端服务器都进行响应并向源端服务器发送CNP拥塞通知报文，则会引起源端服务器的过度降速。此时可以通过如下方法进行解决：
-
-14. 关闭宿端服务器对ECN拥塞标记报文的响应功能，使得宿端服务器收到ECN拥塞标记报文后，不向源端服务器发送CNP拥塞通知报文。
-15. 在DeviceB上设置发送CNP拥塞通知报文的聚合时间，这样DeviceB收到下游发送的CNP拥塞通知报文时，会判断与其上一次发送CNP拥塞通知报文的时间差，若小于聚合时间，则丢弃从下游收到的CNP拥塞通知报文。
+此时可以通过如下方法进行解决：
+（1）关闭宿端服务器对ECN拥塞标记报文的响应功能，使得宿端服务器收到ECN拥塞标记报文后，不向源端服务器发送CNP拥塞通知报文。
+（2）在DeviceB上设置发送CNP拥塞通知报文的聚合时间，这样DeviceB收到下游发送的CNP拥塞通知报文时，会判断与其上一次发送CNP拥塞通知报文的时间差，若小于聚合时间，则丢弃从下游收到的CNP拥塞通知报文。
 
 ## CNP的调节机制
 
@@ -264,14 +285,14 @@ CNP的作用是**触发速率降低**（Rate Control），而不是调节拥塞�
 
 当发送端收到一个CNP报文后，它会执行以下动作来降低速率：
 
-16. **即时惩罚 (Multiplicative Decrease):** 发送端立即将其允许的发送速率 Rallow​ 乘以一个**惩罚因子 β**（例如 β=0.5），即：
+2. **即时惩罚 (Multiplicative Decrease):** 发送端立即将其允许的发送速率 Rallow​ 乘以一个**惩罚因子 β**（例如 β=0.5），即：
 ```bash
 R_new​=R_old​×β
 ```
   
-17. **CNP抑制 (CNP Suppression):** 为了避免接收端在短暂拥塞期间发送过多的CNP导致发送端过度惩罚，DCQCN通常会采用一个**时间窗口**或**CNP计数器**来抑制后续的CNP，直到速率降低生效。
+3. **CNP抑制 (CNP Suppression):** 为了避免接收端在短暂拥塞期间发送过多的CNP导致发送端过度惩罚，DCQCN通常会采用一个**时间窗口**或**CNP计数器**来抑制后续的CNP，直到速率降低生效。
     
-18. **速率增加 (Additive Increase):** 在没有收到CNP（即没有拥塞）时，发送端会像传统TCP一样，**缓慢地、线性地增加**其速率，直到达到带宽限制或再次触发拥塞。
+4. **速率增加 (Additive Increase):** 在没有收到CNP（即没有拥塞）时，发送端会像传统TCP一样，**缓慢地、线性地增加**其速率，直到达到带宽限制或再次触发拥塞。
 
 
 ## 存在的问题
@@ -288,15 +309,24 @@ DCQCN的拥塞控制过程中主要分为三部分：发送端（RP）调整流�
 
 ![](attachments/31c9777832df65314c1f38ddfc878803.webp)
 
-## ECN（Explicit Congestion Notification，显式拥塞通知）
+## 角色：CP/NP/RP
+![](attachments/image%20(23)%201.png)
 
-ECN 是 IP 层的一项扩展功能，允许网络设备在数据包头部标记拥塞状态，而非直接丢包。
+DCQCN 定义了以下角色和功能定位：
+**（1）RP（Reaction Point）**：Sender RNIC，负责根据拥塞通知调整发送速率。
+**（2）CP（Congestion Point）**：Switch，负责检测拥塞并标记 ECN。
+**（3）NP（Notification Point）**：Receiver RNIC，负责生成 CNP 并反馈给 Sender。
 
-- 标记阶段：当交换机检测到出端口队列长度超过预设阈值时，将经过的数据包的 IP 头部中的 ECN 位设置为“CE”（Congestion Experienced）。
 
-- 反馈阶段：接收端识别到被标记的包后，在返回的确认报文（如 TCP ACK 或 RoCEv2 的 CNP）中携带拥塞信息。
+![](attachments/Pasted%20image%2020260502171911.png)
 
-- 调速阶段：发送端接收到拥塞信号后，主动降低发送速率，避免进一步加剧网络压力。
+DCQCN 和 ECN 的核心区别是前者设计了一套复杂的量化数据算法，在 RP、CP、NP 三个维度进行精细化的参数调控。
+
+**CP 算法**：与 DCTCP 算法相同，即：在出口队列中，如果队列长度超过阈值，则对到达的报文进行 ECN 打标，并根据实际情况调整 DCTCP 算法中定义的 Kmin、Kmax、Pmax 等参数。
+
+**NP 算法**：当一个带有 ECN 标记的报文到达 NP 时，表示网络拥塞了，NP 生成 CNP，NP 算法则规定了生成 CNP 的方式和时间。
+
+**RP 算法**：当 CNP 到达 RP 时，就开始根据 RP 算法中定义的降低公式 new_rate = old_rate * (1 - α/2) 进行降速和后续的恢复。其中 α是可动态调整的降速因子。
 
 ## DCQCN
 
@@ -316,9 +346,13 @@ DCQCN 的三大核心组件：
 
 # DCQCN的优缺点
 ## 优势
+
+### 基于流的拥塞控制
+**基于流的拥塞控制**：实现了基于流的拥塞控制。
+
+### 分布式控制
 **分布式控制**：引入了分布式控制的思想，允许数据中心网络中的交换机独立地进行拥塞检测和控制，这种分布式方法可以更好地适应大规模网络的动态性和异构性；
 
-**基于流实现拥塞控制**：实现了基于流的拥塞控制。
 
 ## 劣势
 ### 需要PFC配合使用（RoceV2+PFC+DCQCN)
@@ -473,11 +507,28 @@ DCQCN 持续进行 **端到端的速率调整**，努力将网络流量控制在
 PFC 触发后，虽然避免了丢包，但可能引起线头阻塞。DCQCN 随后接收到 CNP 或 ECN 信号，会开始降低发送速率，**从源头解除拥塞**，从而尽快让 PAUSE 状态解除，**消除 PFC 带来的负面影响**。
 
 
-## 总结
+## RoceV2+PFC+DCQCN的配置
 
-# DCQCN的配置
+DCQCN 的设计理念是在拥塞时通过 ECN 让发送端降低传输速率，从而尽量避免触发 PFC，因为 PFC 被触发，发送流量会完全停止，DCQCN 需要考虑如下两个关键点：
+（1）确保 PFC 不会太早触发：即先使用 ECN 发送拥塞反馈使流量变慢。
+（2）确保 PFC 不会太晚触发：PFC防止丢包，拥塞较严重产生缓冲区溢出进而出现丢包。
+
+
+通过合理设置下面三个参数，可以满足上述需求：
+
+**Headroom Buffers（防缓冲区溢出丢包）**：发送至上游设备的 PAUSE 消息需要一些时间到达并生效。为避免丢包，PAUSE 发送方 必须保留足够的缓冲区，以处理在此期间可能收到的任何数据包。这包括发送 PAUSE 时正在传输的数据包，以及上游设备在处理 PAUSE 消息时发送的数据包。
+
+**PFC Threshold（向上游发送PFC）**：这是一个==入口阈值==。当到达该阈值时，会向上游发送 PFC PAUSE 报文。
+
+**ECN Threshold**：这是一个==出口阈值==。ECN 阈值等于 WRED 开始填充级别值。一旦出口队列超过此阈值，交换 机将开始为该队列中的数据包进行 ECN 标记。DCQCN 要有效，此阈值必须低于入口 PFC 阈值，以确保 PFC 不 会在交换机有机会使用 ECN 标记数据包之前触发。设置非常低的 WRED 填充级别可提高 ECN 标记概率。例如， 使用默认共享缓冲区设置，WRED 开始填充级别为 10% 可确保标记无丢失数据包。但是，如果填充级别较高，则 ECN 标记的概率降低。
+
+### ECN水线(ECN_Min/ECN_Max)配置在发送队列， PFC水线(XOFF/XON)配置在接收队列
+
+
+# DCQCN的配置以及查看
 
 ## 交换机侧的参数配置
+
 ## 主机侧的参数配置
 ### TI 和 TD
 在 RoCEv2 的 DCQCN 中，**TI（Increase Timer）** 和 **TD（Decrease Timer）** 是控制发送速率“加速 / 减速节奏”的两个关键时间参数，本质上是**发送端速率调整的节拍器（pacing timers）**。
@@ -535,29 +586,42 @@ TI和TD类似于AIMD，可以类比控制论：
 - TD：μs 级（快速）
 - TI：几十 μs ~ ms 级（慢恢复）
 
-### 范例
+
+## 端上的配置
+### 主机侧QOS配置
+![](attachments/111aa.png)
+![](attachments/111bb.png)
+
+（1）为TCP流量，RDMA流量，CNP包设置了不同的队列  （CNP是反馈拥塞的包，需要及时的反馈给发送端，担心被RDMA大象流对头阻塞，设置单独的队列）
+（2）设置RDMA流量的TOS值
+（3）设置RDMA流量所在队列的PFC enable
+（4）设置RDMA流量所在队列的 DCQCN的NP/RP 使能；
+
+### 主机侧的DCQCN配置
+
+![](attachments/111.png)
+
+#### 范例
 参数分两类：
 - `roce_rp/*` → 控制“怎么调速”
 - `roce_np/*` → 控制“多久发一次CNP”
 
 ```bash
 # DCQCN优化参数；
-# 策略：减少反馈 + 加速更猛 + 降速更轻
+# 策略：减少反馈（CNP） + 加速更猛 + 降速更轻
 ## 适合于：
 - 网络 buffer 足够大
 - ECN 阈值合理
 - 追求吞吐（throughput > latency）
 
-
 echo 1 > /sys/class/net/$eth/ecn/roce_rp/enable/1  
 echo 1 > /sys/class/net/$eth/ecn/roce_np/enable/1  
-echo 64 > /sys/class/net/$eth/ecn/roce_np/min_time_between_cnps  // 两次发送 CNP 的**最小时间间隔**
+echo 64 > /sys/class/net/$eth/ecn/roce_np/min_time_between_cnps  // 两次发送 CNP 的最小时间间隔
 echo 15 > /sys/class/net/$eth/ecn/roce_rp/rpg_ai_rate   // 每次“加速阶段”（TI触发）增加多少速率(ai: additive Increase)
 echo 150 > /sys/class/net/$eth/ecn/roce_rp/rpg_hai_rate // “高速阶段（hai: Hyper Additive Increase）”的加速速率（比 ai_rate 更猛）
 echo 80 > /sys/class/net/$eth/ecn/roce_rp/rpg_min_dec_fac # 最小降速比例（Minimum Decrease Factor, 单位 %）,需要<100; 值越大 → 降速越“温和”.  比如：80，意味着 降到 80%（降得少）
 
 ```
-
 
 把整个系统想成开车：
 
@@ -569,17 +633,48 @@ echo 80 > /sys/class/net/$eth/ecn/roce_rp/rpg_min_dec_fac # 最小降速比例�
 |min_time_between_cnps|刹车提醒频率|
 
 
-
-
-## 端上的配置
-
-![](attachments/111aa.png)
-![](attachments/111bb.png)
-
-（1）为TCP流量，RDMA流量，CNP包设置了不同的队列  （CNP是反馈拥塞的包，需要及时的反馈给发送端，担心被RDMA大象流对头阻塞，设置单独的队列）
-（2）设置RDMA流量的TOS值
-（3）设置RDMA流量所在队列的PFC enable
-（4）设置RDMA流量所在队列的 DCQCN的NP/RP 使能；
+## 查看
+### mlnx_qos
+```bash
+#查询QoS
+mlnx_qos -i ${ETH}
+#示例:
+$ mlnx_qos -i eth05
+DCBX mode: OS controlled
+Priority trust state: dscp
+dscp2prio mapping:
+        prio:0 dscp:07,06,05,04,03,02,01,00,
+        prio:1 dscp:15,14,13,12,11,10,09,08,
+        prio:2 dscp:23,22,21,20,19,18,17,16,
+        prio:3 dscp:31,30,29,28,27,26,25,24,
+        prio:4 dscp:39,38,37,36,35,34,33,32,
+        prio:5 dscp:47,46,45,44,43,42,41,40,
+        prio:6 dscp:55,54,53,52,51,50,49,48,
+        prio:7 dscp:63,62,61,60,59,58,57,56,
+default priority:
+Receive buffer size (bytes): 20016,156096,0,0,0,0,0,0,
+Cable len: 7
+PFC configuration:
+        priority    0   1   2   3   4   5   6   7
+        enabled     0   1   0   0   0   0   0   0   
+        buffer      0   1   0   0   0   0   0   0   
+tc: 0 ratelimit: unlimited, tsa: ets, bw: 30%
+         priority:  0
+tc: 1 ratelimit: unlimited, tsa: ets, bw: 70%
+         priority:  1
+tc: 2 ratelimit: unlimited, tsa: ets, bw: 0%
+         priority:  2
+tc: 3 ratelimit: unlimited, tsa: ets, bw: 0%
+         priority:  3
+tc: 4 ratelimit: unlimited, tsa: ets, bw: 0%
+         priority:  4
+tc: 5 ratelimit: unlimited, tsa: ets, bw: 0%
+         priority:  5
+tc: 6 ratelimit: unlimited, tsa: strict
+         priority:  6
+tc: 7 ratelimit: unlimited, tsa: strict
+         priority:  7
+```
 
 # 400G 时代 DCQCN 开始接近物理极限
 在 100G 时代，DCQCN 是可调的。在 400G 时代，DCQCN 开始变得“脆弱”。
@@ -629,10 +724,10 @@ Incast 的瞬时队列深度和`fan-in × BDP` 强相关。
 ### 第三道物理墙：控制反馈周期没有变短
 
 DCQCN 依赖以下流程：
-1. 交换机标记 ECN
-2. 接收端生成 CNP
-3. CNP 返回发送端
-4. 发送端调整速率
+5. 交换机标记 ECN
+6. 接收端生成 CNP
+7. CNP 返回发送端
+8. 发送端调整速率
 
 这个闭环延迟是：
 ```bash

@@ -47,8 +47,91 @@ fnat64/fnat46(即ipv6到ipv4的转换)
 client和 sever 同设备(使用相同的ip)
 
 # TOA的原理
+TOA 的核心思想是：LB 在转发 TCP 报文时，将客户端的真实 IP/Port 封装在 TCP 选项字段中（TCP Option Kind=254），RS 端安装 toa.ko 内核模块，在 TCP 三次握手创建新 socket 时解析该选项并保存到 sock->sk_user_data，后续当应用程序调用 getpeername() 时，TOA 模块将替换返回的 IP/Port 为真实客户端地址。
+```bash
+Client (真实IP:Port) --> LB (SNAT+DNAT) --> RS (看到的是LB的IP:Port)
+```
+对于应用层来说，获取客户端真实 IP 是常见需求（如日志记录、访问控制、地域统计等）。TOA 和 UOA 就是解决这一问题的内核模块：
+(1) TOA: 针对 TCP 协议，通过自定义 TCP Option 传递真实客户端 IP/Port
+(2) UOA: 针对 UDP 协议，通过 IP Option 或私有 Option Protocol 传递真实客户端 IP/Port
+
+## 核心思想
+
+![](attachments/Pasted%20image%2020260506225744.png)
+
+TOA 的核心思想是：LB 在转发 TCP 报文时，将客户端的真实 IP/Port 封装在 TCP 选项字段中（TCP Option Kind=254），RS 端安装 toa.ko 内核模块，在 TCP 三次握手创建新 socket 时解析该选项并保存，后续当应用程序调用 getpeername() 时，TOA 模块将替换返回的 IP/Port 为真实客户端地址。
+
+> 注：当应用调用 getpeername() 时，内核调用 inet_getname()。TOA 模块通过 hook 该函数，检查 sk->sk_user_data，如果存在 TOA 数据则替换返回的 IP/Port 为真实客户端地址
+
+## 后端TOA内核模块的挂载点与触发时机
+
+TOA 使用直接**修改内核函数指针**表的方式实现 ==hook，而非 Netfilter hook==：
+```bash
+/* hook 过程 */
+inet_stream_ops_p = (struct proto_ops *)&inet_stream_ops;
+inet_stream_ops_p->getname = inet_getname_toa;  /* 替换 getname */
+
+ipv4_specific_p = (struct inet_connection_sock_af_ops *)&ipv4_specific;
+ipv4_specific_p->syn_recv_sock = tcp_v4_syn_recv_sock_toa;  /* 替换 syn_recv_sock */
+```
+
+TOA 模块通过直接替换内核函数指针来 hook 两个关键位置：
+
+|挂载点|原始函数|替换函数|触发时机|作用|
+|---|---|---|---|---|
+|ipv4_specific.syn_recv_sock|tcp_v4_syn_recv_sock|tcp_v4_syn_recv_sock_toa|TCP 三次握手完成创建新 socket|解析 TCP Option，保存真实 IP 到 socket|
+|inet_stream_ops.getname|inet_getname|inet_getname_toa|应用调用 getpeername()|用真实 IP 替换返回的 LB IP|
+|ipv6_specific.syn_recv_sock|tcp_v6_syn_recv_sock|tcp_v6_syn_recv_sock_toa|IPv6 TCP 三次握手完成|IPv6 场景解析 TOA|
+|inet6_stream_ops.getname|inet6_getname|inet6_getname_toa|IPv6 getpeername()|IPv6 场景替换地址|
+
+
 
 # UOA的原理
+
+UOA 是 TOA 的 UDP 版本。由于 UDP 头没有选项字段（不像 TCP 有 TCP Options），UOA 需要寻找其他方式携带真实客户端 IP/Port。UOA 提供了两种携带方式：
+
+1. IP Option 方式：将真实地址封装在 IPv4 选项字段中（类似 TCP TOA 的思路，但放在 IP 层）
+2. Option Protocol (OPP) 方式：使用私有 IP 协议号 (IPPROTO_OPT=0xf8) 封装，解决了三层交换机不支持 IP Option 的问题
+    
+关键设计差异（与 TOA 的根本区别）：
+- TCP 是面向连接的，一个 socket 对应一个五元组，TOA 可以将数据绑定到 sock->sk_user_data
+- UDP 是无连接的，同一个 socket 可能与多个对端通信，因此 UOA 不能绑定到 socket，而是维护一个哈希映射表 (uoa_map)，以 (saddr, daddr, sport, dport) 为 key 存储真实地址
+
+![](attachments/Pasted%20image%2020260506230331.png)
+
+## 后端UOA内核模块的挂载点和触发事件
+
+UOA 使用 Netfilter hook（而非 TOA 的函数指针替换方式）：
+
+```c
+static struct nf_hook_ops uoa_nf_hook_ops[] __read_mostly = {
+    {
+        .hook        = uoa_ip_local_in,
+        .pf          = NFPROTO_IPV4,
+        .hooknum     = NF_INET_LOCAL_IN,
+        .priority    = NF_IP_PRI_NAT_SRC + 1,  /* 在 NAT SRC 之后 */
+    },
+    {
+        .hook        = uoa_ip_forward,
+        .pf          = NFPROTO_IPV4,
+        .hooknum     = NF_INET_FORWARD,
+        .priority    = NF_IP_PRI_LAST - 1,
+    },
+};
+```
+
+![](attachments/Pasted%20image%2020260506230815.png)
+
+|挂载点|Hook 类型|函数|触发时机|优先级|
+|---|---|---|---|---|
+|NF_INET_LOCAL_IN (IPv4)|Netfilter|uoa_ip_local_in|报文到达本机（INPUT 链）|NF_IP_PRI_NAT_SRC + 1|
+|NF_INET_FORWARD (IPv4)|Netfilter|uoa_ip_forward|报文转发（FORWARD 链 ，可选）|NF_IP_PRI_LAST - 1|
+|NF_INET_LOCAL_IN (IPv6)|Netfilter|uoa_ip_local_in|IPv6 报文到达本机|NF_IP_PRI_NAT_SRC + 1|
+|NF_INET_FORWARD (IPv6)|Netfilter|uoa_ip_forward|IPv6 报文转发（可选）|NF_IP_PRI_LAST - 1|
+|nf_sockopt_ops|Netfilter sockopt|uoa_so_get|应用调用 getsockopt(UOA_SO_GET_LOOKUP)|-|
+
+FORWARD 链说明：默认只注册 LOCAL_IN 的 hook。如果需要 LB 和 RS 在同一台机器（非典型场景），可通过模块参数 uoa_hook_forward=1 启用 FORWARD 链。
+
 ## dpvs中 uoa option 信息添加
 
 dpvs 中 udp client 信息，又称之为 uoa option；下面主要从 dpvs 将 uoa option 信息插入到何处，插入的时机，插入的数据格式等几个方面进行展开讨论；
@@ -90,6 +173,7 @@ ipv4 uoa 信息 = code(1B):len(1B):cport(2B):cip(4B)
 不发生改变。
 
 ### 插入的时机
+
 dpvs 只会在一个udp 连接的前n个数据包中插入 `uoa option` 相关信息，默认n为3；
 
 
@@ -111,6 +195,9 @@ uoa中会基于当前的五元组查询会话，从会话取出 `client ip`，`c
 每个服务程序调用 `getsockopt` 时，会查询 uoa表项，查询到之后，会将uoa表项的超时时间进行刷新。
 
 
+# TOA和UOA对比
+
+![](attachments/Pasted%20image%2020260506230928.png)
 
 # UOA存在的问题
 ## 低概率获取不到cip的问题

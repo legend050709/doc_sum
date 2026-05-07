@@ -1,5 +1,19 @@
 ```table-of-contents
 ```
+# python3
+## hex函数
+```bash
+# python3
+Python 3.6.8 (default, Apr  2 2020, 13:34:55)
+[GCC 4.8.5 20150623 (Red Hat 4.8.5-39)] on linux
+Type "help", "copyright", "credits" or "license" for more information.
+>>> 12568508668259008512
+12568508668259008512
+>>> hex(12568508668259008512)
+'0xae6c500affff0000'
+>>> 0xae6c500affff0000
+12568508668259008512
+```
 # echo命令
 ## 介绍
 **echo命令** 用于在shell中打印shell变量的值，或者直接输出指定的字符串。

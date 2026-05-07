@@ -634,7 +634,7 @@ PCI Device ID是 硬件真实位置，对应 lspci，不会变（除非硬件拓
 
 
 2》 对于GPU内存而言，如果单个NUMA上的每个IB设备绑定了多个GPU（同RC下），是在每个GPU上申请内存，然后进行MR注册。`dev->gpu_mrs[gpu_id] = mr`, 后续传递是可以基于 gpu_addr 反差出 gpu_id，进而得到对应的MR的 lkey/rkey等信息。
-> 即：每个GPU内存都注册一个MR；另外，GPU的内存，KUCL内部不进行管理。本身GPU内存在CPU中也不可以访问。
+> 即：每个GPU内存都注册一个MR；另外，GPU的内存，UCL内部不进行管理。本身GPU内存在CPU中也不可以访问。
 ![](attachments/Pasted%20image%2020260425131810.png)
 
 
