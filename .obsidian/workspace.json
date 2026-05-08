@@ -314,9 +314,23 @@
               "icon": "lucide-file",
               "title": "RDMA流控和拥塞控制：4-流控之RC类型下IB传输层消息级别的端到端流控"
             }
+          },
+          {
+            "id": "8402ea32256f47dd",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "数据结构与算法/读者写者/读者写者问题.md",
+                "mode": "preview",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "读者写者问题"
+            }
           }
         ],
-        "currentTab": 21
+        "currentTab": 22
       }
     ],
     "direction": "vertical"
@@ -335,7 +349,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "UCX",
+                "query": "",
                 "matchingCase": false,
                 "explainSearch": false,
                 "collapseAll": true,
@@ -369,11 +383,12 @@
               "title": "文件列表"
             }
           }
-        ]
+        ],
+        "currentTab": 2
       }
     ],
     "direction": "horizontal",
-    "width": 207.5
+    "width": 622.5
   },
   "right": {
     "id": "a93c1244e0a44ed2",
@@ -463,13 +478,26 @@
       "command-palette:打开命令面板": false
     }
   },
-  "active": "f8d3522c4a8b50db",
+  "active": "8402ea32256f47dd",
   "lastOpenFiles": [
+    "数据结构与算法/生产者消费者/生产者消费者问题.md",
+    "数据结构与算法/读者写者/读者写者问题.md",
+    "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：4-流控之RC类型下IB传输层消息级别的端到端流控.md",
+    "数据结构与算法/算法：2-查找/二分查找.md",
+    "数据结构与算法/算法：2-查找/hash表：cuckoo布谷鸟hash表.md",
+    "数据结构与算法/算法：2-查找/LRU.md",
+    "数据结构与算法/算法：3-思想/算法：分治法思想.md",
+    "数据结构与算法/算法：3-思想/算法：动态规划思想.md",
+    "数据结构与算法/数据结构/二叉树/二叉树的理解实践.md",
+    "数据结构与算法/数据结构/队列/队列的理解与实践.md",
+    "数据结构与算法/数据结构/栈/栈的理解与实践.md",
+    "语言/go/golang的锁/golang的RWMutex读写锁.md",
+    "项目/ebpf、bpf、XDP/AF_XDP使用范例以及在DPDK中整合.md",
+    "网络之物理网络/dns/bind9/bind9的性能.md",
     "网络之高性能网络HPN/RDMA基础和理论/RDMA通信库中间件：7-设计自定义的通讯库中间件.md",
     "网络之物理网络/收发包/丢包：2-网络收包丢包问题.md",
     "网络之高性能网络HPN/GPU相关技术栈/基本概念：4-GPUDirect RDMA 和 GPUDirect Async.md",
     "问题定位查询/内存查看/内存问题：踩内存 & 内存写穿 & double-free & use-after-free & memory leak.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：4-流控之RC类型下IB传输层消息级别的端到端流控.md",
     "网络之高性能网络HPN/RDMA基础和理论/RDMA通信库中间件：1-综合概述.md",
     "网络之高性能网络HPN/RDMA基础和理论/RDMA通信库中间件：4-阿里RDMA通信库X-RDMA.md",
     "网络之高性能网络HPN/RDMA基础和理论/RDMA通信库中间件：2-UCX.md",
@@ -478,21 +506,8 @@
     "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：3-流控之以太网链路层基于优先级的流控PFC.md",
     "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：7-基于ECN的拥塞控制之DCQCN.md",
     "网络之高性能网络HPN/RDMA基础和理论/RDMA负载均衡：1-负载均衡概述.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA组网：2-RNIC的bond.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA流控和拥塞控制：6-拥塞控制之以太网络层ECN.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA负载均衡：2-AWS自研RDMA协议SRD.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA性能优化：1-性能指标.md",
-    "性能/PCIe的 backPressure问题.md",
-    "项目/工作总结/KS：1-通算RDMA通讯库总结.md",
-    "语言/预处理 & 编译 & 汇编 & 链接/elf/nm使用.md",
-    "问题定位查询/gdb and SystemTap/gdb学习：4-gdb常用方法.md",
-    "项目/DPDK/DPDK内存：1-内存管理概述.md",
-    "语言/预处理 & 编译 & 汇编 & 链接/动态库和静态库/静态库和动态库：1-高效生成动态库以及静态库供其他程序使用.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA通信库中间件：6-rsocket.md",
     "网络之高性能网络HPN/RDMA基础和理论/attachments/Pasted image 20260507115732.png",
     "网络之高性能网络HPN/RDMA基础和理论/attachments/Pasted image 20260507115620.png",
-    "问题定位查询/内存查看/内存问题：intel PT 技术.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA连接可扩展性：2-DCT和XRC以及RD.md",
     "项目/LB/attachments/Pasted image 20260506230928.png",
     "项目/LB/attachments/Pasted image 20260506230815.png",
     "项目/LB/attachments/Pasted image 20260506230331.png",
