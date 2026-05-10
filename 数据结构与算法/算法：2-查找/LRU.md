@@ -105,7 +105,7 @@ typedef struct ListNode {
  */
 typedef struct HashNode {
     int key;                /* 哈希键（哨兵节点此字段无意义） */
-    ListNode *list_node;    /* 指向双向链表中对应的节点 */
+    ListNode *list_node;    /* 指向双向链表中对应的节点；相当于是value */
     struct HashNode *next;  /* 哈希冲突链 */
 } HashNode;
 
@@ -157,12 +157,12 @@ static ListNode *list_create_node(int key, int value)
  *   [target] ⇄ [next]
  *   => [target] ⇄ [node] ⇄ [next]
  */
-static void list_insert_after(ListNode *target, ListNode *node)
+static void list_insert_after(ListNode *target, ListNode *newNode)
 {
-    node->prev          = target;
-    node->next          = target->next;
-    target->next->prev  = node;
-    target->next        = node;
+    newNode->prev       = target;
+    newNode->next       = target->next;
+    target->next->prev  = newNode;
+    target->next        = newNode;
 }
 
 

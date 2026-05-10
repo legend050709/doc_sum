@@ -5,7 +5,7 @@
 
 # XRC
 ## 为什么需要XRC
-当前的计算节点一般都有多核，因此可以运行多进程。在这样的计算节点组成的集群中，如果想用RC连接建立full mesh的全连接拓扑时，每个节点就需要建立N*p*p个QP(这里假设集群有N个节点，每个节点上有p个进程，需要让任何2个进程都连通)。当集群扩张，N和p同时增长时，一个节点所需的RC QP资源将变得不可接受。
+当前的计算节点一般都有多核，因此可以运行多进程。在这样的计算节点组成的集群中，如果想用RC连接建立full mesh的全连接拓扑时，每个节点就需要建立`N*p*p`个QP(这里假设集群有N个节点，每个节点上有p个进程，需要让任何2个进程都连通)。当集群扩张，N和p同时增长时，一个节点所需的RC QP资源将变得不可接受。
 
 XRC的思想是当一个进程想与某个远程节点的p个进程通信时不需要跟各个进程建立p个连接而只需要跟对端节点建立一个连接，连接上传输的报文携带了对端目的进程号(XRC SRQ)，报文到达连接对端(XRC TGT QP)时根据进程号分发至各个进程对应的XRC SRQ。这样源端进程只需要创建一个源端连接(XRC INI QP)就能跟对端所有进程通信了，这样所需总的QP数量就会除以p。
 
@@ -27,7 +27,7 @@ XRC INI QP和XRC TGT QP是一一对应的，host2上的每个进程在远端节�
 ## 为什么需要Dynamically Connected  (DC)
 ![](attachments/Pasted%20image%2020260401163031.png)
 
-UD虽然**连接扩展性**很好，但是不支持read/write单边语义。RC虽然支持read/write单边语义，但是连接扩展性不好。
+==UD虽然**连接扩展性**很好，但是不支持`RDMA read/write`单边语义。RC虽然支持read/write单边语义，但是连接扩展性不好==。
 DCT的初衷就是融合2者的优点，保持RC的read/write单边语义和可靠连接特性，同时像UD一样用一个QP去跟多个远端通信，保持良好的可扩展性。DCT一般用于稀疏数据场景。
 ```bash
 N 个节点全互联时，每个节点需要 (N-1) 个 RC QP
@@ -39,9 +39,8 @@ N 个节点全互联时，每个节点需要 (N-1) 个 RC QP
 
 具体问题：
 
-|   |   |
-|---|---|
 |问题|影响|
+|---|---|
 |QP 内存占用|每个 RC QP 在 HCA 内需要 QPC（数 KB～数十 KB），千节点规模下 MB 级内存|
 |HCA QP 上限|大多数 HCA 支持最多 64K QP，千节点集群接近上限|
 |QP context cache miss|HCA 内 QPC cache 内存有限；QP 数量多，context cache miss高，P99 延迟抖动大|
@@ -96,7 +95,7 @@ DC 的英文全称是 **Dynamic Connected**。
 > 接收侧：一个持久化的 DCT（DC Target QP）接收所有来源的消息
 
 ### 池化
-**DCT的池化**：每个DCT有一个responders(DCRs)池，新进的DC连接会在这个池里分配一个DCR(DC resource)。当池资源不足时DCT会向发起新建连接的DCI回复connection NAK(CNAK)，同时丢弃来自这个DCI的后续报文。
+**DCT的池化**：==每个DCT有一个responders(DCRs)池==，新进的DC连接会在这个池里分配一个DCR(DC resource)。当池资源不足时DCT会向发起新建连接的DCI回复connection NAK(CNAK)，同时丢弃来自这个DCI的后续报文。
 
 **DCI的池化**：当我们需要跟多个对端通信时，为避免一个DCI频繁建立/断开连接从而影响性能，一般需要建立一个`<dest DCI>`的哈希表，新连接走最老的DCI(LRU策略)。当池里DCI太少时，一个DCI会在不同的对端频繁切换，严重时建链报文数量会等同数据报文数量，这会大大恶化时延。
 
@@ -148,6 +147,10 @@ Node A                             Node A
 DC EP（即 conn） 创建只需对端 DCT 号 + GID，无需 QP 状态机迁移（无 INIT→RTR→RTS） ；
 新 conn 加入不影响已有 conn。
 
+> 注：这也是因此下面的：
+> - （1）发送端：DCI中的每个WQE需要指定目标的GID+DCT号；
+> - （2）接收端：DCT的CQE解析时，需要识别来源的DCI
+
 #### 硬件级可靠性
 
 与 RC 相同的 ACK/NACK/重传机制（RNR、Transport Retry 等保护机制完整）
@@ -194,9 +197,8 @@ ib_write_bw -d mlx5_0 -c DC -q 8 192.168.1.1
 
 ### DC/RC/UD对比
 
-|   |   |   |   |
-|---|---|---|---|
 |维度|RC|DC|UD|
+|---|---|---|---|
 |可靠性|✅ 硬件保证|✅ 硬件保证|❌ 不可靠|
 |QP 数量（N节点）|O(N)|O(1)|O(1)|
 |连接建立|慢（状态机迁移）|快（iface-level）|极快（无连接）|
@@ -208,7 +210,6 @@ ib_write_bw -d mlx5_0 -c DC -q 8 192.168.1.1
 |硬件要求|全部 IB/RoCE|ConnectX-4+|全部 IB/RoCE|
 |消息大小|任意|任意|≤ MTU（4096B）|
 |适用规模|小/中集群|大/超大集群|超大集群（不可靠）|
-
 
 
 ## 其他
@@ -227,9 +228,8 @@ UCX中实现了DC。
 ## 场景
 ### 推荐使用 DC的场景
 
-|   |   |
-|---|---|
 |场景|原因|
+|---|---|
 |AI 大规模训练（1000+ GPU）|稀疏通信模式（all-to-all 但每次只和少数节点通信）|
 |MPI 大规模集群|MPI AllReduce/Scatter/Gather，多对多，RC QP 数量爆炸|
 |参数服务器（PS-Worker）|PS 节点要连接所有 Worker，连接数量极多|
@@ -239,7 +239,17 @@ UCX中实现了DC。
 
 小集群：数十节点，推荐使用 RC（QP 数量可控，无 DCI 调度开销）。
 
+## 小结
+所以：
+==DC是UD和RC的组合，是每次**临时建立**的是一个**RC可靠连接**==。
+（1）具有UD的优点：
+1.1> O(1)建立连接，没有QP的INIT->RTR/RTS的状态转换，发送端DCI的每个WQE需要指定目标 DCT 号 + 地址信息（GID/LID），接收端的CQE中需要获取识别来源的DCI。
+1.2> 接收端只需要一个DCT连接，发送端的DCI连接可以复用。
+1.3> 固有延迟 +60ns（DCI 动态连接 Datagram seg + CQE解析）
 
+（2）具有RC的优点：
+1.1> 具有可靠性：硬件保证报文序号、ACK/NACK、重传
+1.2> 支持所有的RDMA操作，比如 RDMA Read/Write/Send/Atomic 全部操作
 
 # 软件层自实现的连接可扩展性
 ## per-thread的VRC

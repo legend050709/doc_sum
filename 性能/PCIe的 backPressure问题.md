@@ -87,7 +87,7 @@ ethtool -a eth03
 PCI Express技术， 是串行点对点互连协议， 提供用于可靠数据的高带宽可扩展解决方案传输。PCIe 用于用于不同模块之间的通信。网络适​​配器需要与 CPU 的内存（以及其他模块）进行通信。
 这意味着为了处理网络流量，应该对通过 PCIe 进行通信的不同设备进行良好配置。将网络适配器连接到 PCIe 时，它​​会自动协商网络适配器和 CPU 之间支持的最大功能。
 
-### pci宽度
+### pcie宽度
 PCIe 宽度决定了设备可并行用于通信的 PCIe 通道数。宽度标记为 xA，其中 A 是通道数（例如，x8 表示 8 通道）。 Mellanox 适配器支持 x8 和 x16 配置，具体取决于它们的类型。为了验证 PCIe 宽度，可以使用命令 lspci。
 ```text
 # lspci -s 04:00.0 -vvv | grep Width
@@ -97,7 +97,7 @@ LnkSta: Speed 8GT/s, Width x8, TrErr- Train- SlotClk+ DLActive- BWMgmt- ABWMgmt-
 ![](attachments/Pasted%20image%2020230731114705.png)
 >注：DevCap：表示设备的能力；DevCtl：表示协商后的结果；
 >LnkCap：表示协商后的能力；LnkSta：表示实际的状态。
-### pci速率
+### pcie速率
 PCIe 速度被标识为“代”，其中 2.5GT/s 称为“gen1”，5GT/s 称为“gen2”，8GT/s 称为“gen3”。PCIe 3.0即表示“PCI gen3”
 
 注意：除了支持的速度之外，各代之间的主要区别在于数据包的编码开销。对于第 1 代和第 2 代，在 PCIe 上发送的每个数据包都有 20% 的 PCIe 标头开销。这在第 3 代中得到了改进，其中开销减少到 1.5% (2/130)。
@@ -106,7 +106,7 @@ PCIe 速度被标识为“代”，其中 2.5GT/s 称为“gen1”，5GT/s 称�
 
 最大可能的 PCIe 带宽 =  PCIe宽度 * 速率。
 
-### pci的MPS和MRRS
+### pcie的MPS和MRRS
 #### lspci查看
 ```c
 查看方法：

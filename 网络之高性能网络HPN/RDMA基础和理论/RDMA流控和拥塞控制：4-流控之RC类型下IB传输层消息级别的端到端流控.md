@@ -2,7 +2,7 @@
 ```
 
 
-# 消息级别的端到端流控(END-TO-END (MESSAGE LEVEL) FLOW CONTROL)
+# RC类型：消息级别的端到端流控(END-TO-END (MESSAGE LEVEL) FLOW CONTROL)
 
 IB传输层，为**RC服务**提供了一种**端到端（或消息级别）的流控制能力**，响应方可利用此能力来优化其接收资源的使用。
 本质上，请求方必须拥有适当的**信用 (credits)** 才能发送请求消息。
@@ -41,7 +41,8 @@ IB传输层，为**RC服务**提供了一种**端到端（或消息级别）的�
 
 ## 信用从响应方到请求方的传输 (TRANSFERRING CREDITS)
 传输信用的机制有两种：
-1. **附带信用 (Piggybacked Credits)：**
+
+ **附带/夹带信用 (Piggybacked Credits)：**
     
     - 在**正常的确认包**的 AETH 字段中传输信用。
         
@@ -138,12 +139,12 @@ LSN 计算：LSN = MSN + Credit Value
 ## 小结
 
 
-# RC类型下基于消息级别的端到端流控存在的问题
+# RC类型：基于消息级别的端到端流控存在的问题
 ## SRQ不支持
 一是因为SRQ中的WQE为共享资源，共享SRQ的接收端无法向发送端的每个SQ分配一个准确的credit值。
 二是因为SRQ中并不维护对端SQ的信息，缺乏向SQ主动发送credit的机制。
 
-## 对头阻塞问题
+## 队头阻塞问题
 受限制的SEND操作会阻塞后续的不消耗对方Recv WQE的 WRITE、READ操作。即使WRITE/READ不消耗对方的WQE，也无法绕过前面受限的SEND。
 
 ## 硬件层的流控不感知软件层的资源
@@ -315,6 +316,7 @@ Piggyback = 把 FC 控制信号"塞进"正常数据消息的 header 高位，零
 ![](attachments/image%20(9)%202.png)
 
 ### UCX DC 传输层流控流程
+
 DC（Dynamic Connected）传输层与 RC 的本质区别：多个 EP 共享少量 DCI（DC Initiator QP），没有固定的 per-EP QP 用于回送 Grant。
 
 这带来以下挑战：
