@@ -35,11 +35,12 @@ NIC → GPU VRAM（直接）
 无 CPU 参与，无 memcpy
 
 
-### GPU/NIC/NVMe 通过PCIe插槽
+### GPU/NIC/NVMe 通过PCIe插槽接入系统
 
-### 主机内存(host memory) 如何连接
+### 主机内存(host memory) 如何接入系统
 **主机内存（DRAM）和 HBM 都不是通过 PCIe 插槽接入的设备**，它们和 PCIe 设备（GPU「计算」 / NIC「网络」 / NVMe「存储」）属于完全不同的连接体系。
-主机内存（DRAM）插在主板的 **DIMM 插槽**（内存条）。DRAM 是直接挂在 CPU 内存控制器上的，不走 PCIe
+
+==主机内存（DRAM）插在主板的 **DIMM 插槽**（内存条）。DRAM 是直接挂在 CPU 内存控制器上的，不走 PCIe==
 ```bash
 CPU（内存控制器 IMC）
         ↓
@@ -57,9 +58,9 @@ DRAM（主机内存）
 |协议|DDR|PCIe|
 |延迟|低|高|
 
-### HBM如何连接
+### HBM如何接入系统
 HBM = High Bandwidth Memory（高带宽内存），其连接方式和 DRAM 完全不同。
-HBM 是： **直接封装在 GPU / CPU 芯片旁边（甚至同一封装内）**；HBM 和 GPU 是“贴在一起”的，而不是插在主板上。
+HBM 是： **直接封装在 GPU / CPU 芯片旁边（甚至同一封装内）**；==HBM 和 GPU 是“贴在一起”的，而不是插在主板上==。
 
 ```bash
 GPU die
@@ -125,10 +126,10 @@ GDR与GDA是网络通信方向的连续创新，GDR解决数据路径问题，GD
 
 # GPUDirect RDMA
 ## 背景
-
+### 没有GDR时
 (1) 在传统的多节点或多设备通信架构中，当 GPU 需要将数据发送到网络（例如通过 InfiniBand 或 RoCE 网卡）时，典型流程如下：
 - `GPU → 主机内存（CPU 内存）`：通过 PCIe 总线拷贝数据。
-- `主机内存 → 网卡`：由 CPU 或 DMA 引擎将数据从内存传送到网卡。
+- `主机内存 → 网卡`：由 CPU 或 DMA 引擎将数据从内存传送到网卡（经过PCIe）。
 - `网卡 → 远程节点`：通过高速网络发送。
 
 ```bash
@@ -154,21 +155,22 @@ D2H: device to host, 即 GPU显存到主机内存
 ## 基本概念
 ### BAR（Base Address Register）
 
-PCIe 设备通过 BAR 向总线上的其他设备暴露自己的地址空间。
+==PCIe 设备通过 BAR 向PCIe总线上的其他设备暴露自己的地址空间==。
+
 比如：GPU 显存通过 **PCIe BAR（Base Address Register）** 对外暴露一块可被其他 PCIe 设备/CPU 直接访问的地址窗口。
 ```bash
 GPU 显存 → 通过 BAR1 映射为 PCIe 物理地址 → 网卡 DMA 引擎直接读写
 ```
 
-**两个 PCIe 设备（GPU + 网卡）在同一 PCIe 根复合体（RC: Root Complex）下**时，网卡的 DMA 引擎可以直接向 GPU 的 BAR( pha: DMA 的iova 经过 IOMMU后得到的物理地址) 地址发起 read/write，就像访问普通内存一样。
-
+**两个 PCIe 设备（GPU + 网卡）在同一 PCIe 根复合体（RC: Root Complex）下**时，网卡的 DMA 引擎可以直接向 GPU 的 BAR 地址发起 read/write，就像访问普通内存一样。
+ 
 
 GPU 有多个 BAR：
 
 |BAR|大小|内容|
 |---|---|---|
 |BAR0|16 MB|GPU 控制寄存器（MMIO）|
-|BAR1|最大 256 GB|**VRAM 全量映射**（Resizable BAR / Smart Access Memory 开启后）|
+|BAR1|最大 256 MB|**VRAM 全量映射**（Resizable BAR / Smart Access Memory 开启后）|
 |BAR3|通常 32 MB|扩展寄存器|
 
 BAR1 是核心：它把 GPU 的物理 VRAM 地址映射到 CPU 的物理地址空间（PA），让 PCIe fabric 上的任意 master（CPU、NIC）都能通过 PCIe 事务访问 GPU 内存。
@@ -191,14 +193,16 @@ BAR1 是核心：它把 GPU 的物理 VRAM 地址映射到 CPU 的物理地址�
 ```
 
 
-对 PCIe 设备来说，只要目标地址处于另一个设备暴露出来的 BAR 空间，读写方式与访问系统内存类似。 NVIDIA 文档明确指出，`GPUDirect RDMA` 依赖“从各 PCIe 设备视角看，物理地址保持一致”，并利用 GPU 的 BAR 窗口把一部分显存暴露给对端设备访问。
+==对 PCIe 设备来说，只要目标地址处于另一个设备暴露出来的 BAR 空间，读写方式与访问系统内存类似==。 
+
+NVIDIA 文档明确指出，`GPUDirect RDMA` 依赖“从各 PCIe 设备视角看，物理地址保持一致”，并利用 GPU 的 BAR 窗口把一部分显存暴露给对端设备访问。
 
 这意味着 GPUDirect 不是“网卡直接理解 CUDA 内存”，而是分成两层：
 (1) 用户态通信库识别一个指针属于 CPU 还是 GPU 地址空间。
 (2) 内核态通过 NVIDIA 驱动提供的 `nvidia_p2p_get_pages()` 等接口，把 GPU 页 pin 住，并把对应 BAR 映射交给第三方设备 DMA 使用。
 
 ### IOMMU
-#### RDMA主机内存的地址路径
+#### RDMA主机内存(PCIe设备访问主机内存)的地址路径
 
 正常 DMA（主机内存）： `NIC → IOVA → [IOMMU翻译] → PA → DRAM` 。 IOMMU管理这张映射表
 
@@ -211,7 +215,7 @@ RNIC 发起 DMA：
     Host Physical Address
 ```
 如上：
-（1）NIC DMA 看到的是 IOVA地址： 设备（NIC）使用 IOVA（I/O Virtual Address）发起 DMA
+（1）NIC DMA 看到的是 IOVA地址： ==设备（NIC）使用 IOVA（I/O Virtual Address）发起 DMA==
 （2）RNIC 只关心“最终能访问到内存”：IOMMU 查 **IOMMU Page Table**（每个设备独立的 domain）将 IOVA 翻译为真实物理地址（PA）
 
 #### GPUDirect RDMA的地址路径
@@ -242,6 +246,7 @@ IOMMU 不是挂在目标设备旁边的翻译器，它位于 **Root Complex（�
                                     │
                               (更多下游设备)
 ```
+
 **IOMMU 只作用于进出 Root Complex 的流量**，它不在 PCIe 交换机里，也不在设备旁边。
 
 **IOMMU 在主板/总线上**，而不是每个设备有一个（这样对于接入总线的任意设备，都有了虚拟地址）
@@ -278,7 +283,8 @@ NIC ──► Root Complex（IOMMU 在这里）──► PCIe Switch ──► G
 |**性能极差**|即便路径通了，P2P 流量从 Switch 绕回 Root Complex 再转出去，带宽和延迟都极差|
 
 #### PCIe routing
-只有 BAR 地址才能在 PCIe 网络中被正确路由到 GPU
+
+==只有 BAR 地址才能在 PCIe 网络中被正确路由到 GPU==；
 
 ```bash
 (1) 正确情况（用 BAR 地址）
@@ -416,8 +422,6 @@ GPU BAR 不是系统 RAM
 ```
 
 
-
-
 #### IOMMU类比
 把 IOMMU 想象成一个**门卫+地址翻译官**：
 
@@ -436,7 +440,7 @@ GPU driver（NVIDIA 驱动）做了什么？
 ### cudaMalloc 分配的内存：设备内存，GPU 独占
 **（1） CPU 侧调用**
 `cudaMalloc` 只能在 CPU 侧调用，不可以在GPU侧调用「GPU 内可以 malloc，但那是 device malloc（另一套机制），但是性能差」。
-高性能场景下，用：CPU cudaMalloc + GPU 使用。
+高性能场景下，用：CPU 中进行 cudaMalloc + GPU 使用。
 ```bash
 CPU 预分配（cudaMalloc）
    ↓
@@ -445,7 +449,7 @@ CPU 预分配（cudaMalloc）
 GPU 使用（索引/切分）
 ```
 
-**（2）分配的是设备内存**
+**（2）分配的是GPU设备内存**
 `cudaMalloc` 分配的是 **GPU 设备内存（Device Memory）**，物理上位于GPU显卡的 HBM2/HBM3 或 GDDR6 芯片上。
 
 **（3）GPU kernel（device code）可以直接访问该内存**
@@ -508,8 +512,6 @@ GPU 深度学习训练中，Tensor 的形状和大小在每个 iteration 都可�
 
 BFC有些类似于：DPDK的memheap；
 
-
-
 ### cudaMalloc 地址和GPU设备的绑定
 单机存在多个GPU设备，CPU上调用 cudaMalloc，涉及到 **分配在哪个 GPU → 能不能从指针反查设备 → RDMA 注册 MR 时如何处理**。
 
@@ -528,12 +530,13 @@ cudaMalloc(&ptr_b, size);   // → GPU 2 的 HBM
 int dev;  
 cudaGetDevice(&dev); // `cudaMalloc` 就是在这个 device 上分配
 ```
-`cudaSetDevice` 是线程私有的，两个线程互不干扰。如果**从未调用 `cudaSetDevice`**，默认 device 是 GPU 0。
+
+==`cudaSetDevice` 是线程私有（TLS变量）的，两个线程互不干扰==。如果**从未调用 `cudaSetDevice`**，默认 device 是 GPU 0。
 
 每次 `cudaSetDevice(n)` 实际上是：
-8. 在当前线程的 TLS（Thread-Local Storage）写入 `current_device = n`
-9. 关联或创建该 GPU 的 **CUDA Context**（若尚未创建）
-10. 后续所有 CUDA API 调用（malloc/launch/memcpy）都在该 context 下执行
+1》在当前线程的 TLS（Thread-Local Storage）写入 `current_device = n`
+2》关联或创建该 GPU 的 **CUDA Context**（若尚未创建）
+3》后续所有 CUDA API 调用（malloc/launch/memcpy）都在该 context 下执行
 ```c
 Thread TLS
 ┌─────────────────────┐
@@ -720,12 +723,12 @@ nvidia_peermem 是 NVIDIA 官方提供的 Linux 内核模块（从 CUDA 11.4 / 
 **（2）工作原理**
 NVIDIA 的 nvidia_peermem 内核模块是一个用于 RDMA（远程直接内存访问）系统的插件，主要功能是让 RDMA 网卡（NIC）能够直接访问 GPU 显存。具体工作原理如下：
 ```bash
-11. 注册接口：该模块会向 RDMA 核心子系统（ib_core）注册一个 peer_memory_client 接口，表明它可以处理特定类型的内存（这里是 GPU 显存）。
-12. 自动触发：当应用程序调用 ibv_reg_mr() 注册内存区域（MR）时，如果传入的地址属于 GPU 显存虚拟地址，系统会自动调用 nvidia_peermem 模块。
-13. 内存映射：nvidia_peermem 模块会通过 NVIDIA GPU 驱动（NVIDIA官方提供的专有GPU内核驱动模块，通常以nvidia.ko形式存在于Linux内核中）获取该显    存区域的 DMA 映射能力（支持两种模式：绕过 IOMMU 或使用 IOMMU 的地址转换）。
+1》 注册接口：该模块会向 RDMA 核心子系统（ib_core）注册一个 peer_memory_client 接口，表明它可以处理特定类型的内存（这里是 GPU 显存）。
+2》 自动触发：当应用程序调用 ibv_reg_mr() 注册内存区域（MR）时，如果传入的地址属于 GPU 显存虚拟地址，系统会自动调用 nvidia_peermem 模块。
+3》 内存映射：nvidia_peermem 模块会通过 NVIDIA GPU 驱动（NVIDIA官方提供的专有GPU内核驱动模块，通常以nvidia.ko形式存在于Linux内核中）获取该显存区域的 DMA 映射能力（支持两种模式：绕过 IOMMU 或使用 IOMMU 的地址转换）。
     a. IOMMU绕过模式：允许RDMA网卡直接访问GPU显存物理地址
     b. IOMMU转换模式：通过IOMMU硬件实现地址重映射（iova-->pha）
-14. 返回 IOVA：最终模块会提供一个 I/O 虚拟地址（IOVA），RDMA 网卡可以直接用这个地址进行 DMA 操作，无需 CPU 参与数据拷贝。
+4》 返回 IOVA：最终模块会提供一个 I/O 虚拟地址（IOVA），RDMA 网卡可以直接用这个地址进行 DMA 操作，无需 CPU 参与数据拷贝。
 ```
 
 **（3）作用细节：**
@@ -750,7 +753,7 @@ free_callback, data);
 
 // Step 3: 在需要 IOMMU 的平台上，额外做 DMA 地址映射
 nvidia_p2p_dma_map_pages(pci_dev, page_table, &dma_mapping);
-// ↑ 返回 dma_addresses[]，网卡可直接使用的 I/O 地址(DMA的iova)
+// ↑ 返回 dma_addresses[]，网卡可直接使用的 I/O 地址
 
   
 
@@ -803,9 +806,8 @@ GPU 显存可做 GDR 的总量受限于 BAR1 窗口（通常 256MB ~ 16GB，取�
 在数据处理的实时关键路径（热路径）中，应避免临时分配 GPU 内存并立即注册（如调用 ibv_reg_mr），否则会引入显著延迟，影响性能。
 
 
-|   |   |   |
-|---|---|---|
 |项目|普通 CPU 内存注册（MR）|GPU 显存注册（MR）|
+|---|---|---|
 |注册时间|微秒级|毫秒级（需要 CUDA 驱动介入）|
 |地址类型|普通虚拟地址|GPU 显存地址（cudaMalloc 返回）|
 |依赖|无额外内核模块|需要 nvidia_peermem.ko|
@@ -934,11 +936,11 @@ GPU Memory
 Server Node
 ```
 
-15. **准备 (Client端)**：GPU内的数据需要发送，CPU介入，将数据从GPU显存拷贝到主机内存的一个临时缓冲区。
-16. **装车 (Client端)**：CPU通知网卡，数据已在主机内存中。网卡通过DMA方式，将数据从主机内存拷贝到自己的网卡缓冲区。
-17. **运输**：网卡将数据打包，通过网络发送到Server端。
-18. **卸货 (Server端)**：Server端的网卡收到数据，同样通过DMA方式，将数据放入主机内存的临时缓冲区。
-19. **入库 (Server端)**：CPU再次介入，将数据从主机内存拷贝到目标GPU的显存中，供GPU计算使用。
+5. **准备 (Client端)**：GPU内的数据需要发送，CPU介入，将数据从GPU显存拷贝到主机内存的一个临时缓冲区。
+6. **装车 (Client端)**：CPU通知网卡，数据已在主机内存中。网卡通过DMA方式，将数据从主机内存拷贝到自己的网卡缓冲区。
+7. **运输**：网卡将数据打包，通过网络发送到Server端。
+8. **卸货 (Server端)**：Server端的网卡收到数据，同样通过DMA方式，将数据放入主机内存的临时缓冲区。
+9. **入库 (Server端)**：CPU再次介入，将数据从主机内存拷贝到目标GPU的显存中，供GPU计算使用。
 
 可以看到，数据在整个过程中被拷贝了四次，CPU在这两端都承担了繁重的搬运和协调工作。
 
@@ -964,9 +966,9 @@ Server Node
 ```
 启用GPUDirect RDMA后，一切都变得简单高效。
 
-20. **直装 (Client端)**：CPU只负责“告诉”网卡：“GPU显存里的数据已经准备好了，地址是XXX，你去取吧。”随后，支持GDR的网卡通过PCIe总线，直接发起一个RDMA读操作，将数据从GPU显存拷贝到自己的网卡缓冲区。
-21. **直运**：网卡将数据打包，通过网络发送到Server端。
-22. **直卸 (Server端)**：Server端的网卡收到数据包后，识别出这是一个RDMA操作。它根据数据包里的目标地址信息，通过PCIe总线，直接将数据写入目标GPU的显存中。
+10. **直装 (Client端)**：CPU只负责“告诉”网卡：“GPU显存里的数据已经准备好了，地址是XXX，你去取吧。”随后，支持GDR的网卡通过PCIe总线，直接发起一个RDMA读操作，将数据从GPU显存拷贝到自己的网卡缓冲区。
+11. **直运**：网卡将数据打包，通过网络发送到Server端。
+12. **直卸 (Server端)**：Server端的网卡收到数据包后，识别出这是一个RDMA操作。它根据数据包里的目标地址信息，通过PCIe总线，直接将数据写入目标GPU的显存中。
 
 在这个流程中，数据从源GPU显存直达目标GPU显存，主机内存被完全绕过，CPU仅在初始阶段下达指令，之后便不再参与。
 
@@ -1026,7 +1028,7 @@ nvidia-smi topo -m
 GPUDirect RDMA 还受 BAR 资源限制。NVIDIA 指出，GPU 显存通过 BAR1 等窗口暴露给外设，而 pin GPU memory in BAR 是高成本操作，可能达到毫秒级。 这也是高性能实现通常需要 lazy unpinning 和 registration cache 的原因，即尽量缓存已 pin 的映射，减少重复 pin/unpin 的开销。
 
 ### 同一个RC/socket下：RNIC和GPU在同一个RC/socket下
-
+RNIC和GPU在同一个RC/socket下
 
 # GPUDirect Async
 ## 介绍
@@ -1041,11 +1043,11 @@ GPUDirect Async is a technology that enables direct synchronization and communi
 
 **传统 GPU 网络通信**，通信流程如下：
 ```bash
-2. GPU 计算完成，需要将数据发送给其他节点。
-3. GPU 通知 CPU：通过中断或轮询告知 CPU“数据准备好了”。
-4. CPU 介入控制：CPU 收到信号后，执行上下文切换，运行通信库（如 MPI, NCCL），构建网络描述符（Work Queue Entries, WQEs）。
-5. CPU 触发网卡：CPU 将描述符写入网卡（NIC）的门铃寄存器（Doorbell），命令网卡开始传输。
-6. 数据传输：网卡通过 DMA 直接从 GPU 显存读取数据并发送（这一步是 GDR 做的，很快）。
+1》GPU 计算完成，需要将数据发送给其他节点。
+2》GPU 通知 CPU：通过中断或轮询告知 CPU“数据准备好了”。
+3》CPU 介入控制：CPU 收到信号后，执行上下文切换，运行通信库（如 MPI, NCCL），构建网络描述符（Work Queue Entries, WQEs）。
+4》CPU 触发网卡：CPU 将描述符写入网卡（NIC）的门铃寄存器（Doorbell），命令网卡开始传输。
+5》数据传输：网卡通过 DMA 直接从 GPU 显存读取数据并发送（这一步是 GDR 做的，很快）。
 
 ```
 

@@ -7,5 +7,6 @@
 
 # 参考
 ```bash
-
+# GPU集群NCCL Test结果解读
+https://mp.weixin.qq.com/s/GWTthOo6TGvmlJ0EbQz7Cg
 ```

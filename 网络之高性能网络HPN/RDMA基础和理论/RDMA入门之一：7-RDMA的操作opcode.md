@@ -496,7 +496,7 @@ RDMA 硬件需要为每个未完成的读请求（outstanding RDMA read）维护
 
 #### RDMA write with imm 是否需要提前post recv wr
 
-RDMA Write with Immediate 必须有 Recv WR，否则对端 QP 报错；但这个 Recv WR 只用于接收通知，不接收数据。
+RDMA Write with Immediate 必须有 Recv WR，否则对端 QP 报错；但==这个 Recv WR 只用于接收通知，不接收数据==。
 
 Recv WR 在这个场景中：
 - **不会接收数据 payload**；

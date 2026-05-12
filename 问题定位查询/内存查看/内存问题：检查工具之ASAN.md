@@ -234,10 +234,10 @@ if (*shadow && *shadow < ((unsigned long)addr & 7) + N); //N = 1,2,4
 ![](attachments/Pasted%20image%2020260503090818.png)
 
 ```bash
-5. 当访问 `a[0]`、 `a[1]` 的时候，发现对应的 shadow memory 为 0x00, 判定为安全
-6. 当访问 `a[2]`、 `a[3]` 的时候，发现对应的 shadow memory 为 0x00, 判定为安全
-7. 当访问 `a[4]`、 `a[5]` 的时候，发现对应的 shadow memory 为 0x00, 判定为安全
-8. 当访问 `a[6]` 的时候，发现对应的 shadow memory 不为 0x00, 那么访问这块内存可能是不安全的，需要更详细的判断才能确定访问是否安全
+1. 当访问 `a[0]`、 `a[1]` 的时候，发现对应的 shadow memory 为 0x00, 判定为安全
+2. 当访问 `a[2]`、 `a[3]` 的时候，发现对应的 shadow memory 为 0x00, 判定为安全
+3. 当访问 `a[4]`、 `a[5]` 的时候，发现对应的 shadow memory 为 0x00, 判定为安全
+4. 当访问 `a[6]` 的时候，发现对应的 shadow memory 不为 0x00, 那么访问这块内存可能是不安全的，需要更详细的判断才能确定访问是否安全
 ```
 
 已知当前访问的地址为 `addr`、访问字节数为 `size`, 且 `memToShadow(addr)` 不为 0. 显然，当前的访问操作涉及的地址范围为 `[addr, addr + size)`，而它实际安全的访问范围为 `[p, p + memToShadow(addr))`, 其中 `p` 为 `addr & ~0x7` 表示当前以 8 字节为单元的起始地址，`memToShadow(addr)`表示 `addr` 地址对应 shadow memory 的内存值。显然 `p <= addr`， `addr - p == (addr & 0x7)`.
@@ -307,8 +307,72 @@ Free函数会对整个内存区域染毒，同时将它放到隔离区(quarantin
 ## 如何使用ASAN
 基于Linux C/C++的程序，使用基于glibc提供的 `malloc/free`内存申请释放函数（非DPDK的内存申请释放），只需要在编译命令中加上`-fsanitize=address`检测选项就可以让`ASAN`在你的项目中大展神通。
 
-9. 打开了调试标志`-g`，这是因为当发现内存错误时调试符号可以帮助错误报告更准确的告知错误发生位置的堆栈信息，如果错误报告中的堆栈信息看起来不太正确，请尝试使用`-fno-omit-frame-pointer`来改善堆栈信息的生成情况。
-10. 如果构建代码时，**编译**和**链接**阶段分开执行，则必须在编译和链接阶段都添加`-fsanitize=address`选项。
+（1）打开了调试标志`-g`，这是因为当发现内存错误时调试符号可以帮助错误报告更准确的告知错误发生位置的堆栈信息，如果错误报告中的堆栈信息看起来不太正确，请尝试使用`-fno-omit-frame-pointer`来改善堆栈信息的生成情况。
+（2）如果构建代码时，**编译**和**链接**阶段分开执行，则必须在编译和链接阶段都添加`-fsanitize=address`选项。
+
+### 范例
+先写一个存在内存泄漏的程序 leak.cpp：
+```c
+#include <iostream>
+using namespace std;
+
+void func() {
+    int* p = new int[10];  // 动态分配数组，未释放
+    p[0] = 100;
+    // 无 delete[] p; 导致内存泄漏
+}
+
+int main() {
+    func();
+    cout << "程序结束" << endl;
+    return 0;
+}
+
+```
+#### 编译和运行
+（1）编译程序时添加 ASAN 选项：
+```bash
+
+g++ -g -fsanitize=address -o leak_asan leak.cpp  # -fsanitize=address 启用 ASAN
+
+若用 Clang：
+clang++ -g -fsanitize=address -o leak_asan leak.cpp。
+```
+
+（2）直接运行程序：
+```bash
+./leak_asan
+```
+
+程序运行结束后，ASAN 会自动检测内存泄漏并输出：
+```bash
+程序结束
+=================================================================
+==12346==ERROR: LeakSanitizer: detected memory leaks
+
+Direct leak of 40 byte(s) in 1 object(s) allocated from:
+    #0 0x7f1234567890 in operator new[](unsigned long) (/usr/lib/x86_64-linux-gnu/libasan.so.6+0xb0890)
+    #1 0x556789abcdef in func() /home/user/leak.cpp:5
+    #2 0x556789abd20 in main /home/user/leak.cpp:12
+    #3 0x7f1234123456 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x28083)
+    #4 0x556789abcb9 in _start (/home/user/leak_asan+0xcb9)
+
+SUMMARY: AddressSanitizer: 40 byte(s) leaked in 1 allocation(s).
+```
+
+直接指出泄漏的内存大小、位置（`leak.cpp:5`）和调用链，可读性强。
+
+#### 进阶选项
+
+- `export ASAN_OPTIONS=detect_leaks=0`：临时禁用泄漏检测（仅检测其他内存错误）。
+- `export ASAN_OPTIONS=log_path=asan.log`：将输出保存到文件。
+- `export ASAN_OPTIONS=fast_unwind_on_malloc=0`：启用精确栈回溯（默认快速回溯可能不准确）。
+
+#### 优缺点
+
+- 优点：运行速度快、检测能力强（支持多种内存错误）、无需额外工具（编译器内置）。
+- 缺点：需要重新编译程序、不支持部分老编译器、内存占用略高于普通程序。
+
 
 # DPDK ASAN
 

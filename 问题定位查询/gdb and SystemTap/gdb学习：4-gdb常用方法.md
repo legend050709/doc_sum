@@ -830,6 +830,8 @@ type = struct {
 $1 = (void *) 0x850e
 ```
 
+
+
 # 反汇编
 
 # 寄存器
@@ -963,6 +965,15 @@ gdb -p `pidof dpvs` --batch -ex 'set print pretty on'  -ex 'p /x dpvs_estats' -e
 
 ```
 
+# gdb常见问题
+## 无法设置断点
+程序未加 `-g` 编译，重新编译时添加 `-g`。
+
+##  变量显示 `optimized out`
+
+编译时优化级别过高（如 `-O3`），调试时用 `-O0` 或 `-O1`。
+## 无法生成 core 文件
+未开启 `ulimit -c unlimited`，或目录无写权限。
 
 # 参考
 ```bash
