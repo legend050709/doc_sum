@@ -50,4 +50,9 @@ NCCL 作为深度学习框架（如 PyTorch、TensorFlow）中的重要组件，
 ```bash
 # NCCL概述和NCCL-Test分析
 https://mp.weixin.qq.com/s/3lrLSYe7JhalTcXjpFQ0dA
+
+# NCCL官方文档
+https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/nccl1.html
+
+https://my.oschina.net/u/1459307/blog/1650028
 ```

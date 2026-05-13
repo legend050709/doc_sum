@@ -622,23 +622,23 @@ PCI Device ID是 硬件真实位置，对应 lspci，不会变（除非硬件拓
 
 **（3）单机多GPU和多RNIC，在同一个RC下匹配**
 
-![](attachments/multi_gpu_nic_rc_affinity.svg)
+![](../集合通信/attachments/multi_gpu_nic_rc_affinity.svg)
 
 整体架构：
-![](attachments/Pasted%20image%2020260425132737.png)
+![](../集合通信/attachments/Pasted%20image%2020260425132737.png)
 
 通过脚本的方式，识别单机上的IB设备（RNIC），以及 GPU；将IB设备和GPU配对在同一个RC下。
-![](attachments/Pasted%20image%2020260425132536.png)
-![](attachments/Pasted%20image%2020260425132342.png)
+![](../集合通信/attachments/Pasted%20image%2020260425132536.png)
+![](../集合通信/attachments/Pasted%20image%2020260425132342.png)
 
 1》 对于主机内存而言，如果单个NUMA上存在多个IB设备，其实是将同一块主机内存作为MR注册到每个IB设备中（每个IB设备创建一个PD）的，但是其实这块内存在使用的时候，通过DPDK的mempool以及memheap来管理，每次取一小块来使用的，保证不重复，不重叠；
 > 注：一个IB设备，只会属于一个NUMA，一个RC；一个Conn只会选择一个Dev作为出口/入口。
-![](attachments/Pasted%20image%2020260425132042.png)
+![](../集合通信/attachments/Pasted%20image%2020260425132042.png)
 
 
 2》 对于GPU内存而言，如果单个NUMA上的每个IB设备绑定了多个GPU（同RC下），是在每个GPU上申请内存，然后进行MR注册。`dev->gpu_mrs[gpu_id] = mr`, 后续传递是可以基于 gpu_addr 反差出 gpu_id，进而得到对应的MR的 lkey/rkey等信息。
 > 即：每个GPU内存都注册一个MR；另外，GPU的内存，UCL内部不进行管理。本身GPU内存在CPU中也不可以访问。
-![](attachments/Pasted%20image%2020260425131810.png)
+![](../集合通信/attachments/Pasted%20image%2020260425131810.png)
 
 
 ### cudaMallocManaged：统一内存
@@ -829,7 +829,7 @@ GPUDirect RDMA enables third-party devices (like RDMA NICs) to directly access G
 - **更高效率**：绕过 CPU 和  host memory
 - **更低延迟**：降低 latency，提高 bandwidth
 
-![](attachments/Pasted%20image%2020260428091850.png)
+![](../集合通信/attachments/Pasted%20image%2020260428091850.png)
 
 在没有 GDR 技术之前，GPU 需要先将数据从显存搬移到系统内存，然后再利用 RDMA 传输到目标节点，目标节点的 GPU 还需要再做一次数据从系统内存到显存的搬移动作。这一过程涉及多次内存拷贝和 CPU 参与，增加了延迟和开销。
 ```bash
@@ -1155,7 +1155,7 @@ NIC DMA data
 ```
 
 在这个模型下，整个数据传输的控制流程完全由**GPU内核中的CUDA线程**主导。
-![](attachments/deepseek_mermaid_20260316_2c6967.png)
+![](../集合通信/attachments/deepseek_mermaid_20260316_2c6967.png)
 
 ## GDA的关键组件协同
 

@@ -24,7 +24,7 @@ nvidia-smi topo -m
 
 lspci -t 
 ```
-![](attachments/Pasted%20image%2020260423152444.png)
+![](../集合通信/attachments/Pasted%20image%2020260423152444.png)
 
 
 # 参考

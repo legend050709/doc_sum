@@ -2,7 +2,7 @@
 ```
 
 # CPU和GPU的内存互访
-![](attachments/Pasted%20image%2020260423173805.png)
+![](../集合通信/attachments/Pasted%20image%2020260423173805.png)
 
 ## 三种机制
 

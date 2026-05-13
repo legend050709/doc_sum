@@ -176,59 +176,17 @@
             }
           },
           {
-            "id": "d46dd24b43f11945",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "网络之高性能网络HPN/集合通信/集合通信原语：1-总体介绍.md",
-                "mode": "preview",
-                "source": true
-              },
-              "icon": "lucide-file",
-              "title": "集合通信原语：1-总体介绍"
-            }
-          },
-          {
-            "id": "50eac025f8883b91",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "网络之高性能网络HPN/GPU相关技术栈/基本概念：4-GPUDirect RDMA 和 GPUDirect Async.md",
-                "mode": "source",
-                "source": true
-              },
-              "icon": "lucide-file",
-              "title": "基本概念：4-GPUDirect RDMA 和 GPUDirect Async"
-            }
-          },
-          {
-            "id": "10577f60da51e17d",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA入门之一：7-RDMA的操作opcode.md",
-                "mode": "source",
-                "source": true
-              },
-              "icon": "lucide-file",
-              "title": "RDMA入门之一：7-RDMA的操作opcode"
-            }
-          },
-          {
             "id": "e74d4d673dd1c70b",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA性能优化：1-性能指标.md",
+                "file": "项目/工作总结/KS：1-通算RDMA通讯库总结.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "RDMA性能优化：1-性能指标"
+              "title": "KS：1-通算RDMA通讯库总结"
             }
           },
           {
@@ -244,9 +202,101 @@
               "icon": "lucide-file",
               "title": "RDMA性能优化：1-性能指标"
             }
+          },
+          {
+            "id": "7d9721f8ac25b72f",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA组网：6-Ethernet与RDMA融合的挑战.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "RDMA组网：6-Ethernet与RDMA融合的挑战"
+            }
+          },
+          {
+            "id": "50eac025f8883b91",
+            "type": "leaf",
+            "state": {
+              "type": "image",
+              "state": {
+                "file": "网络之高性能网络HPN/集合通信/attachments/multi_gpu_nic_rc_affinity.svg"
+              },
+              "icon": "lucide-image",
+              "title": "multi_gpu_nic_rc_affinity"
+            }
+          },
+          {
+            "id": "dca4b310d4a87218",
+            "type": "leaf",
+            "state": {
+              "type": "image",
+              "state": {
+                "file": "网络之高性能网络HPN/集合通信/attachments/copy_engine_location.svg"
+              },
+              "icon": "lucide-image",
+              "title": "copy_engine_location"
+            }
+          },
+          {
+            "id": "ec35171d927ea958",
+            "type": "leaf",
+            "state": {
+              "type": "image",
+              "state": {
+                "file": "网络之高性能网络HPN/集合通信/attachments/deepseek_mermaid_20260316_2c6967.png"
+              },
+              "icon": "lucide-image",
+              "title": "deepseek_mermaid_20260316_2c6967"
+            }
+          },
+          {
+            "id": "ae4ead88783236e3",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "网络之高性能网络HPN/集合通信/高性能以太网络测试.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "高性能以太网络测试"
+            }
+          },
+          {
+            "id": "6bdd08bde8364502",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "网络之高性能网络HPN/集合通信/NCCL：1-概述.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "NCCL：1-概述"
+            }
+          },
+          {
+            "id": "6cc85708d5091c03",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "网络之物理网络/grpc/RPC：1-简介.md",
+                "mode": "preview",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "RPC：1-简介"
+            }
           }
         ],
-        "currentTab": 16
+        "currentTab": 19
       }
     ],
     "direction": "vertical"
@@ -265,7 +315,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "post_send",
+                "query": "",
                 "matchingCase": false,
                 "explainSearch": false,
                 "collapseAll": true,
@@ -299,11 +349,12 @@
               "title": "文件列表"
             }
           }
-        ]
+        ],
+        "currentTab": 2
       }
     ],
     "direction": "horizontal",
-    "width": 474.5
+    "width": 504.5
   },
   "right": {
     "id": "a93c1244e0a44ed2",
@@ -393,44 +444,44 @@
       "command-palette:打开命令面板": false
     }
   },
-  "active": "eb29d6ff78647f94",
+  "active": "6bdd08bde8364502",
   "lastOpenFiles": [
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA性能优化：1-性能指标.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA通信库中间件：7-设计自定义的通讯库中间件.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA性能优化：2-代码优化的建议和技巧.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA性能优化：3-设计一个高性能的RDMA系统.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA入门之一：7-RDMA的操作opcode.md",
+    "网络之高性能网络HPN/集合通信/NCCL-Tests：1-介绍.md",
+    "网络之高性能网络HPN/集合通信/MPI：1-概述.md",
+    "网络之高性能网络HPN/集合通信/并行计算：1-概述.md",
+    "网络之高性能网络HPN/集合通信/NCCL：2-分布式训练基础知识.md",
+    "网络之高性能网络HPN/集合通信/MPI & UCX & NCCL 的理解和概述.md",
+    "网络之高性能网络HPN/集合通信/DeepEP：1-整体介绍.md",
+    "网络之高性能网络HPN/集合通信/AI 技术原理与应用场景系列文章.md",
+    "网络之高性能网络HPN/集合通信/使用 DPDK 和 GPUdev 在 GPUs上增强内联数据包处理.md",
+    "网络之高性能网络HPN/集合通信/集合通信性能：1-性能指标.md",
+    "网络之高性能网络HPN/集合通信/集合通信：1-概述.md",
+    "网络之高性能网络HPN/集合通信/基本概念：1-GPU的基本组件和基本概念.md",
+    "网络之高性能网络HPN/集合通信/基本概念：2-GPU驱动软件栈介绍.md",
+    "网络之高性能网络HPN/集合通信/基本概念：3-GPUDirect RDMA 和 GPUDirect Async.md",
+    "网络之高性能网络HPN/集合通信/基本概念：4-PCIe 距离类型(PIX,PXB,PHB,NOD,SYS)和判断.md",
+    "网络之高性能网络HPN/集合通信/基本概念：5-SM和CUDA.md",
+    "网络之高性能网络HPN/集合通信/高性能以太网络测试.md",
+    "网络之高性能网络HPN/集合通信/工具：1-nvidia-smi.md",
+    "网络之高性能网络HPN/集合通信/attachments/deepseek_mermaid_20260316_2c6967.png",
+    "网络之高性能网络HPN/集合通信/attachments/copy_engine_location.svg",
+    "网络之高性能网络HPN/集合通信/attachments/multi_gpu_nic_rc_affinity.svg",
+    "网络之高性能网络HPN/GPU相关技术栈/基本概念：5-PCIe 距离类型(PIX,PXB,PHB,NOD,SYS)和判断.md",
     "网络之高性能网络HPN/GPU相关技术栈/基本概念：4-GPUDirect RDMA 和 GPUDirect Async.md",
-    "问题定位查询/抓包/pf_ring：1-理解.md",
+    "网络之高性能网络HPN/GPU相关技术栈/基本概念：3-GPU驱动软件栈介绍.md",
+    "网络之高性能网络HPN/集合通信/集合通信原语：1-总体介绍.md",
+    "网络之高性能网络HPN/GPU相关技术栈/基本概念：2-SM和CUDA.md",
+    "网络之高性能网络HPN/高性能互联技术与组网架构/SHMEM：1-总体介绍.md",
+    "网络之高性能网络HPN/高性能互联技术与组网架构/CXL：1-总体介绍.md",
+    "网络之高性能网络HPN/高性能互联技术与组网架构/组网：2-scale-out：智算中心网络常见组网拓扑分析.md",
+    "网络之高性能网络HPN/高性能互联技术与组网架构/组网：1-scale-up和scale-out.md",
     "问题定位查询/抓包/attachments/Pasted image 20260512144256.png",
     "问题定位查询/抓包/attachments/Pasted image 20260512144240.png",
     "问题定位查询/抓包/attachments/Pasted image 20260512144225.png",
     "问题定位查询/抓包/attachments/Pasted image 20260512142644.png",
     "问题定位查询/抓包/attachments/Pasted image 20260512142612.png",
-    "问题定位查询/抓包/tcpdump常见命令.md",
-    "网络之高性能网络HPN/集合通信/集合通信原语：1-总体介绍.md",
-    "网络之高性能网络HPN/集合通信/并行计算：1-概述.md",
-    "网络之高性能网络HPN/集合通信/集合通信性能：1-性能指标.md",
-    "网络之高性能网络HPN/集合通信/集合通信：1-概述.md",
     "网络之高性能网络HPN/集合通信/attachments/Pasted image 20260511202404.png",
     "网络之高性能网络HPN/集合通信/attachments/Pasted image 20260511202341.png",
-    "网络之高性能网络HPN/集合通信/attachments/Pasted image 20260511202203.png",
-    "网络之高性能网络HPN/集合通信/attachments/Pasted image 20260511202151.png",
-    "网络之高性能网络HPN/集合通信/attachments/Pasted image 20260511202028.png",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA工具：1-工具概述.md",
-    "数据结构与算法/读者写者/读者写者问题.md",
-    "网络之高性能网络HPN/高性能互联技术与组网架构/组网：2-scale-out：智算中心网络常见组网拓扑分析.md",
-    "问题定位查询/内存查看/内存问题：检查工具之ASAN.md",
-    "问题定位查询/gdb and SystemTap/gdb学习：4-gdb常用方法.md",
-    "问题定位查询/gdb and SystemTap/gdb学习：10-breakpoint断点.md",
-    "问题定位查询/gdb and SystemTap/gdb学习：11-多线程和多进程程序的调试.md",
-    "操作系统/进程 & 线程/进程：进程类型之zombie僵尸进程和orphan孤儿进程.md",
-    "网络之高性能网络HPN/集合通信/MPI：1-概述.md",
-    "网络之高性能网络HPN/集合通信/NCCL：1-概述.md",
-    "问题定位查询/gdb and SystemTap/gdb学习：3-debuginfo和调试信息.md",
-    "问题定位查询/gdb and SystemTap/gdb学习：2-gdb给程序添加symbols符号表.md",
-    "问题定位查询/gdb and SystemTap/gdb学习：1-gdb之符号表.md",
-    "问题定位查询/gdb and SystemTap/调试基础：1-coredump产生的原理及其配置.md",
     "数据结构与算法/算法：3-思想",
     "数据结构与算法/数据结构",
     "数据结构与算法/算法：2-查找/attachments",
