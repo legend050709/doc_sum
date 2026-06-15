@@ -378,8 +378,9 @@ LRUCache *lru_create(int capacity)
     return cache;
 }
 ```
+## LRU GET实现：访问
 
-## LRU get实现：查找
+## LRU PUT实现：插入
 ```c
 /**
  * lru_put - 插入或更新缓存项

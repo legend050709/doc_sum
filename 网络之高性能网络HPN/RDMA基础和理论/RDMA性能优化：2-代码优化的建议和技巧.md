@@ -842,7 +842,8 @@ send CQ和recv CQ分开；
 
 
 ## 避免使用许多分散/聚集sge条目
-在工作请求（发送请求或接收请求）中使用多个分散/聚集条目意味着 RDMA 设备将读取这些条目并将读取它们引用的内存。使用一个分散/聚集条目比使用多个分散/聚集条目提供更好的性能。
+在工作请求（发送请求或接收请求）中使用多个分散/聚集条目意味着 RDMA 设备将读取这些条目并将读取它们引用的内存。**使用一个分散/聚集条目比使用多个分散/聚集条目提供更好的性能**。
+如果是Sge过多，意味着DMA通过PCIe读取或者写入的次数会比较多。
 
 `Using one scatter/gather entry will provide better performance than more than one`.  数据尽量放在一块，一次读完。
 
@@ -955,7 +956,6 @@ RNIC是包含多个`Processing Unit(PU)`的，同时由于QP内的请求处理�
 Working with selective signaling in the Send Queue means that not every Send Request will produce a Work Completion when it ends and this will reduce the number of Work Completions that should be handled.
 ```
 
-
 一个QP执行多次`post_send`的场景，等多次SR(send request)的最后一次使用`signaled`标志来产生CQE（需要在创建qp的时候指定`sq_sig_all = 1`）
 
 在发送队列中使用选择性信号意味着并非每个发送请求在结束时都会产生工作完成，这将减少应处理的工作完成的数量。
@@ -971,7 +971,47 @@ Read Work Completions by polling，In order to read the Work Completion as soon 
 
 ### 以inline内嵌方式发送小消息
 
-小消息直接使用inline flag，在发送SR的时候data就放在请求命令中，不用去内存再取数据了。我们是可以控制inline data的size的。不同的RDMA device可能配置的方法不一样。使用的时候指定flag就行。
+#### 背景
+
+![](attachments/Pasted%20image%2020260617165032.png)
+
+网络接口卡 (NIC) 通常通过 PCI Express (PCIe) 插槽连接到服务器。
+PCIe I/O 子系统的主要导体是根复合体 (RC), RC 将处理器和内存连接到 PCIe 结构。
+
+连接到 PCIe 结构的外围设备称为 PCIe 端点。PCIe 协议由三层组成：事务层、数据链路层和物理层。
+(1) 第一层，即最上层，描述发生的事务类型。
+两种类型的事务层数据包 (TLP) 是相关的：`Memory Write(MWr)` 和 `Memory Read (MRd)`。与独立的 MWr TLP 不同，MRd TLP 与来自目标 PCIe 端点的带数据完成 (CplD) 事务相结合，其中包含发起者请求的数据。
+
+(2) 数据链路层使用数据链路层数据包 (DLLP) 确认 (ACK/NACK) 和基于信用的流控制机制确保所有事务的成功执行。
+只要发起者有足够的信用额度，它就可以发起事务。当它从邻居那里收到更新流控制 (UpdateFC) DLLP 时，它的信用额度就会得到补充。这种流控制机制允许 PCIe 协议有多个未完成的事务。
+
+##### ibv_post_send发送一块数据的整体流程
+（1）步骤 0：用户首先将消息描述符 MD （metadata：WQE）排队到 TxQ （QP的send queue）中。然后，网络驱动程序准备包含 NIC 标头和指向有效负载的指针的设备特定 MD。
+
+（2）步骤 1：使用 8 字节原子写入内存映射位置，CPU（网络驱动程序）通知 NIC 已准备好发送消息。这称为敲响门铃(DoorBell)。PCIE的RC 使用 MWr PCIe 事务执行门铃。
+
+（3）步骤 2：门铃响后，NIC 使用 DMA 读取获取 MD。MRd PCIe 事务执行 DMA 读取, 大小为64字节。
+
+（4）步骤 3：然后，NIC 将使用另一个 DMA 读取（另一个 MRd TLP）从已注册的内存区域获取有效负载。请注意，在 NIC 执行 DMA 读取之前，必须将虚拟地址转换为其物理地址。
+
+（5）步骤 4：一旦 NIC 收到有效负载，它就会通过网络传输读取的数据。成功传输后，NIC 会收到来自目标 NIC 的确认 (ACK)。
+
+（6）步骤 5：收到 ACK 后，NIC 将通过 DMA 写入（使用 MWr TLP）完成队列条目 (CQE；在 Verbs 中又称为 cookie；在 Mellanox InfiniBand 中为 64 字节）到与 TxQ 关联的 CQ。然后 CPU 将轮询此完成以取得进展。
+
+小结：每个提交的关键数据路径需要**一次 MMIO 写入**(CPU通知网卡的DoorBell)、**两次 DMA 读取(先读描述符,再读数据)**和**一次 DMA 写入(写入发送完成CQE)**。DMA 读取转换为昂贵的往返 PCIe 延迟。
+
+
+#### 解决
+内联Inline、Postlist、无信号完成(Unsignaled Completions)和编程 I/O(Programmed I/O ) 是 IB 的操作功能，有助于减少这种开销。
+
+##### Postlist
+IB 允许应用程序通过一次调用 ibv_post_send 来发布 WQE 链接列表，而不是每次 ibv_post_send 只发布一个 WQE。它可以将 DoorBell 响铃次数从 n 减少到 1。
+
+##### inline send
+发送数据时，CPU（网络驱动程序）将数据复制到 WQE 中。因此，通过对 WQE 的第一次 DMA 读取，NIC 也会获得有效负载，从而消除了对有效负载的第二次 DMA 读取。
+> 注：==inline send 即将 数据载荷部分，直接通过CPU拷贝的方式放入到了WQE中。NIC DMA取WQE的时候，直接获取到了数据载荷==。
+
+小消息直接使用inline flag，在发送SR(send WQE)的时候data就放在请求命令中，不用去内存再取数据了。我们是可以控制inline data的size的。不同的RDMA device可能配置的方法不一样。使用的时候指定flag就行。
 
 ![](attachments/Pasted%20image%2020250318163133.png)
 ```bash
@@ -980,6 +1020,21 @@ it eliminates the need of the RDMA device to perform extra read (over the PCIe b
 使用关系如上图所示： max_inline_data：表示能够内联发送的最大数据量（以字节为单位）。内联发送是指将较小的数据直接包含在发送操作中，而不需要额外的缓冲区。
 
 在支持内联发送数据的 RDMA 设备中，内联发送小消息将提供更好的延迟，因为它消除了 RDMA 设备（通过 PCIe 总线）执行额外读取以读取消息有效负载的需要。
+
+##### 无信号完成(Unsignaled Completions)
+IB 允许应用程序B 允许应用程序关闭 WQE 的完成，而不是为每个 WQE 发出完成信号，前提是每 n 个 WQE 中至少有一个发出信号(CQE)。
+关闭完成会减少 NIC 对 CQE 的 DMA 写入。此外，应用程序轮询更少的 CQE，从而减少取得进展的开销。
+
+##### BlueFlame
+
+BlueFlame 是 Mellanox 的编程 I/O 术语——它与 DoorBell 一起写入 WQE，从而切断 WQE 本身的 DMA 读取。
+> 注：BlueFlame 是在敲门铃的时候，写入了WQE，减少了DMA通过PCIe 取WQE的过程。
+
+请注意，**BlueFlame 仅在没有 Postlist 的情况下使用**。使用 Postlist，NIC 将 DMA 读取链接列表中的 WQE。
+
+##### inline send 和 BlueFlame 结合
+为了减少 PCIe 往返延迟的开销，开发人员通常将 Inlining 和 BlueFlame 一起用于小消息。它消除了两个 PCIe 往返延迟。
+
 
 ### 在 QP 的超时和 min_rnr_timer 中使用较低的值
 ```bash
@@ -1090,6 +1145,7 @@ RNIC是包含多个Processing Unit(PU)的，同时由于QP内的请求处理是�
 所以，我们可以在一个线程内**建立多个QP，充分利用多PU**来加速你数据处理，避免RDMA程序性能瓶颈卡在PU的处理上。
 
 ![](attachments/Pasted%20image%2020250318151444.png)
+
 > 我的理解：图中的 processor Pool 就是PU的Pool。 RNIC中的多个PU，就类似于 CPU中的多核。
 
 即：一个QP对应一个PU，这是我们对RNIC执行方式的一个简单建模。这个模型下，我们需要通过多QP来充分发挥多PU并行处理的能力，同时也要关注我们的操作减少PU之间的同步，PU之间同步对于性能有着较大的伤害。

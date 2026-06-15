@@ -17,7 +17,6 @@ IO（数据）流程可以绕过内核，即在用户层就可以把数据准备
 可以在远端节点CPU不参与(`RDMA read/RDMA write`)通信的情况下（当然需要持有访问远程某段内存的“钥匙”）对内存进行读写，也就是将==报文封装和解析的任务放到硬件中==完成（即：将之前内核协议栈的一部分功能 offload 到了硬件）。
 节省了CPU的开销，让CPU可以做其他更有价值的计算工作。
 
-
 # RNIC架构
 
 RNIC属于智能网卡的一类，是一种专门设计用于支持RDMA技术的网卡。它在硬件层面实现RDMA的功能，并提供用于数据传输的高性能网络接口。
@@ -302,7 +301,13 @@ MMIO或Doorbell方法传输跨越两个cache lines的两个WQE（阴影）
 
 #### 优化方法
 ##### Inline RECV
-Inline RECV（图7中间示意图）：如果X很小（0<X<64 B），NIC可以将Payload放入CQE中，之后由驱动程序将其复制到应用程序的指定地址。
+Inline RECV（图7中间示意图）：如果X很小（0<X<64 B），NIC可以将Payload放入Recv CQE中，之后由驱动程序将其复制到应用程序的指定地址。
+> 注：(1) 没有Inline RECV，对于send/recv操作，recv收到一块数据的流程：一次PCIe读，两次PCIe写。
+> 1> DMA 通过 PCIe Mem Read 读取一个Recv WQE；
+> 2> DMA 通过 PCIe Mem Write 写入数据到 Recv WQE指定的内存空间
+> 3> DMA 通过 PCIe Mem Write 写入Recv CQE到用户空间的内存
+> (2)  存在Inline RECV时，可以省去第二部将数据写入到Recv WQE指定的内存空间，可以直接将小数据写入到 Recv CQE中。
+
 CPU：拷贝小Payload产生的开销很小。
 PCIe：从2个DMA变为1个。
 

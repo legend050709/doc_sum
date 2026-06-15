@@ -5,7 +5,7 @@
 
 UCL(unified communication library) 是 RDMA 统一通讯库中间件。
 业务使用RDMA，可以发挥RDMA的`kernel bypss`,  `offload cpu`、`zero-copy`的特性。
-通过`UCL`，屏蔽了底层RDMA编程的众多概念以及编程复杂性，为业务提供`类socket`编程的接口，让业务快速、简易的享受到`RDMA`带来的低时延、高带宽的高性能网络服务。
+通过`UCL`，屏蔽了底层RDMA编程的众多概念以及编程复杂性，为业务提供`类socket`编程的接口，让业务快速、简易的享受到`RDMA`带来的==低时延、高带宽、低CPU使用率==的高性能网络服务。
 
 # 背景
 ## 为什么要实现基于RDMA的通讯库中间件
@@ -19,11 +19,10 @@ UCL(unified communication library) 是 RDMA 统一通讯库中间件。
 使用RDMA、用户态协议栈，可以通过零拷贝传输、bypass kernel (减少系统调用和上下文切换)来减少CPU的使用。
 另外，RDMA还可以通过`offload CPU`的方式减少CPU的损耗(即RDMA可以将协议栈放在了网卡上「比如报文的封装/解封装都是在网卡上」) 。  
 
-
 ##### 业务侧
 
 业务层：比如`rpc`通信，序列化和反序列化可以使用其他方式，比如RAW方式或者KV的方式取代PB，甚至不进行序列化和反序列化来达到节省CPU的效果。
-之前有听`RPC`的同学，通TOR下的RPC通信，序列化和反序列化可能消耗了一个`RPC`请求/响应一半的时延。
+之前有听`RPC`的同学，同TOR下的RPC通信，序列化和反序列化可能消耗了一个`RPC`请求/响应一半的时延。
 
 之前社科应该使用了Raw(没有序列化和反序列化)+rdma，相对于基于内核TCP的rpc性能提升了70%；然后百度开源的底层基于RDMA的brpc相对于基于内核tcp的brpc性能应该是提升了17%。
 
@@ -34,19 +33,19 @@ UCL(unified communication library) 是 RDMA 统一通讯库中间件。
 
 ### 业务需求
 
-业内除了阿里自研的**通算场景的通讯库**X-RDMA之后，其他的更多的是**智算场景（基于GPU）面向集合通信的通讯库**。
-一个比较大的原因就是这些头部厂商的业务起步早，业务因为性能的需求，更早的在业务层面自己就完成了RDMA的集成。
+业内除了阿里自研的**通算场景的通讯库**X-RDMA之后，其他的更多的是**智算场景（基于GPU）面向集合通信的通讯库 以及传统HPC下的接口（比如：libfabric以及UCX等等）**。
+一个比较大的原因就是这些**头部大厂的业务起步早，业务因为性能的需求**，更早的在业务层面自己就完成了RDMA的集成。
 但是KS的现状是此类基础服务业务暂未开始RDMA方面的建设工作，这就为通算场景的统一通讯库提供了契机。
 
 ![](attachments/image%20(9)%201.png)
 
 #### 分布式存储服务
-分布式存储服务，比如底层使用块存的服务，类似于Ceph的存储服务。
 
+分布式存储服务，比如底层使用块存的服务，类似于Ceph的存储服务。
 存放服务分为多层：端上(给业务「比如MySQL」提供虚拟的磁盘)、调度层（选择哪个节点进行落盘，多副本，纠错恢复）、底层落盘层（SPDK + Nvme）。
 
 （1）网络通信一：
-存储服务的端上(提供虚拟磁盘的服务)和存储调度层之间需要UTCP或者RDMA传输。
+存储服务的端上(计算节点：提供虚拟磁盘的服务)和存储调度层之间需要UTCP或者RDMA传输（如果两个节点的物理部署跨越了POD，在没有自研的RDMA的拥塞算法解决丢包以及选择性重传的情况下，就使用UTCP）。
 
 （2）网络通信二：
 存储调度层和底层落盘层之间的通信(同一个POD内，使用RDMA通信)。
@@ -61,7 +60,6 @@ KV cache: 类似于Memcached和Redis这种提供热数据的分布式缓存之�
 消息中间件：比如Kafka, 一边是生产者，一边是消费者，中间是分布式存储层集群（对于业务不可见），那么存储层各个节点之间的数据同步就需要高性的网络。
 
 #### 大数据
-
 大数据 = 数据量巨大 + 需要分布式计算；RDMA的一个特性，就是高带宽，低CPU使用率，很适合大数据中的大量数据的传输。
 
 ```bash
@@ -246,27 +244,50 @@ struct iovec {
 
 ### 高可用
 高可用主要体现在四个层面：
-（1） RDMA→UTCP 自动降级：当 RDMA 通道出现 CQ error、QP error 或心跳超时时，认为该conn的RDMA传输异常，转为UTCP传输协议，业务层完全无感知。
+
+**（1） 网口bond**
+**（2） RDMA层：多QP，一个QP存在问题，切换到另外一个QP**
+
+**（3） 传输层：RDMA→UTCP 自动降级**：
+当 RDMA 通道出现 CQ error、QP error 或心跳超时时，认为该conn的RDMA传输异常，转为UTCP传输协议，**业务层完全无感知（业务看到的fd不变）**。
 > 注：通过在UCL抽象层设置发送队列`txq`和接收队列`rxq`，实现传输层UTCP和RDMA的切换时的数据不丢，不重。
 > 发送端发送数据的时候，收到ACK或者send_CQE的时候，才会将数据从发送队列中剥离，否则会存在一个缓存。
 > 接收端接收数据的时候，会存在一个数据的去重。
 > 对于UTCP而言，可以通过seq来去重；对于RDMA而言，PSN实在BTH头，网卡进行卸载，CPU程序不可见，因此需要在每个发送的数据之前添加固定长度的头（带有Seq）信息。
 
-（2）QP Pool 复用：预创建 QP 池，建连时从池中取已初始化的 QP，避免 ibv_create_qp 的耗时和失败风险。连接断开时 reset QP 放回池中复用。
+**（4）QP Pool 复用**：
+预创建 QP 池，建连时从池中取已初始化的 QP，避免 ibv_create_qp 的耗时和失败风险。连接断开时 reset QP 放回池中复用。
+> 注： QP POOL是进程粒度的，其实主要是在Kpoll中进行查询，QP也是在Kpoll及其子线程中进行创建、删除、状态更改。
 
-（3）控制/数据路径分离：kpoll 控制线程处理建连、协商、心跳，kpoll的slave 线程异步执行 ibv_create_qp 等耗时操作，worker 线程专注数据收发。控制路径异常不拖垮数据路径。
+**（5）控制/数据路径分离**：
+kpoll 控制线程处理建链、协商、心跳，kpoll及其slave 线程异步执行 ibv_create_qp 等耗时操作，worker 线程专注数据收发。控制路径异常不拖垮数据路径。
 
-（4）多 SRQ 分组：连接按 ID 分组到不同 SRQ，单连接流量异常不影响全局。
+**（6）多 SRQ 分组**：
+连接按 ID 分组到不同 SRQ，单连接流量异常不影响全局。
 
 
 ### 高性能
 高性能主要体现在六个层面：
-（1） DPDK bypass kernel：PMD busy-poll 收包，无中断无上下文切换，syscall 开销从 ~5us 降到 ~0.1us。
-（2）RDMA 零拷贝 Put/Get：UCL_put 直接 RDMA Write 到远端内存，CPU 不参与数据搬运。Prealloc 模式下远端预分配 buffer，本地 RDMA Write 后通知远端读取。
-（3）NUMA-aware 三层内存：大页绑定 NUMA node → DPDK mempool per-lcore cache → thread cache 无锁 TAILQ，全链路避免跨 NUMA 访问和锁竞争。
-（4）锁最小化/无锁操作：数据路径几乎无锁——conn 查找 O(1) 数组索引、QP Pool SPSC ring、skbuff mempool per-lcore cache、malloc thread cache、VQP sq SPSC ring。
-（5）CPU 亲和性 + 批量操作：线程独占 CPU core busy-poll，ibv_poll_cq/mempool_get_bulk/txq_enqueue_burst 全部批量处理。
-（6）cache-line对齐：核心数据结构全部cache-line对齐；避免 false sharing：不同线程操作的数据不在同一 cache line；
+**（1） DPDK bypass kernel**：
+PMD busy-poll 收包，无中断无上下文切换，无系统调用，syscall 开销从 ~5us 降到 ~0.1us。
+
+**（2）大页内存 && RDMA 零拷贝 Put/Get**：
+UCL_put 直接 RDMA Write 到远端内存，CPU 不参与数据搬运。Prealloc 模式下远端预分配 buffer，本地 RDMA Write 后通知远端读取。
+
+**（3）NUMA-aware 三层内存 && 内存的cache**：
+mempool 固定大小内存：大页绑定 NUMA node → DPDK mempool per-lcore cache → thread cache 无锁 TAILQ，全链路避免跨 NUMA 访问和锁竞争。
+ucl_malloc非固定大小内存：thread-local 级别的cache && numa级别的共享cache && 本numa的heap动态管理的内存 && 跨numa的heap管理的内存作为兜底。
+
+**（4）锁最小化/无锁操作**：
+数据路径几乎无锁——conn 查找 O(1) 数组索引、QP Pool SPSC ring、skbuff mempool per-lcore cache、malloc thread cache、VQP sq SPSC ring。
+
+**（5）CPU 亲和性 + 批量操作**：
+线程独占 CPU core busy-poll，`ibv_poll_cq/ibv_post_send/mempool_get_bulk/txq_enqueue_burst` 全部批量处理。
+
+**（6）cache-line对齐 && prefetch预取 && 分支预测**：
+核心数据结构全部cache-line对齐；避免 false sharing：不同线程操作的数据不在同一 cache line；
+分支预测：likely和unlikely
+prefetch预取 ：
 
 ## 零拷贝进行发送和接收
 ### 背景
@@ -325,12 +346,12 @@ struct iovec {
 （1）数据路径对比
 ```bash
 (1) 内核 read/write：
-用户态buf ← memcpy ← 内核缓冲区 ← DMA ← NIC
-用户态buf → memcpy → 内核缓冲区 → DMA → NIC
+接收: 用户态buf ← memcpy ← 内核缓冲区 ← DMA ← NIC
+发送: 用户态buf → memcpy → 内核缓冲区 → DMA → NIC
 
 (2) 用户态零拷贝：
-用户态 DMA 缓冲区 ← DMA ← NIC
-用户态 DMA 缓冲区 → DMA → NIC
+接收: 用户态 DMA 缓冲区 ← DMA ← NIC
+发送: 用户态 DMA 缓冲区 → DMA → NIC
 无任何 memcpy
 ```
 
@@ -432,13 +453,13 @@ int epoll_create(int size);
 int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event); 
 int epoll_wait(int epfd, struct epoll_event *events,int maxevents, int timeout);
 ```
+
 自定义的 `epoll`，也需要提供类似于上面的接口。
 ```c
 int xxx_epoll_create(int size); 
 int xxx_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event); 
 int xxx_epoll_wait(int epfd, struct epoll_event *events,int maxevents, int timeout);
 ```
-
 
 ### 事件
 #### EPOLLIN 可读事件
@@ -502,11 +523,12 @@ ssize_t read_n(int fd, void *vptr, size_t n)
 业务需要发送数据的时候，会自动实时的给`send queue`进行`post WR「即补充wqe」`。
 
 ### Event模式
-event 模式下，worker线程中，会执行系统调用 epoll_wait；
+event 模式下，worker线程中，会执行**系统调用 epoll_wait**；
 将某个worker线程下的RDMA以及UTCP以及KTCP的事件模式，统统放入到一个epoll下；
 （1）通过调用一次epoll_wait即可感知到RDMA/UTCP/KTCP的事件。
 （2）有事件返回之后，后续才会执行各个传输层的处理；否则，就会阻塞在 epoll_wait，直到超时 
-2.1> 对于RDMA而言，传输层的处理就是`poll_cq`的操作 「基于CQE的wr_id --> recv buffer --->conn --->pconn, 将recv buff 加入到 conn的 recv list中」
+
+2.1> 对于RDMA而言，传输层的处理就是`poll_cq`的操作 「基于Recv CQE的wr_id(低48bit) --> recv buffer ptr--->conn --->pconn, 将recv buff 加入到 conn的 recv list中」
 2.2> 对于UTCP而言，传输层的处理就是 utcp的收发队列的处理（rte_eth_rx_burst/rte_eth_tx_burst等等）。
 2.3> 对于KTCP而言，传输层的处理无。
 
@@ -589,13 +611,10 @@ linux C多线程的大型程序中，分层设计。回调函数的妙用，使�
 linux C多线程的大型程序中，分层设计。回调函数的妙用，使用场景，作用。
 ```
 
-
-
 ### 分层中的回调函数
 
 设计大型 Linux C 多线程程序时，**分层设计**和**回调函数**是实现高内聚、低耦合、可扩展性和高并发性的两个关键技术。
 在这种架构中，**回调函数（callback functions）** 扮演非常重要的角色，常用于==解耦、异步事件处理、跨层通信==等。
-
 
 ####  回调函数的作用
 
@@ -713,7 +732,7 @@ int driver_register_event(int fd, uint32_t events, IoHandler handler, void *ctx)
 ## RDMA传输协议
 ### WQE、CQE、CONN、SKB 的关联
 有两个重要的字段，一个是WR_ID， 一个是 IMM_Data；
-其中WR_ID是为了本端中多个结构之间进行关联的重要字段；
+其中WR_ID是为了本端中多个结构（WQE/CQE/SKB）之间进行关联的重要字段；
 IMM_Data是本端的conn和对端的conn进行关联的重要字段；
 
 **本机(发送端)**：
@@ -727,8 +746,8 @@ WQE和CQE可以通过WR_ID进行关联，因为具有相同的WR_ID；
 在协商建链的过程中，会交换本端conn和对端conn的conn_id；
 目前的操作都是send_with_imm, write_with_imm, imm_data就是对端conn的conn_id;
 
-可以通过WC的imm_data就可以查找到对应的conn，因为 imm_data 就是本端的 conn_id，进而可以在这个CONN上产生IN事件，表明收到了数据；
-可以通过WC中的WR_ID，查找到post_recv时的SKB，此时这个SKB的地址已经被填写了数据，即收到了数据，可以将这个SKB挂到conn的skb_list中；
+可以通过Recv WC的imm_data就可以查找到对应的conn，因为 imm_data 就是本端的 conn_id，进而可以在这个CONN上产生IN事件，表明收到了数据；
+可以通过Recv WC中的WR_ID，查找到post_recv时的SKB，此时这个SKB的地址已经被填写了数据，即收到了数据，可以将这个SKB挂到conn的skb_list中；
 > 注：此时基于 WC中的WR_ID 得到 post_recv时的SKB，是无法基于 skb 中的conn_id 得到conn的，因为使用的是SRQ，skb 中的conn_id 无法提前设置。
 
 ![](attachments/deepseek_mermaid_20260317_16d554.png)
@@ -745,7 +764,7 @@ WQE和CQE可以通过WR_ID进行关联，因为具有相同的WR_ID；
   |
   |--(地址作为WR_ID)--> [WQE] --(含IMM_Data=对端conn_id)--> 硬件
                               |
-                              `--> [CQE] (含相同WR_ID) --(找到SKB)--> 进而找到CONN-->产生OUT事件
+                              `--> [CQE] (含相同WR_ID) --(找到SKB： skb中存储有conn-id)--> 进而找到CONN-->产生OUT事件
 
 接收端:
 [预注册SKB] --(地址作为WR_ID)--> post_recv
@@ -754,7 +773,7 @@ WQE和CQE可以通过WR_ID进行关联，因为具有相同的WR_ID；
                  |
                  +--(IMM_Data=本端conn_id)--> 找到CONN --> 产生IN事件
                  |
-                 `--(WR_ID)--> 找到预注册SKB (数据已填充) --> 挂入skb_list
+                 `--(WR_ID)--> 找到预注册SKB (数据已填充) --> 挂入conn的skb_list
 ```
 
 ![](attachments/deepseek_mermaid_20260317_015c02.png)
@@ -762,7 +781,7 @@ WQE和CQE可以通过WR_ID进行关联，因为具有相同的WR_ID；
 ###  RDMA write的支持
 
 #### 背景
-大数据(连续内存)的发送和接收：比如，存储场景，将来自于多个client的小内存，在BS（调度层）上gather为一个大内存，然后将大内存发送给CS（块存储）层，进行压缩存储。
+大数据(连续内存)的发送和接收：比如，存储场景，BS（block server）将来自于多个client的小内存，在BS（调度层）上gather为一个大内存，然后将大内存发送给CS（chunk server：块存储）层，进行压缩存储。
 **现在的问题**是：通讯库的block_size（send/recv模式时，需要提前rdma post_recv，这个就是每个recv块的大小） 如果设置的太大，会浪费内存；如果设置的比较小，那么recv时，由于多个block之间的内存不连续，业务如果需要连续的内存，就需要在业务层拷贝，浪费性能。现在业务希望将一个或者多个大片的连续内存发送出去，接收端是一大片连续的内存进行接收。
 
 #### 设计
@@ -771,12 +790,14 @@ UCL_put 用于发送大块内存，UCL_get用于接收大块内存，每个大�
 
 
 发送一个大的数据段，在此之前，发送端和接收端都需要使用send/recv 发送控制信息的请求和响应，然后才是发送端使用rdma write_with_imm发送具体的数据信息给对端。
-具体就是：发送端先用send发送控制信息(主要是接下来要发送的真实数据的大小，以及block_id、inner_block_id等信息），对端recv进行接收；
+具体就是：发送端先用send发送控制信息(主要是接下来要发送的真实数据的大小，以及 block_id、inner_block_id 等信息），对端recv进行接收；
+> 注意：block_id 是业务感知到的id，用于大块数据的发送和接收的关联；
+> inner_block_id 是通讯库内部的id，用于关联控制消息和数据消息。
+
 比如：UCL_put要发送1G的数据，在通讯库中，发送端先用send发送控制信息，告知要发送1G的大块数据，然后接收端收到控制信息之后，准备一个已经注册过MR的1G的内存，然后响应的时候告知这个地址，长度，key等供接下来的的rdma write使用；
-send/recv 完成控制信息的请求和响应之后，然后发送端用write_with_imm来发送数据信息；
+send/recv 完成控制信息的请求和响应之后，然后发送端用rdma_write_with_imm来发送数据信息；
 
-
-其实，用户其实不感知通讯库中的控制信息和数据信息，只是使用了UCL_put发送，UCL_get来接收。在通讯库将将其拆分为控制信息的发送和响应，以及数据信息的发送。
+其实，==用户其实不感知通讯库中的控制信息和数据信息，只是使用了UCL_put发送，UCL_get来接收==。在通讯库将将其拆分为控制信息的发送和响应，以及数据信息的发送。
 
 #### 问题和解决
 
@@ -793,7 +814,7 @@ send/recv 完成控制信息的请求和响应之后，然后发送端用write_w
 **发送端**：通过 inner_block_id 关联，收到的控制信息的响应，以及自己发送的控制信息请求。
 **接收端**：也可以通过这个 inner_block_id 来关联，收到的控制信息请求 以及后续收到的数据信息；每次收到控制信息请求时，解析得到 inner_block_id，在控制信息响应中将其原样返回给发送端。
 
-其中，发送端发送数据信息时，==inner_block_id 以及 peer_conn_id 合并， 可以作为 imm_data的一部分==，那么接收端就可以从imm_data中提取出 inner_block_id 以及本端连接的 conn_id，然后和之前收到了控制信息进行关联了。
+其中，发送端发送**数据信息**时，==inner_block_id 以及 peer_conn_id 合并， 可以作为 imm_data的一部分==，那么接收端就可以从imm_data中提取出 inner_block_id 以及本端连接的 conn_id，然后和之前收到了控制信息进行关联了。
 
 至于 inner_block_id 的管理，inner_block_id 是连接内部的一个成员，发送端的每个连接(即 fd)收到了一个 UCL_put 调用就会自增一次。
 ```c
@@ -843,7 +864,7 @@ UCL_poll：是暴露给业务（Client端）获取sever端大块数据的接口�
 
 ## UTCP传输协议
 ### 流分叉
-基于DPDK的用户态协议栈，其中一个重要的功能，就是流分叉(flow bifurcation), 通过`isolated`的`rte_flow`将DPDK的流量和内核的流量分开(即：只有匹配到`rte_flow`的规则的流量才会给DPDK应用，其他的流量都是给内核协议栈)；
+基于DPDK的用户态协议栈，其中一个重要的功能，就是流分叉(flow bifurcation), 通过`isolated`的`rte_flow： rte_flow_isolated`将DPDK的流量和内核的流量分开(即：只有匹配到`rte_flow`的规则的流量才会给DPDK应用，其他的流量都是给内核协议栈)；
 
 好处：
 ```bash
@@ -867,10 +888,10 @@ UCL_poll：是暴露给业务（Client端）获取sever端大块数据的接口�
 目前实现了一个对外提供类socket接口的点对点的通信库（抽象层：即UCL层），底层封装了基于DPDK的用户态TCP协议栈，以及RDMA协议；
 连接默认都是per-thread的，不会跨线程使用；每个conn的具体数据结构紧凑，即前面是UCL层(统一抽象层)相关的成员，紧挨着的是rdma层的结构，然后是utcp的结构，最后是ktcp的结构；
 默认创建一个socket是底层默认使用rdma协议，如果感知到rdma连接存在问题，则会切换到用户态tcp协议，使用curr_tp表示当前传输层的协议。
-如果使用rdma协议的话，还会额外创建一个基于内核tcp的tcp conn，进行协商建链，主要是协商QPN，MTU等信息；
+如果使用rdma协议的话，还会额外创建一个基于内核tcp的tcp conn，进行rdma协商建链，主要是协商QPN，MTU, Conn_id等信息；
 
 
-当 transport=TP_ANY 时，UCL 会同时初始化 RDMA 和 UTCP 两个传输层的私有数据（pdata[0] 和 pdata[1] 均有效），切换过程中，用户感知到的fd始终不变，底层的数据结构也是一个统一的数据机构。通过 curr_tp 字段决定当前使用哪个传输层。这是 fallback 能够快速切换的底层基础——两个传输层并不是互斥的，而是同时存在于同一个连接对象中。
+当 transport=TP_ANY 时，UCL 会同时初始化 RDMA 和 UTCP 两个传输层的私有数据（`pdata[0] 和 pdata[1]` 均有效），切换过程中，用户感知到的fd始终不变，底层的数据结构也是一个统一的数据机构。通过 curr_tp 字段决定当前使用哪个传输层。这是 fallback 能够快速切换的底层基础——**两个传输层并不是互斥的，而是同时存在于同一个连接对象中**。
 ```bash
 UCL_conn (fd=X, fb_enable=1)
 ┌──────────────────────────────────────────────────┐
@@ -898,7 +919,8 @@ UCL_conn (fd=X, fb_enable=1)
 （1）kpoll 控制线程创建 timerfd_hb，每 1 秒扫描所有 managed 连接：
 具体，就是kpoll给每个conn所在的worker发送消息，在worker中触发心跳的检查。
 
-（2）Worker 线程收到 UCL_CONN_EVENT_HB_CHECK 消息后，实际发送的是纯 RDMA Write（不带 Immediate Data），长度为 0 字节。
+（2）Worker 线程收到 UCL_CONN_EVENT_HB_CHECK 消息后，实际发送的是纯 RDMA Write（不带 Immediate Data），长度为 0 字节， base_ptr 为NULL。
+> 注：RDMA write的本端地址为NULL，长度为0；远端地址为NULL，长度为0， rkey为0；
 
 ```bash
 对比普通数据传输：
@@ -908,7 +930,7 @@ UCL_conn (fd=X, fb_enable=1)
 （心跳只是单向探测本端 QP Send Path 是否畅通，通过 CQE 完成时间差测量 RTT）
 ```
 
-(3) 心跳 Write CQE 完成时，如果存在CQE err 或不存在CQE ERR时，测量 RTT 并决策。
+(3) 心跳 Write CQE 完成时，如果存在CQE err 或不存在CQE ERR时，测量 RTT 并决策是否超时。
 
 ```bash
 kpoll thread (1s timer)
@@ -956,7 +978,7 @@ kpoll thread (1s timer)
 ### RDMA到UTCP的切换的触发条件
 #### 前提条件
 ```bash
-前提：fb_enable=1  &&  UCL_CONN_FLAG_UCONN_OK 已置位
+前提：fb_enable=1  && 当前的传输协议是RDMA &&  UCL_CONN_FLAG_UCONN_OK 已置位
         （即 UTCP 连接已经建立并就绪）
 ```
 
@@ -1125,8 +1147,6 @@ UCL conn层，设置接收缓冲区/队列（UCL_rxq），和发送缓冲区/队
 Ps: 收缓冲区/队列，和发送缓冲区/队列对后续的流控也是有作用的。
 ```
 
-![](attachments/UCL_buffer_flow.svg)
-
 
 ### UTCP到RDMA的回迁条件
 #### 心跳回迁检测
@@ -1199,6 +1219,10 @@ Ps: 收缓冲区/队列，和发送缓冲区/队列对后续的流控也是有�
 ## 单流的多路径(负载均衡)
 
 通过RDMA QP的多路径：
+1》多QP方式：单个fd多个qp
+2》多TOS方式：一个fd一个qp 或 多个 fd 多个qp，但是 qp 的 不同的wr 可以设置 不同的 TOS，交换机可以基于五元组+TOS进行hash选路吗？
+
+### 单连接多QP
 即sip和dip中间创建多个QP，由于每个QP的udp的五元组应该是不一样的，那么在以太网中基于五元组进行`ECMP`的`Hash`时，就会选择不一样的路径。
 
 **（1）单连接多QP+通讯库层的缓存排序**
@@ -1206,6 +1230,8 @@ Ps: 收缓冲区/队列，和发送缓冲区/队列对后续的流控也是有�
 
 **（2）单连接多QP+消息拆分+ RDMA write**
 类似于DDP：每个QP，直接将数据写入到指定的位置，那么就可以不在软件层进行缓存。
+
+### 单连接单QP多TOS
 
 
 ### 拥塞的感知
@@ -1305,10 +1331,10 @@ Ps: 收缓冲区/队列，和发送缓冲区/队列对后续的流控也是有�
 
 (2) TCP控制连接，得到conn所在的设备
 client 在tcp控制连接中，使用 connect 发起新连接选择 ib_context:
-       系统调用connect之后，通过getsockname就可以获取到local_ip, 可以基于local_ip，在多个设备中查找，找到当前连接所在的设备(ib_ctx)
+       系统调用 connect 之后，通过getsockname就可以获取到local_ip, 可以基于local_ip，在多个设备中查找，找到当前连接所在的设备(ib_ctx)
 
 server 在tcp控制连接中，使用 accept 创建新连接 选择 ib_context:
-       系统调用connect之后，通过getsockname就可以获取到local_ip, 可以基于local_ip，在多个设备中查找，找到当前连接所在的设备(ib_ctx)
+       系统调用 accept 之后，通过getsockname就可以获取到local_ip, 可以基于local_ip，在多个设备中查找，找到当前连接所在的设备(ib_ctx)
 
 (3) 基于QP的数据连接:
 在基于QP的数据连接中，需要创建QP, 就可以基于前面得到的conn的 ib_ctx信息，设置QP所属的PD
@@ -1341,14 +1367,13 @@ device_name / port / gid / gid_index / gid_type / mtu / 对应 IP 等
 （2）控制面（TCP）选择设备  
   
 client：  
-connect → getsockname → local_ip  
+	connect → getsockname → local_ip  
 server：  
-accept → getsockname → local_ip  
+	accept → getsockname → local_ip  
   
 然后：  
   
-local_ip → 映射到 GID  
-→ 映射到 ib_context + port + gid_index  
+local_ip → 映射到 GID  → 映射到 ib_context + port + gid_index  
   
 得到该连接所属的 RDMA 设备  
   
@@ -1488,7 +1513,7 @@ RC服务类型的`QP`「RNIC上需要维护带状态的QP」的数量存在过�
 
 #### 解决：延迟释放+引用计数
 
-**(1) RC服务类型**：
+##### RC服务类型
  `close 连接`的时候：
 《1.1》如果这个`conn`对应的QP，还存在没有完成（outstanding）的`send wr, recv wr`「每个`conn`中保存 `send_uncompleted`, `recv_uncompleted`, 表示这个conn上未完成的`SR`, `RR`数量」;
   则只是给这个conn打上标记(`closing标记`)，后续不允许通过这个`conn`继续调用`send/writev API`接口继续发送。
@@ -1498,16 +1523,20 @@ RC服务类型的`QP`「RNIC上需要维护带状态的QP」的数量存在过�
 
 《1.2》如果这个`conn`对应的QP，不存在没有完成（outstanding）的`send wr, recv wr`，则直接释放`conn`和对应的`QP`。
 
-**(2) SQP/VQP服务类型**：
+##### SQP/VQP服务类型
 SQP类型，多个连接可能关联到一个`RC`类型的`QP`上。
 那么，除了每个`conn`中保存 `send_uncompleted`, `recv_uncompleted`「表示这个conn上未完成的`SR`, `RR`数量」之外。
 每个`QP`中还存在`tx_refcnt`和`rx_refcnt`, 分别表示这个QP上关联了多少个存在`SR「send wr」`和`RR「recv WR」`的`conn`。
 
 只有，一个`QP`上的`tx_refcnt`和`rx_refcnt`都为0的时候，才允许对这个QP进行释放。
 
+###### VQP的爆炸半径大的问题
+多个conn底层服用一个或者几个物理qp，如果一个conn的数据超时（比如由于缺少流控，导致出现了RNR的CQE err），此时QP如果变为Err状态，接下来所有关联这个QP的conn都会受到影响。
+因此，多个conn不可以只关联到一个物理QP，可以考虑比如：100个conn关联到5个物理QP上，如果由于某个conn导致这个QP出现了Err状态，就将这个qp上的其他的conn迁移被备用的qp上。
+
 ## 优化
 ### QP资源池
-QP的创建，状态修改等比较耗时；如果新建较多，那么多个QP的创建就会耗时很久；
+QP的创建，状态修改，销毁释放等比较耗时；如果新建较多，那么多个QP的创建就会耗时很久；
 尽量不要在数据面进行QP的创建，可以在控制线程创建QP资源池（需要提前创建，否则首轮突发新建会耗时很久），减少QP创建的时间；
 
 之前测试过：
@@ -1519,7 +1548,7 @@ QP的创建，状态修改等比较耗时；如果新建较多，那么多个QP�
 （3）影响：首轮「此时qp的池子为空，qp的池子可以理解为qp释放后的缓存池子」批量突发新建1000个左右的连接，会出现第1000个连接，大概需要10s+才可以建立连接成功。
 ```
 
-解决方法：==QP的资源池 + QP资源池不足时，多个控制线程进行 QP的创建以及QP的状态切换==。
+解决方法：==QP的资源池 + QP资源池不足时，多个kpoll控制及其子线程进行 QP的创建以及QP的状态切换==。
 
 
 ### 预注册内存池：减少MR的注册和注销的开销
@@ -1692,8 +1721,6 @@ QP的 max_recv_sge 不可以设置为1。因为对于发送message类型的消�
 ## GDR支持
 略
 
-
-
 ## RPC支持
 ### 目标
 UCL通讯库对外提供两类接口：
@@ -1712,7 +1739,7 @@ KRPC相关：为了在KRPC时，基于RDMA来实现数据收发的零拷贝，�
     （pb文件中的 messag类似于普通的结构体；service类似于函数指针的结构体，每个成员都是函数）
 
 （2）pb中的service中的每个method都是自己实现的，这个没有问题。    
-   但是 method的 rpc调用，==依赖之前的传统的 一整套的网络框架(连接建立、method的注册、发请求、请求解析「收请求查找method并且调用」、发响应、异常处理「超时、部分发送等」、服务发现，服务异常感知、服务负载均衡等等)，现在就不能用了==；因为现在为了ZC，就需要自己实现这样的一套框架（目前可以仅仅只实现部分功能）。
+   但是 method的 rpc调用，==依赖之前的传统的 一整套的网络框架(连接建立、method的注册、发请求、请求解析「收请求查找method并且调用」、发响应、异常处理「超时、部分发送等」、服务发现，服务异常感知、服务负载均衡等等)，现在就不能用了==；因为现在为了ZC（zoro-copy），就需要自己实现这样的一套框架（目前可以仅仅只实现部分功能）。
 
 （3）新的框架：原有框架的实现现在要自己进行实现，包括错误处理，部分写处理、延迟发送、超时重传等等处理。
 
@@ -1750,19 +1777,21 @@ struct UCL_iovec {
 后面的 N-1 个 iov：其实就是发送端真实的要传递的数据；
 
 （5）接收者：readv
+
 ![](attachments/deepseek_mermaid_20260407_940398.png)
+
 （5.1）提前实现method方法并注册: 
 将各个service的method，提前自己实现，然后注册到map中，方便收到请求之后，查找到该方法后进行调用。
 
-（5.2）异步RPC回调：
+（5.2）==非阻塞异步RPC==：通过回调函数实现
 通过一个rpc_callback, 接收发送者发送过来的rpc头（包含 rpc_call_id, 要远程调用的 service_name + method_name, 头数据长度等） 以及 rpc消息体（包含序列化的messag，以及后续的数据「数据没有被序列化」）；
 
 （5.3）实现一个 buff 缓冲区（可以认为是多个接收buffer的链表）：
 因为对于RDMA而言，为了ZC，需要提前post_recv多个内存块(buffer block)，每收到一块每块内存块(buffer block)就会产生一个IN事件，但是什么时候将发送者发送的数据接收完，这个其实是不知道的。
 
-(5.4) 异步RPC回调+读取数据：
+(5.4) ==非阻塞异步RPC==：回调函数+读取数据
 
-(5.4.1)异步RPC回调:
+(5.4.1)异步RPC:
 通过一个rpc_callback, 接收发送者发送过来的rpc头（包含 rpc_call_id, 要远程调用的 service_name + method_name, 头数据长度等） + 序列化的message + 零拷贝的消息体（数据没有被序列化）；
 
 (5.4.2)读取数据：
@@ -1782,12 +1811,14 @@ client:
 （1）UCL_rpc_init （底层调用UCL_init 进行初始化: 指定传输协议，内存使用，资源申请，接收buff大小，worker数，ib设备，max_conns, qp/cq/srq depth, trace/日志配置）
 （2）通过UCL socket接口 UCL_epoll_create 创建一个epoll fd;
 （3）创建rpc channel(即一个连接)，传入参数server ip + port，以及UCL_rpc_chan_opts 配置；
-（4）通过UCL_rpc_call_create分配一个请求调用（rpc call：一个连接上可以有多个call）;
-    一个call上封装好了：rpc数据「call_header(call_id, 各部分长度) + message的序列化 + data部分」、call所属的channel 等等。
+（4）通过UCL_rpc_call_create分配一个rpc请求调用（rpc call：一个连接上可以有多个call）;
+    请求数据（非序列化） + 请求medata（序列化）：rpc数据「call_header(call_id, 各部分长度) +  message的序列化 + data部分」、call所属的channel 等等。
 
 （5）通过UCL_rpc_call_submit发送一个rpc call request：
 
-    指定call，对方的service+method，设置响应回调函数：UCL_rpc_callback；
+    指定call：本端要发送的数据，包含了序列化的message（在iov[0]中） + 数据部分（不进行序列化，在iov[1~N] 中）；
+    对方的service+method：对方要执行的函数
+    设置响应回调函数：UCL_rpc_callback（为了异步非阻塞）；
 
 （6）通过 UCL_epoll_wait 驱动工作线程，且指定call的reponse返回时会自动回调 UCL_rpc_callback
 
@@ -1803,7 +1834,8 @@ server:
 （3）创建rpc server，传入server ip + port，以及UCL_rpc_chan_opts 配置；
     rpc_server中包含：listen_channel, method_map, worker_id等等；
 （4）通过 UCL_rpc_register_method 注册服务方法:
-    包含 rpc server， service_name, method_name, rpc请求的回调函数： UCL_rpc_callback
+    包含 rpc server， service_name, method_name, UCL_rpc_callback
+    service_name + method_name：UCL_rpc_callback 就是method 对应的具体的执行函数；
 
 （5）通过 UCL_epoll_wait 驱动工作线程，在 UCL_rpc_callback 回调函数里处理 rpc request
 （6）发送则同客户端使用方式，通过调用UCL_rpc_call_submit函数提交 rpc response
@@ -1820,7 +1852,7 @@ server:
 ### 后续扩展
 #### 通用RPC设计
 
-KRPC 的定位是一个==通用 RPC 通信框架，专注于提供高性能的消息传输能力，而非绑定任何特定的序列化协议==。框架本身只负责 RPC 消息的路由与传输，不参与业务数据的序列化/反序列化。序列化协议的选择（Protobuf、FlatBuffers、自定义二进制协议等）完全由业务方决定。
+KRPC 的定位是一个==通用 RPC 通信框架，专注于提供高性能的消息传输能力，而非绑定任何特定的序列化协议==。框架本身**只负责 RPC 消息的传输**，不参与业务数据的序列化/反序列化。序列化协议的选择（Protobuf、FlatBuffers、自定义二进制协议等）完全由业务方决定。
 
 > 注：前面的带有PB的序列化和反序列化的RPC，也可以和这个通用RPC合并。可以在固定长度的RPC头中添加一个Flags字段，表示这个是通用的RPC（业务自己决定是否序列化，以及如何序列化）还是默认的PB序列化的RPC。如果是默认的PB序列化的RPC，那么相当于在通用RPC的基础上，自己实现了一部分业务RPC的逻辑（因为PB序列化为常见的序列化，大部分业务有这个就足够了）。
 
@@ -1836,13 +1868,13 @@ KRPC 的定位是一个==通用 RPC 通信框架，专注于提供高性能的�
 ==通用层不进行任何的序列化和反序列化；是否进行序列化，以及序列化的工作，交给业务来实现==。
 
 对于通用层来讲，readv收取一个固定长度头（rpc_hdr）+ payload（头中指定）长度的数据。
- 通用层也不感知 service 和 method，收到上面的信息之后；如果是异步的rpc处理，直接就会交给**通用的回调函数（rpc_cb）** 处理。这个`rpc_cb` 是在 `rpc`层实现的；
+ 通用层也不感知 service 和 method，收到上面的信息之后；如果是异步的rpc处理，直接就会交给**通用的接收回调函数（rpc_cb）** 处理。这个`rpc_cb` 是在 `rpc`层实现的；
  
  `rpc_cb` 内部，调用业务传递的业务层实现的 `cb_handle` 函数，传递的参数是：业务层的头指针，payload长度。
 
 **（2）业务侧中间层**：
 业务侧实现自己的 `cb_handle` 函数，在==业务头==(变长)中一般含有`service + method`（指定`service_name_len, method_name_len`），基于`service + method`可以找到自己实现的方法；
-业务侧实现自己的 `cb_handle` 函数，可以兼容处理业务的多个`service+method`方法，可以认为是==业务自己实现的一个统一的处理接口==。
+==业务侧实现自己的 `cb_handle` 函数，可以兼容处理业务的多个`service+method`方法，可以认为是业务自己实现的一个统一的处理接口==。
 
 
 **（3）业务侧处理逻辑**：
@@ -1882,7 +1914,7 @@ RPC线程模型有两种：
 
 ![](attachments/175018.png)
 
-RTC模型在低延迟的业务处理场景下具有极致性能，但当业务处理（callback）耗时较长时，会阻塞 IO 事件循环，导致吞吐下降和尾部延迟恶化。
+RTC模型在**低延迟的业务处理**场景下具有极致性能，但当业务处理（callback）耗时较长时，会阻塞 IO 事件循环，导致吞吐下降和尾部延迟恶化。
 Pipeline（Reactor）线程模型，将 IO 处理和业务处理分离到不同线程组，使得 IO 线程不被业务阻塞，保障网络层的及时响应。
 
 
@@ -2222,6 +2254,34 @@ message的序列化和反序列化的好处之一：增强可扩展性（比较�
 ==控制消息（调用频率低，关注扩展性）进行序列化和反序列化。
 数据消息（调用频率高，关注性能，后续变化少）直接传递结构体，跳过序列化和反序列化==。
 
+#### 流式RPC
+上面的实现的rpc都是简单RPC（一元RPC），也就是RPC请求和响应是一对一的；或者只有RPC请求，没有RPC响应。
+
+##### server端流式RPC
+服务端流式 RPC 是指客户端发送一个请求消息给服务端，服务端返回一个数据流，在这个流中可以包含多个响应消息。客户端从流中读取消息直到没有更多消息为止。
+
+client收到RPC响应之后，从在飞的flighting call中查找到对应的RPC 请求，不可以将其摘除，因为后续还是有RPC响应。
+
+##### client端流式RPC
+客户端流式 RPC 是指客户端发送一个数据流给服务端，在这个流中可以包含多个请求消息，服务端接收完整个流后返回一个响应消息。
+
+client发送了多个RPC请求，server只回复一个响应。
+> 即：client支持发送多个RPC请求；server端收到RPC请求之后，如果后续还有RPC请求，则不进行回复；直到收到最后一个RPC请求，才进行回复。
+
+对于server端：需要在server端的RPC的method处理函数进行特殊处理，只有收到最后一个RPC请求之后，才可以进行回复响应。
+对于client端：比如，上传一个大文件，支持断点续传。其实具体传到哪里了，新的client应该从哪里继续传输，这个应该是需要server告知client。
+
+##### 双向流式RPC
+
+
+#### 发布订阅模式
+发布者，订阅者，broker
+
+发布者：向broker 发送message 以及 message的标签Topic 给 broker；
+订阅者：向broker 发送关注的topic
+broker：对于某个topic的订阅者，向所有的订阅者发送其感兴趣的message
+
+
 # 可观测性 和 可运维性
 
 ## 可观测性
@@ -2244,14 +2304,14 @@ message的序列化和反序列化的好处之一：增强可扩展性（比较�
 
 **ebpf**： 对于DPDK/libverbs这种用户态的程序，通过ebpf Uprobe 或者 USDT探针 低侵入性的监控追踪（关键字段查询、关键路径耗时等）。
 ```bash
-uprobe: 用户态动态探针「代码无侵入，任意位置」。
+uprobe: 用户态动态探针「代码无侵入，任意位置，获取部分信息（参数、返回值、执行时刻、执行时间）」。
         触发时机：
 	    1》程序进入时：对于用户态的函数前插入指令断点，执行特定函数前，先到ebpf中执行执行的程序，获取信息，写入到map中；用户态程序从map中获取信息。
         2》函数退出时: 也可以执行指定的程序，这样就可以获取函数的执行时间。
         比如：ibv_post_send / ibv_poll_cq 以及 UCL 自己的内部函数打 uprobe；
 
 USDT（Userland Statically Defined Tracing）:  
-        用户态，在指定的代码位置预埋静态探针「代码预埋，指定API」，对于源码少量侵入。
+        用户态，在指定的代码位置预埋静态探针「代码预埋，指定API，获取信息丰富（自定义）」，对于源码少量侵入。
         需要在代码中主动添加几行代码（探针）。USDT 探针未挂载时是 NOP 指令，无性能影响；
         可以在 UCL 现有 Trace 体系的基础上，额外添加 USDT 探针。只需在关键路径加几行宏，未挂载时性能零损耗。
 
@@ -2294,6 +2354,137 @@ USDT 和 内核的 tracepoint相对：一个用户态，一个内核态，都是
 
 如果不限制并发度的情况下，按理一个线程，就可以给100G的带宽给打满。
 
+# AI提效
+## 闭环开发
+### skills
+（1）ssh-relay
+通过ssh登录开发机，需要首先登录堡垒机(relay), 通过ssh-relay skill工具，登录开发机或者线上机器。
+
+（2）case测试
+把client以及server的测试机器配置，RDMA IP, 各类的测试工具（比如：kperf， msgperf 等）的用法沉淀为skills，AI可以直接驱动client和server进行打流测试，发起带有参数的测试。
+
+### 工作流
+整体流程：
+```bash
+1> 在KUCL工程中提需求----> 
+2> AI 自动coding ---> 
+3> 建立临时分支，向gitlab提交代码----> 
+4> 编译机器上拉取代码，进行编译，产出二进制可执行文件----->
+5> 将二进制可执行文件，拷贝到client和server的测试机器上---->
+6> 执行 case测试的skills
+7> 输出测试结果报告
+```
+
+### skill 、subagent、workflow 之间的区别和联系
+
+Skill 是"AI 读的说明书"；Subagent 是"AI 调用的另一个 AI"；Workflow 是"AI 按顺序做事的剧本"。
+Skill 让 AI 知道怎么做；Subagent 让 AI 找别人帮忙做；Workflow 让 AI 按步骤把事做完。
+三者通常嵌套使用：Workflow 调用 Skill 获取知识、调用 Subagent 处理子任务。
+
+![](attachments/微信图片_20260624162647_47_3.jpg)
+
+![](attachments/微信图片_20260624162647_46_3.jpg)
+
+## TODO：Code Review 智能化
+### 痛点
+KUCL涉及到RDMA状态机，QP生命周期，CQ/SRQ、QP的引用计数、内存池等踩坑高发区。新人提交的PR经常因为这些细节被打回。
+
+### 做法
+建立KUCL专属的 `kucl-core-reviewer`的 subagent, 加载领域知识后审查diff。
+
+（1）RDMA状态机检查：
+QP的状态转移路径是否合法（`INIT->RTR->RTS`）, 错误路径回滚是否到正确的状态
+
+（2）线程模式检查
+操作设备的cq/srq是否在worker线程中；操作ctrl_data是否在kpoll线程中。
+
+（3）代码风格审查
+自动跑 `clang-format -i` 并报告diff。
+
+
+
+
+## TODO: 性能回归 + 自动二分定位
+### 痛点
+KUCL作为一个延迟敏感的高性能通讯库，提交的多个commit 可能会让P99 时延上升 5%，但是被功能测试漏过。人工跑perf 二分查找是哪个commit提交导致时延变大通常需要半天。
+
+### 做法
+（1）比较性能diff：
+新建一个perf-regresssion(性能回归)的skill，封装"基线baseline 以及 当前的HEAD 提交，跑性能测试工具（比如kperf、msgperf）--> 得到P50/P99/带宽 的  diff----> 一旦性能存在下降，并且下降幅度超过5%，则出发告警"的完整链路。
+
+（2）定位性能回退的commit：
+当AI检测到性能回退时，自动出发`git bisect(对半切分、 二分查找)`：在两个commit之间，反复的进行`编译 + 部署 + 跑性能测试用例`，二分定位到首个引起回退的 commit。
+
+（3）生成性能演进曲线：
+把perf性能数据，写入到时序的数据库中（或者简答的CSV），形成性能演进曲线。AI在 Core Review 时引入历史曲线给出趋势判断。
+
+
+### 预期收益
+把每次release 发版前的性能回归从1天压缩到一小时，且可在nightly 自动触发。
+
+## TODO：新人Onboarding Agent
+Onboarding Agent ≠ 一份新人手册，而是一个"专门带新人的 AI 学长"：
+
+它陪着新人，一步一步、动手实操、随时答疑、定期检验， 把"3-4 周才能上手"压缩到"3-5 天能交付"， 同时把老同事从重复的入职辅导中解放出来。
+
+![](attachments/微信图片_20260624165918_52_3.jpg)
+
+## TODO: 问题定位推断：失败日志--> root case 推断
+### 痛点
+测试机器跑kperf 失败，错误日志散落在多个机器，多个文件（KUCL_LOG_ERR + dmesg + ibv async event + 内核 RDMA 模块日志），新人面对一堆log经常无从下手
+
+### 做法
+（1）新增 kucl-log-doctor skill：
+- 自动拉取测试机器上的 `/var/log/kucl/*.log`、`dmesg`、`ibv_devinfo`输出；
+- 识别常见的错误模式（如：`cqe with error`, `qp transition failed`, `mr registration failed`, `hugepage 不足`， `PCIe BDF 找不到`）
+- 输出，根因 + 修复建议 + 相关的代码位置
+
+（2）把历史bug复盘（root cause + fix commit）做成知识库，AI在遇到类似问题时，引用过往的案例
+
+
+
+## AI 在系统软件中的应用的发展趋势预测
+### 能力演进：从代码补全到自主闭环
+
+（1）代码补全：
+时间窗口：2021-2023年；
+特征：单行或者单个函数的代码补全；
+
+（2）任务级的辅助：
+时间窗口：2024-2025年；
+特征：在多个文件内完成一个feature；
+
+（3）闭环开发：
+时间窗口：2025-2027年；
+特征：AI自主完成`改代码--->编译---->测试---->调优---->提PR`全链路，人类只是做code review。
+
+（4）系统级自主
+时间窗口：2027+；
+特征：AI长期维护一个子系统： 监控相关指标，自主提性能优化的PR，自主修复线上的bug。
+
+#### 注意
+通用LLM对于C内存安全、并发原语、硬件交互（PCIe/IBV）上的幻觉比业务代码严重的多。所以，领域知识沉淀（skill/subagent/workflow/Rag知识库）的价值远大于更换更强的模型。KUCL的`agents.md + skills`的路线是对的。
+
+
+### 协作方式的演进：人机分工的新边界
+未来的1-2年，工程师的工作越来越向`架构 + review + 调优`集中， AI接管 `实现 + 测试 + 部署  + 文档`：
+```bash
+人类                          AI
+┌──────────────────────────┐    ┌──────────────────────────┐
+│ • 业务需求拆解             │    │ • 代码实现（多轮）          │
+│ • 架构/接口设计            │ ←→ │ • 单元测试编写             │
+│ • 复杂 Bug 的根因判断      │    │ • 性能回归 + 二分定位       │
+│ • PR Review（最后一道闸）  │    │ • 文档同步                  │
+│ • 安全/合规决策            │    │ • Onboarding 陪伴          │
+└──────────────────────────┘    └──────────────────────────┘
+```
+
+### 风险和反共识
+下面的一些问题，需要警惕；
+
+![](attachments/微信图片_20260624164556_49_3.jpg)
+
+
 # 规划
 
 ![](attachments/image%20(12).png)
@@ -2303,6 +2494,8 @@ USDT 和 内核的 tracepoint相对：一个用户态，一个内核态，都是
 ![](attachments/image15.png)
 
 ![](attachments/image2.png)
+
+
 
 # 参考
 ```bash

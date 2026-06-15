@@ -44,21 +44,16 @@ ET（边缘触发）的核心是：**检测缓冲区状态的"变化沿"（edge�
 真正的 ET 是：“状态变化时通知，而不是一直通知。”
 
 #### 普通socket的读操作
-**普通socket的读操作**：
-（1）只要有新的数据到来，就会产生IN事件：
+
+##### 场景一：普通socket的读操作：只要有新的数据到来，就会产生IN事件
 - 当读缓冲区数据为==空变为非空==时，触发可读事件。
 - 当读缓冲区之前存在未读完数据，此时接收到新数据时：==依然触发可读事件==。
 - 当读缓冲区之前存在未读完数据，此时收到了FIN包，==依然触发可读事件==。
 
-（2）读缓冲区存在数据 + EPOLL_CTL_MOD修改：
+##### 场景二：普通socket的读操作：读缓冲区存在数据 + EPOLL_CTL_MOD修改：会产生IN事件
 - 当读缓冲区有数据可读，且进程对相应的文件描述符进行 ==`EPOLL_CTL_MOD` 修改 `EPOLLIN` 事件==时，触发可读事件。
 
-
-```bash
-在 边缘触发（ET）模式下：
-1. 缓冲区有未读数据时，新数据到达不会触发可读事件。
-2. 只有缓冲区从空变为非空时（例如数据首次到达，或数据被完全读空后再次到达新数据）才会触发一次事件。
-```
+##### 小结
 
 ![](attachments/Pasted%20image%2020260429145218.png)
 
@@ -80,12 +75,12 @@ ET（边缘触发）的核心是：**检测缓冲区状态的"变化沿"（edge�
 > 即：只要全连接队列（accept队列）有新的连接到来，就会产生IN事件。
 
 #### 普通socket的写操作
-**普通socket的写操作**：
-（1）从不可写到可写： 
-- 无论Client还是Server，三次握手成功，都会产生EPOLLOUT事件；
-- 当写缓冲区由不可写变为可写（满到非满）时，触发可写事件。
 
-（2）写缓冲区有空间可写 + EPOLL_CTL_MOD修改：
+##### 场景一：普通socket的写操作：从不可写到可写，产生OUT事件
+（1）无论Client还是Server，三次握手成功，都会产生EPOLLOUT事件；
+（2）当写缓冲区由不可写变为可写（满到非满）时，触发可写事件。
+
+##### 场景二：普通socket的写操作：写缓冲区有空间可写 + EPOLL_CTL_MOD修改，产生OUT事件
 - 当写缓冲区有空间可写，且进程对相应的文件描述符进行 `EPOLL_CTL_MOD` 修改 `EPOLLOUT` 事件时，触发可写事件。
 
 ![](attachments/Pasted%20image%2020260429151441.png)
@@ -1301,7 +1296,7 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);
 
 因为`epoll`本身没有明确提出当非阻塞的fd进行`connect`成功之后会返回什么样的信号；
 
-通过测试有如下结果：
+**通过测试有如下结果**：
 （1）当本地还没调用`connect`函数，却将套接字送交`epoll`检测，`epoll`会产生一次 `EPOLLOUT | EPOLLHUP`， 也就是产生一个值为`0x14`的`events`.
 （2）当本地`connect`事件发生了，但建立连接失败，则`epoll`会产生一次 `EPOLLIN | EPOLLERR | EPOLLHUP`， 也就是一个值为`0x19`的`events`.
 （3）当`connect`函数也调用了，而且连接也顺利建立了，则`epoll`会产生一次 `EPOLLOUT`， 值为`0x4`，即表明套接字已经可写。
@@ -1338,9 +1333,9 @@ if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len) < 0) {
 遵循 ==先`connect`，再 `epoll_ctl` ，最后 在 `connect` 后主动检查连接状态，而非依赖产生的事件==。
 
 ```bash
-4. 创建非阻塞 socket。
-5. 调用 `connect`，捕获 `EINPROGRESS` 错误。
-6. 将 socket 加入 `epoll` 监听 `EPOLLOUT` 事件。
+1》创建非阻塞 socket。
+2》调用 `connect`，捕获 `EINPROGRESS` 错误。
+3》将 socket 加入 `epoll` 监听 `EPOLLOUT` 事件。
 ```
 
 ```c
@@ -3284,7 +3279,9 @@ EPOLLRDHUP （需要主动在`epoll_ctl`时加入该`events「EPOLLRDHUP」`） 
 
 
 # 线程安全
-## epoll_ctr 对红黑树加锁
+## epoll_ctrl 对红黑树加锁
+
+epoll_ctrl 本身就是线程安全的函数。
 
 ```text
 只允许一个线程 在rbtree.insert()/delete();的时候
@@ -3304,7 +3301,7 @@ EPOLLRDHUP （需要主动在`epoll_ctl`时加入该`events「EPOLLRDHUP」`） 
 如上， `nginx` 的 `epoll_ctl` 系统调用，除了 `listen socket` 的操作是 `lt` 模式，其它的 `socket` 处理几乎所有都是 `et` 模式。
 
 ### `listen-sockfd`的`accept`的惊群问题的解决
-#### 方案一：EPOLLEXCLUSIVE 
+#### 方案一：LT + EPOLLEXCLUSIVE 
 `EPOLLEXCLUSIVE` 是 2016 年 4.5+ 内核新添加的一个 epoll 的标识（代码改动较小，详看：[github](https://link.zhihu.com/?target=https%3A//github.com/torvalds/linux/commit/df0108c5da561c66c333bb46bfe3c1fc65905898)）。
 
 它降低了多个进程/线程通过 epoll_ctl 添加共享 fd 引发的惊群概率，使得一个事件发生时，只唤醒一个正在 epoll_wait 阻塞等待唤醒的进程/线程（而不是全部唤醒）。
@@ -3344,8 +3341,8 @@ select 实现多路复用的方式是，将已连接的 Socket 都放到一个�
 ### select：fdset使用比特位图(bitsmap)可监听的fd个数有限
 select 使用固定长度的 BitsMap，表示文件描述符集合，而且所支持的文件描述符的个数是有限制的，在 Linux 系统中，由内核中的 FD_SETSIZE 限制， 默认最大值为 1024，只能监听 0~1023 的文件描述符。
 
-### select：不支持边缘触发
-select 和 poll 都不支持边缘触发，只有水平触发。
+### select：select 和 poll 不支持边缘触发
+==select 和 poll 都不支持边缘触发，只有水平触发==。
 epoll 支持 边缘触发 和 水平触发。
 
 ### poll：使用链表，无监听的fd个数有限

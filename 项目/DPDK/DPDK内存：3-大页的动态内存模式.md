@@ -207,7 +207,6 @@ numastat -m
 DPDK 22.11内存管理变化解析 （+++++++++）
 (http://blog.chinaunix.net/uid-28541347-id-5877488.html)
 
-
 # DPDK内存管理中动态模式和legacy模式
 https://xisme.cn/post/494103e2/
 ```

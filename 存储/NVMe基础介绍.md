@@ -4,6 +4,8 @@
 ## 介绍
 **Non-Volatile Memory Express (NVMe) 非易失性存储器高速接口协议**： 专为高性能 SSD 设计的本地通信协议（通过 PCIe 总线）。
 
+NVMe协议是为实现对FLASH介质的高性能访问而推出的标准协议，从最初用于访问PCIe FLASH SSD，逐渐演进到基于其他网络的远程访问。
+
 # NVMe SSD
 **SSD** = 固态硬盘（Solid State Drive），**NVMe** = Non-Volatile Memory Express（一种协议）
 **NVMe SSD** = 使用 NVMe 协议的 SSD，它不是一种“新型存储介质”，而是一种**访问协议 + 总线架构方式**。
@@ -42,7 +44,7 @@ NVMe:
 ```
 
 
-为什么 NVMe 会比 SATA 快很多：
+### 为什么 NVMe 会比 SATA 快很多
 ```bash
 ### 1️⃣ 队列并行度大幅提升
 SATA：1 queue × 32 depth  
@@ -80,7 +82,13 @@ NVMe SSD 是为多核 + 并行 + 低延迟时代设计的架构
 
 
 
-# NVMe-oF
+# NVMe-oF-Fabrics
+在当前大数据节点的背景下，存储节点不是独立存在的，海量的存储数据读写，需要高性能存储网络的支撑，由此产生了NVMe-oF。
+
+NVMe over Fabrics（NVMe-oF）是一种网络存储协议，它允许NVMe（Non-Volatile Memory Express）存储协议通过网络传输，而不是仅限于本地PCI Express（PCIe）总线。
+
+NVMe-oF的目标是将NVMe的高性能和低延迟特性扩展到网络存储环境中，使得远程主机能够像访问本地NVMe存储设备一样访问远程存储资源。
+
 ##  介绍
 **Non-Volatile Memory Express (NVMe)**：非易失性存储器高速接口协议
 专为高性能 SSD 设计的本地通信协议（通过 PCIe 总线）。
@@ -94,6 +102,43 @@ NVMe SSD 是为多核 + 并行 + 低延迟时代设计的架构
 
 **NVMe-oF = NVMe（高性能本地协议） + over Fabrics（网络扩展）** 它彻底改变了数据中心存储架构，使**网络存储性能逼近本地 NVMe SSD**，成为现代高性能存储网络的基石技术。
 
+
+## NVMe-oF 传输
+NVMe over Fabrics 要求底层 NVMe 传输提供可靠的 NVMe 命令和数据传递。NVMe 传输是一个抽象的协议层，独立于任何物理互连属性。
+
+![](attachments/Pasted%20image%2020260621134557.png)
+
+上图展示了 NVMe 传输的分类及其示例。
+
+NVMe 传输可能展现出一个内存模型、一个消息模型，或两者的结合。
+（1）内存模型是指通过执行显式的内存读写操作在网络节点之间传输命令、响应和数据。
+（2）消息模型则是指仅通过发送包含command capsules、response capsules和数据的消息在网络节点之间进行传输。
+（3）消息/内存模型则结合了消息和显式的内存读写操作，以在网络节点之间传输command capsules、response capsules和数据。数据可以选择性地包含在command capsules和response capsules和响应中。
+
+## NVMe-oF的传输协议
+
+在NVMe over Fabrics（NVMe-oF）中，不同的传输协议（见下图）在数据面中扮演着关键角色，它们各自有不同的工作原理和特点。以下是针对这几种传输协议的详细讲解：
+
+![](attachments/Pasted%20image%2020260621134754.png)
+
+### TCP （NVMe-oF-TCP： NVMe-oT）
+
+TCP是互联网协议族中的一个核心协议，提供可靠的、面向连接的数据传输服务。在NVMe-oF中，NVMe over TCP（NVMe-oT）使用TCP作为传输层协议，通过标准的以太网传输NVMe命令和数据。
+
+NVMe-oF-TCP的优势在于其广泛的兼容性和易于部署，因为它可以在现有的TCP/IP网络基础设施上运行，无需特殊的硬件支持。
+然而，TCP的性能通常不如RDMA等专用协议，因为它在传输过程中需要更多的CPU参与，增加了延迟和处理开销。
+
+### RDMA（NVMe-oF-RDMA）
+
+RDMA是一种网络协议，允许计算机在网络中直接访问另一台计算机的内存，而无需远程计算机的操作系统参与。这减少了CPU的负担，降低了延迟，并提高了数据传输效率。
+
+在NVMe-oF中，RDMA可以通过多种网络技术实现，如InfiniBand、RDMA over Converged Ethernet（RoCE）和Internet Wide Area RDMA Protocol（iWARP）。
+
+RDMA的优势在于其极低的延迟和高吞吐量，适合高性能计算和数据中心环境。使用RDMA的NVMe-oF需要支持RDMA的网络硬件和适配器，这可能需要额外的投资和配置。
+
+### FC（Fiber Channel，光纤通道）
+
+
 ## 技术实现关键
 - **协议映射**： NVMe 命令集（用于本地 PCIe 通信）被封装到网络传输协议中，例如：
     - **NVMe over RDMA**（如 RoCE v2、InfiniBand）：利用 RDMA 技术绕过 CPU 和内核协议栈，实现零拷贝、低延迟。
@@ -103,6 +148,10 @@ NVMe SSD 是为多核 + 并行 + 低延迟时代设计的架构
 - **端到端架构**：
     - **Host（Initiator）**：发起 NVMe 命令的客户端。
     - **Target**：提供 NVMe 存储服务的远程设备（如存储阵列）。
+
+
+
+
 
 # NVMe和SPDK
 

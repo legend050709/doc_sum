@@ -1,7 +1,7 @@
 ```table-of-contents
 ```
 # 介绍
-链路聚合控制协议（LACP）是一种用于将多个物理链路聚合为一个逻辑链路的协议，以提高带宽和冗余。
+链路聚合控制协议（LACP： Link Aggregation Control Protocol）是一种用于将多个物理链路聚合为一个逻辑链路的协议，以提高带宽和冗余。
 
 # 基本概念
 ## 聚合组（Bonding Group）

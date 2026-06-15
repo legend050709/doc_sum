@@ -1,5 +1,10 @@
 ```table-of-contents
 ```
+# 介绍
+lldp(Link Layer Discovery Protocol)  链路层发现协议, 工作在 L2（数据链路层）。
+用于：告诉网络邻居："我是谁，我连接到了哪里。"
+它属于网络设备之间的"自我介绍"协议。
+
 
 # lldp命令
 实现交换机端口的抓取，目前我知道的有两种工具，一种是 lldpad，另一种是 lldpd。

@@ -163,7 +163,6 @@ void handle_request(coroutine_ctx_t *ctx) {
 注：通常会在每次 `yield`（协程挂起） 后，或者每运行 N 个协程后，强制插入一次 `epoll_wait(timeout = 0)`，以保证网络IO不会因为多个长计算任务而饿死。比如，有1000个协程，只有一个协程在等待IO。
 ```
 
-
 #### 协程框架封装底层IO多路复用
 协程框架（如 Go runtime、libco）会封装底层 IO 多路复用（epoll/select），核心流程：
 

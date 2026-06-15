@@ -5,7 +5,7 @@
 # 原始的内核协议栈
 ## iptables/netfilter的问题
 
-ptables/netfilter 是上个时代Linux网络提供的优秀的防火墙技术，扩展性强，能够满足当时大部分网络应用需求。但该框架也存在很多明显问题：
+iptables/netfilter 是上个时代Linux网络提供的优秀的防火墙技术，扩展性强，能够满足当时大部分网络应用需求。但该框架也存在很多明显问题：
 
 - （1）路径太长
 netfilter 框架在IP层，报文需要经过链路层，IP层才能被处理，如果是需要丢弃报文，会白白浪费很多CPU资源，影响整体性能；
@@ -75,7 +75,7 @@ tcpdump这种抓包工具的原理和bpf后门是一样的，也是工作在链�
 参考：[# Linux 网络栈接收数据（RX）：原理及内核实现（2022）](https://arthurchiao.art/blog/linux-net-stack-implementation-rx-zh/)
 
 
-# gxdp和 TC(qdisc)
+# native-xdp和 TC(qdisc)
 
 XDP位于网络栈的最底层，**驱动层**，可以加载到驱动上进行运行。
 而**TC是在数据链路层**，最主要的功能就是流量控制，这种流量控制要和TCP窗口流控区别开来。
@@ -98,7 +98,7 @@ XDP位于网络栈的最底层，**驱动层**，可以加载到驱动上进行�
 **收包方向：native XDP--->分配skb--->GRO处理---->gxdp---->tcpdump---->TC---->netfilter(iptables)**
 
 **发包方向：netfilter(iptables)--->TC--->tcpdump--->GSO**
-> 注：XDP是收包方向的技术，发包方向上不处理。TC主要作用在发包方向上。
+> 注：==XDP是收包方向的技术，发包方向上不处理。TC主要作用在发包方向上==。
 
 
 ## rps 和 xdp的先后关系
