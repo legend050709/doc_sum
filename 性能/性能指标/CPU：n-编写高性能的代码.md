@@ -28,7 +28,7 @@ unsigned long sequentialSum(size_t arr_size, list **la) {
 
 
 ## 优化
-![](attachments/Pasted%20image%2020250527181651.png)
+![](../../语言/C语言/attachments/Pasted%20image%2020250527181651.png)
 ### 优化思想
 通过增加并行内存访问的数量，从而减少外部内存访问的延迟对性能的影响。
 通过交错执行随机内存位置访问的操作，可以实现比顺序执行它们显著更好的性能。
