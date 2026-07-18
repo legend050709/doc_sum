@@ -27,86 +27,86 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "网络之高性能网络HPN/RDMA基础和理论/RDMA通信库中间件：7-设计自定义的通讯库中间件.md",
-                "mode": "preview",
-                "source": true
-              },
-              "icon": "lucide-file",
-              "title": "RDMA通信库中间件：7-设计自定义的通讯库中间件"
-            }
-          },
-          {
-            "id": "7369b5db69bc0dc4",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "项目/工作总结/KS：3-基于DPDK的LB和NAT网关总结.md",
-                "mode": "preview",
-                "source": true
-              },
-              "icon": "lucide-file",
-              "title": "KS：3-基于DPDK的LB和NAT网关总结"
-            }
-          },
-          {
-            "id": "21eb60d765910686",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "项目/工作总结/KS：4-IPSec网关总结.md",
-                "mode": "preview",
-                "source": true
-              },
-              "icon": "lucide-file",
-              "title": "KS：4-IPSec网关总结"
-            }
-          },
-          {
-            "id": "4b623d179de4ba87",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "项目/工作总结/KS：4-IPSec网关总结.md",
+                "file": "语言/预处理 & 编译 & 汇编 & 链接/GCC：高版本的gcc和cmake以及clang.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "KS：4-IPSec网关总结"
+              "title": "GCC：高版本的gcc和cmake以及clang"
             }
           },
           {
-            "id": "68cdeff712136fbb",
+            "id": "de60560e8dfdd5d2",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "网络之云网络和容器网络/虚拟化/隧道/ipsec 理解.md",
+                "file": "语言/C++语言/现代C++11：2-auto 和 decltype.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "ipsec 理解"
+              "title": "现代C++11：2-auto 和 decltype"
             }
           },
           {
-            "id": "46672b36609b05c8",
+            "id": "2dfa8014d98d7b80",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "网络之云网络和容器网络/虚拟化/隧道/ipsec 理解.md",
+                "file": "语言/C++语言/C++并发编程：Thread-Local Storage.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "ipsec 理解"
+              "title": "C++并发编程：Thread-Local Storage"
+            }
+          },
+          {
+            "id": "ec85ab13683f3441",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "语言/C++语言/C++基础：1-概述.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "C++基础：1-概述"
+            }
+          },
+          {
+            "id": "cbfb82c9d42236de",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "语言/C++语言/现代C++11：4-左值引用 & 右值引用 && move移动语义 && forward转发语义.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "现代C++11：4-左值引用 & 右值引用 && move移动语义 && forward转发语义"
+            }
+          },
+          {
+            "id": "888a7a5546e91d03",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "语言/C++语言/C++基础：1-概述.md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "C++基础：1-概述"
             }
           }
         ],
-        "currentTab": 3
+        "currentTab": 5
       }
     ],
     "direction": "vertical"
@@ -125,7 +125,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "对称加密",
+                "query": "boost",
                 "matchingCase": false,
                 "explainSearch": false,
                 "collapseAll": true,
@@ -159,11 +159,12 @@
               "title": "文件列表"
             }
           }
-        ]
+        ],
+        "currentTab": 2
       }
     ],
     "direction": "horizontal",
-    "width": 278.5
+    "width": 442.5
   },
   "right": {
     "id": "a93c1244e0a44ed2",
@@ -254,54 +255,54 @@
       "command-palette:打开命令面板": false
     }
   },
-  "active": "21eb60d765910686",
+  "active": "cbfb82c9d42236de",
   "lastOpenFiles": [
-    "网络之云网络和容器网络/虚拟化/隧道/ipsec 理解.md",
-    "网络之物理网络/安全/对称加密和非对称加密理解.md",
-    "项目/工作总结/KS：4-IPSec网关总结.md",
-    "项目/DPDK/DPDK特性：4-加解密-1-支持的软硬件加解密.md",
-    "项目/工作总结/KS：3-基于DPDK的LB和NAT网关总结.md",
-    "网络之高性能网络HPN/RDMA应用/RDMA的应用：5-云上RDMA之阿里云的eRDMA.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA虚拟化：1-概述.md",
-    "项目/工作总结/KS：5-DNS网关总结.md",
-    "网络之物理网络/路由相关/BGP：1-基础.md",
-    "网络之物理网络/路由相关/OSPF：1-基础.md",
-    "网络之物理网络/路由相关/network-scripts目录下无网卡对应配置文件问题.md",
-    "网络之物理网络/路由相关/Linux 路由缓存route cache.md",
-    "项目/软硬一体化和DPU和Offload以及ASIC/linux switchdev技术.md",
-    "网络之物理网络/二层协议/LLDP：链路层发现协议及其应用.md",
-    "网络之物理网络/二层协议/ARP：2-Linux内核的arp缓存.md",
-    "网络之物理网络/二层协议/LACP：二层协议LACP链路聚合理解.md",
-    "网络之物理网络/二层协议/MPLS：1-基础.md",
-    "网络之物理网络/socket/socket类型：2-inet socket的分层option.md",
-    "网络之云网络和容器网络/虚拟化/隧道/ipip的理解与配置.md",
-    "网络之物理网络/socket/底层socket：1-socket架构中的socket和sock结构体.md",
-    "项目/DPDK/DPDK特性：9-LPM的实现.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA通信库中间件：7-设计自定义的通讯库中间件.md",
-    "网络之高性能网络HPN/RDMA基础和理论/attachments/deepseek_mermaid_20260702_ec243c.svg",
-    "项目/ebpf、bpf、XDP/ebpf应用：4-硬件故障诊断体系.md",
-    "网络之云网络和容器网络/虚拟化/vSwitch：vSwitch技术解析与未来十年趋势展望.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA通信库中间件：3-内核中的SMC-R.md",
-    "网络之高性能网络HPN/RDMA基础和理论/RDMA性能优化：2-代码优化的建议和技巧.md",
-    "问题定位查询/可观测性/attachments/Pasted image 20260702113243.png",
-    "问题定位查询/可观测性/attachments/Pasted image 20260702112937.png",
+    "语言/C++语言/C++基础：6-普通指针和引用.md",
+    "语言/C++语言/现代C++11：4-左值引用 & 右值引用 && move移动语义 && forward转发语义.md",
+    "语言/C++语言/C++基础：7-面向对象编程.md",
+    "语言/C++语言/C++学习基础.md",
+    "语言/C++语言/C++基础：1-概述.md",
+    "语言/C++语言/工具：3-cmake 和 bear.md",
+    "语言/C++语言/现代C++11：11-std下addressof的原理与使用.md",
+    "语言/C++语言/现代C++11：10-静态断言.md",
+    "语言/C++语言/现代C++ Boost库：1-概述.md",
+    "语言/C++语言/现代C++11：3-范围for(for-range)循环 和 迭代器iterator.md",
+    "语言/C++语言/现代C++11：7-lambda表达式.md",
+    "语言/C++语言/C++基础：7-面向对象编程之多态.md",
+    "语言/C++语言/现代C++11：5-类的新功能.md",
+    "语言/C++语言/现代C++11：9-智能指针.md",
+    "语言/C++语言/attachments/Pasted image 20260726124821.png",
+    "语言/C++语言/现代C++11：并行算法.md",
+    "语言/C++语言/现代C++11：8-包装器之function和bind包装器.md",
+    "语言/C++语言/C++并发编程：1-多线程编程.md",
+    "语言/C++语言/现代C++11：10-thread线程库.md",
+    "语言/C++语言/现代C++11：6-可变参数的模版.md",
+    "语言/C++语言/现代C++11：1-特性概述.md",
+    "语言/C++语言/现代C++11：5-完美转发（std下的forward）.md",
+    "语言/C++语言/C++基础：4-数据类型对齐.md",
+    "日常效率工具/iterm2的使用.md",
+    "语言/C++语言/工具：C++项目函数跳转查看.md",
+    "日常效率工具/mac上安装虚机运行linux-ubuntu.md",
+    "语言/C++语言/现代C++17：1-特性概述.md",
+    "语言/C++语言/attachments/Pasted image 20260722224902.png",
+    "语言/C++语言/attachments/Pasted image 20260720224658.png",
+    "语言/C++语言/attachments/Pasted image 20260720224631.png",
+    "语言/C++语言/attachments/Pasted image 20260720224609.png",
+    "语言/C++语言/attachments/Pasted image 20260720224258.png",
+    "语言/C++语言/attachments/Pasted image 20260720224254.png",
+    "语言/C++语言/attachments/Pasted image 20260720224158.png",
+    "语言/C++语言/attachments/Pasted image 20260720223546.png",
+    "语言/C++语言/attachments/Pasted image 20260720223424.png",
+    "项目/DPDK/DPDK用户态协议栈/attachments",
     "问题定位查询/可观测性/attachments",
     "问题定位查询/可观测性",
-    "项目/DPDK/DPDK用户态协议栈/attachments/Pasted image 20260626193450.png",
-    "项目/DPDK/DPDK用户态协议栈/attachments",
-    "网络之高性能网络HPN/RDMA基础和理论/attachments/Pasted image 20260626163120.png",
-    "网络之高性能网络HPN/RDMA基础和理论/attachments/Pasted image 20260626162918.png",
-    "网络之高性能网络HPN/RDMA基础和理论/attachments/Pasted image 20260626162502.png",
-    "网络之高性能网络HPN/RDMA基础和理论/attachments/Pasted image 20260626162120.png",
-    "网络之高性能网络HPN/AI大模型/attachments/Pasted image 20260626125625.png",
-    "网络之高性能网络HPN/AI大模型/attachments/Pasted image 20260626125259.png",
-    "存储/attachments",
+    "语言/C语言/attachments",
+    "语言/C语言",
+    "语言/C++语言/attachments",
+    "语言/C++语言",
     "网络之高性能网络HPN/AI大模型/attachments",
     "网络之高性能网络HPN/AI大模型",
-    "数据结构与算法/算法：3-思想",
-    "数据结构与算法/数据结构",
-    "数据结构与算法/算法：2-查找/attachments",
-    "数据结构与算法/数据结构/图",
+    "网络之物理网络/grpc & brpc/attachments",
     "未命名 3.canvas",
     "未命名 2.canvas",
     "未命名 1.canvas",

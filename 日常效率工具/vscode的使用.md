@@ -31,6 +31,55 @@ vscode菜单： `Code -> Preferences -> Settings`(快捷键command + ，)，如�
 `command + 鼠标左键`，实现跳转到函数定义的地方或者函数调用的地方。
 `ctrl + -`实现回退到跳转前的位置。
 
+C/C ++ 和 C++ intellisense 两个是必装的。安装之后记得重启编译器。
+![](attachments/Pasted%20image%2020260715174455.png)
+
+已安装插件 的情况下， 会遇到之前正常的的VS code突然无法跳转了，怎么按都没反应，这时候将编译器重启一下，会发现跳转功能又正常了，好吧，重启大法好。
+
+
+## 问题解决
+### 函数无法跳转问题
+#### 问题
+一开始侥幸心理，装了很多插件，希望有一个能奏效，如下：
+![](attachments/Pasted%20image%2020260715211549.png)
+
+现实总是残酷的，也不要被我上面这么多插件迷惑，其实对于这个问题只需要两个插件：C/C++ 和 C++ Intellisense。讲了半天，其实应该大多人的情况是：已经装好了这两个插件，已经经历了多次卸载、安装、重启，可还是无法跳转。
+
+#### 分析
+你在装完C++插件的时候，vscode往往会提醒你安装 clang。
+​  你不能跳转的关键是你没有把 C_Cpp: IntelliSenseEngine 的开关打开，没有配置 C/C++:Edit Configurations(JSON)。
+
+#### 解决问题的教程
+ (1) 左击插件 C/C++，选择小齿轮 -> 扩展设置。
+ ![](attachments/Pasted%20image%2020260715211738.png)
+
+![](attachments/Pasted%20image%2020260715211742.png)
+
+​ (2) 搜索框内输入 “intell”，将 C_Cpp：Intelli Sense Engine 开关设置为 Default。
+![](attachments/Pasted%20image%2020260715211759.png)
+
+预警：这个时候前面的伏笔就来了，如果你装了 clang，你将无法把 C_Cpp：Intelli Sense Engine 开关设置为 Default，它会强制给你关掉，导致你配置不了 C/C++:Edit Configurations(JSON)，也就不能进行调试跳转。
+【解决方法】很简单，在插件栏里将 clangd 卸载、重启即可。
+
+​ (3) 配置 C/C++:Edit Configurations(JSON)：
+​按键盘 “Ctrl + Shift + P”，进入设置搜索栏。
+
+![](attachments/Pasted%20image%2020260715211853.png)
+
+点击 C/C++:Edit Configurations(JSON)，会自动生成配置如下：
+
+![](attachments/Pasted%20image%2020260715211902.png)
+
+ 其中，cStandard 和 cppStandard 可根据实际填写，一般默认就行。gcc、g++、gdb这种自己用 apt 或 yum 装就好了。
+注：你的c++代码是哪个版本的，那就将 cppStandard改成哪个就行。否则，可能出现 C++ 无法跳转到函数定义的问题。
+
+#### 小结
+
+​  遇到vscode c++无法跳转的问题，先确认两个配置：
+​  (1) 已经安装了 C/C++和 C++ Intellisense 插件;
+​  (2) 确认 C_Cpp: IntelliSenseEngine 的开关打开，C/C++:Edit Configurations(JSON)创建。
+​   还是不行的话，恭喜你，又有成长的机会了。
+
 # vscode阅读C++
 在VSCode中实现C++代码跳转，主要通过clangd插件或微软C/C++插件完成。推荐优先使用`clangd+compile_commands.json`方案以获得最佳体验，以下是具体配置方法和对比分析。
 
@@ -287,6 +336,9 @@ bear -- make  # 首次执行前先make clean
 
 # 参考
 ```bash
+# 5分钟掌握cmake(20): VSCode 里的 C++ 跳转：cmake-file-api 介绍
+https://zhuanlan.zhihu.com/p/707532724
+
 # Mac下vscode编辑器设置
 https://yu66.vip/doc/mac/007-Mac%E4%B8%8Bvscode%E7%BC%96%E8%BE%91%E5%99%A8%E8%AE%BE%E7%BD%AE.html
 
@@ -295,5 +347,11 @@ https://comate.baidu.com/zh/page/7ewmht2gc3s#7
 
 # (保姆级教程)Trae中使用clangd插件实现c++代码函数列表、变量补全、代码跳转等功能
 https://developer.volcengine.com/articles/7535310756422615086
+
+【经验分享】vscode c++ 调试无法跳转问题解决教程
+https://blog.51cto.com/u_15531854/5221004
+
+# vscode如何配置C/C++环境，支持函数跳转和自动补全
+https://forum.ytmicro.com/topic/6/vscode%E5%A6%82%E4%BD%95%E9%85%8D%E7%BD%AEc-c-%E7%8E%AF%E5%A2%83-%E6%94%AF%E6%8C%81%E5%87%BD%E6%95%B0%E8%B7%B3%E8%BD%AC%E5%92%8C%E8%87%AA%E5%8A%A8%E8%A1%A5%E5%85%A8
 ```
 

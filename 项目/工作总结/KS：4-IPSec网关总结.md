@@ -11,7 +11,7 @@ IDC的互通是支撑业务发展的强需求；
 # KEG
 ![](attachments/image%20(36).png)
 加速接入点（KEG），主要部署在第三级CDN节点；
-（1）边缘节点到加速接入点（KEG）通过ipsec连通，
+（1）边缘节点（KES: 边缘服务器）到加速接入点（KEG：边缘网关）通过ipsec连通，
 （2）加速接入点（KEG）到内网服务器通过专线连通，
 
 - 由于当前边缘节点大部分在公有云，包括阿里云，腾讯云，以及海外aws，google等，并且边缘节点的服务器数量非常少，一般2-3台云主机。
@@ -26,7 +26,7 @@ IDC的互通是支撑业务发展的强需求；
 |---|---|---|
 |gre|缺点：不可加密，外网安全性较低|不满足要求|
 |vxlan|缺点：不可加密，一般用内网，外网安全性较低<br><br>优点：相对通用，技术成熟|不满足要求|
-|ipsec|缺点：<br><br>    开源方案，IKE SA/IPSEC SA状态协商复杂，IKE密码系统复杂，CPU开销大，只能采用主备模式<br><br>优点：<br><br>  支持加密，开源方案成熟。SDWAN，CloudVPN等方案大量使用|采用Scale out的设计思路，打破IPSEC的性能局限。通过以下三个具体方案，来确保Scale out的思路能够落地<br><br>1. 转发面无状态。只采用IPSEC的隧道转发面开源方案，采用静态方式建立无状态隧道，避免产生会话，以建立转发面scale out的能力<br>    <br>2. 密码系统无状态。采用静态对称加密算法，避免IKE的会话产生，以确保scale out的能力<br>    <br>3. 自研密码分发系统，采用控制器系统来集中控制更新。避免产生有状态的会话，集群化提升可靠性和性能|
+|ipsec|（1）缺点：<br><br>    开源方案，IKE SA/IPSEC SA状态协商复杂，IKE密码系统复杂，CPU开销大，只能采用主备模式，不支持集群模式<br><br>（2）优点：<br><br>  支持加密，开源方案成熟。SDWAN，CloudVPN等方案大量使用|采用Scale out（集群）的设计思路，打破IPSEC的性能局限。通过以下三个具体方案，来确保Scale out的思路能够落地<br><br>1. 转发面无状态：只采用IPSEC的隧道转发面开源方案，**采用静态方式建立无状态隧道，避免产生会话**，以建立转发面scale out的能力<br>    <br>2. 密码系统无状态：采用静态对称加密算法，避免IKE的会话产生，以确保scale out的能力<br>    <br>3. 自研密码分发系统：采用控制器系统来集中控制更新。避免产生有状态的会话，集群化提升可靠性和性能|
 
 ### ip xfrm  内核的ipsec能力
 ip xfrm  内核的ipsec能力：
@@ -34,8 +34,8 @@ ip xfrm  内核的ipsec能力：
 
 ![](attachments/image%20(37).png)
 ```bash
-边缘到keg: decode , 然后 fwd policy;  policy 和 state必须都要走到匹配。
-keg 到边缘：out policy, 然后 encode；
+边缘节点到keg: decode（prerouting-->input-->xfrm decode） , 然后 fwd policy;  policy 和 state必须都要走到匹配。
+keg 到边缘：out policy(prerouting-->forward-->xfrm encode-->output-->postrouting)
 ```
 
 #### esp封装、解封装和tcpdump的先后关系
@@ -50,7 +50,8 @@ keg 到边缘：out policy, 然后 encode；
 （2）不存在 esp_offload + gro:
 	tcpdump可以看到esp包，以及解封装之后的包。
 
-注：esp_offload 需要和GRO配合使用，收包方向，对于大块数据进行解密。发包方向，没有作用。
+> 注：esp_offload 需要和GRO配合使用，收包方向，对于大块数据进行解密。发包方向，没有作用。
+> GRO位于驱动中，tcpdump(tap口)在内核协议栈的链路层。
 
 #### 发包
 
@@ -71,8 +72,8 @@ lan口发布边缘网段路由；
 
 #### 业务流量路由
 业务流量：
-- lan 口入向流量走 forward，打上 hash mark 后转发，匹配 policy 后加密 (打上 mark 0x300， )，从 wan 口发送出去（查找 table 300）
-- wan 口入向流量 走 input 解密 （打上 mark 0x400），后再走 forward 从 lan 口发送出去（查找 table 400）
+- lan 口入向流量走 forward（prerouting--->forward），打上 hash mark 后转发，匹配 policy 后加密 (打上 mark 0x300， )，从 wan 口(output-->postrouting)发送出去（查找 table 300）
+- wan 口入向流量 走 input (prerouting--->input )解密 （打上 mark 0x400），后再走 forward 从 lan 口发送出去（查找 table 400）
     
 #### 探测流量路由
 探测流量：
@@ -92,9 +93,9 @@ lan口发布边缘网段路由；
 - 隧道policy，出向policy指向对端KEG vip，入向policy全部接收；
 
 ### KEG的隧道和密码
-1. 每条隧道对应独立密码
-2. 定期生成新密码并分发新密码到KEG网关和边缘节点    
-3. 密码下发到KEG，KEG负责新建隧道并替换旧隧道，负责新隧道的探测
+(1) 每条隧道对应独立密码
+(2) 密码控制器，定期生成新密码并分发新密码到KEG网关和边缘节点    
+(3) 密码下发到KEG，KEG负责新建隧道并替换旧隧道，负责新隧道的探测
 
 ### 隧道的密钥更新
 （1）使用对称加密
@@ -124,11 +125,13 @@ C》探测新的隧道
 
 用本机lan ip进行探测。
 
+
 (2) DIP
 
-ping对端公网IP，并将流量导到隧道。
+ping对端公网IP，并将流量导到隧道（ping响应包的隧道外层的dip为本端集群的vip）。
 
 由于是集群模式，应答包可能不会直接回到发送的网关，接收到应答的网关会转发到发起的网关上。
+
 
 (3) 从边缘到集群的探测
 
