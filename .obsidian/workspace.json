@@ -97,12 +97,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "语言/C++语言/现代C++11：4-左值引用 & 右值引用 && move移动语义 && forward转发语义.md",
+                "file": "语言/C++语言/C++项目：1-项目开发流程之CI和CD.md",
                 "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "现代C++11：4-左值引用 & 右值引用 && move移动语义 && forward转发语义"
+              "title": "C++项目：1-项目开发流程之CI和CD"
             }
           },
           {
@@ -139,7 +139,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "boost",
+                "query": "",
                 "matchingCase": false,
                 "explainSearch": false,
                 "collapseAll": true,
@@ -271,8 +271,10 @@
   },
   "active": "888a7a5546e91d03",
   "lastOpenFiles": [
-    "语言/C++语言/C++基础：7-面向对象编程.md",
+    "语言/C++语言/C++设计模式：4-策略模式.md",
+    "语言/C++语言/C++项目：1-项目开发流程之CI和CD.md",
     "语言/C++语言/现代C++11：4-左值引用 & 右值引用 && move移动语义 && forward转发语义.md",
+    "语言/C++语言/C++基础：7-面向对象编程.md",
     "语言/C++语言/C++基础：1-概述.md",
     "语言/C++语言/C++基础：7-面向对象编程之多态.md",
     "语言/C++语言/现代C++11：7-lambda表达式.md",
@@ -296,8 +298,6 @@
     "语言/C++语言/C++基础：4-数据类型对齐.md",
     "日常效率工具/iterm2的使用.md",
     "语言/C++语言/工具：C++项目函数跳转查看.md",
-    "日常效率工具/mac上安装虚机运行linux-ubuntu.md",
-    "语言/C++语言/现代C++17：1-特性概述.md",
     "语言/C++语言/attachments/Pasted image 20260722224902.png",
     "语言/C++语言/attachments/Pasted image 20260720224658.png",
     "语言/C++语言/attachments/Pasted image 20260720224631.png",
